@@ -13,12 +13,11 @@ import {
 } from "@clashking/api-contracts"
 import { importPKCS8, SignJWT } from "jose"
 import { Effect, Schema } from "effect"
-import { SqlClient, SqlError } from "effect/sql"
+import { SqlClient } from "effect/sql"
 
-import { familyIdentity, parseFamilyId, queryAdminFamilies, queryAdminFamilyMembers, type FamilyIdentityRow } from "./army-family-analytics.js"
 import type { AdminPrincipal } from "./access.js"
 import { appUpdateInternals } from "./app-updates.js"
-import { Conflict, DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, UpstreamUnavailable, type ApiFailure } from "./errors.js"
+import { DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"
 import { decryptPushToken } from "./push-secrets.js"
 import { executeTrackingRead } from "./tracking-operations.js"
@@ -69,38 +68,6 @@ interface DeveloperApplicationRow {
   readonly token_prefix: string
   readonly updated_at: Date | string
 }
-
-const listArmyFamilies = (input: AdminOperationInput) => database("Army family list failed",
-  queryAdminFamilies(new URL(input.request.url).searchParams))
-const listArmyFamilyMembers = (input: AdminOperationInput) => database("Army member list failed",
-  queryAdminFamilyMembers(String(asRecord(input.path).familyId ?? ""), new URL(input.request.url).searchParams))
-const updateArmyFamily = (input: AdminOperationInput) => database("Army family update failed", Effect.gen(function* () {
-  const id = yield* parseFamilyId(asRecord(input.path).familyId)
-  const rawName = asRecord(input.body).name
-  if (rawName !== null && typeof rawName !== "string") return yield* new InvalidRequest({ message: "Name must be text or null" })
-  const name = rawName === null ? null : rawName.trim().replace(/\s+/gu," ")
-  if (name !== null && (name.length === 0 || name.length > 120)) return yield* new InvalidRequest({ message: "Name must contain 1 to 120 characters" })
-  const sql = yield* SqlClient.SqlClient
-  if (name !== null) {
-    yield* sql.unsafe("SELECT pg_advisory_xact_lock(hashtext(lower($1)))", [name])
-    const conflicts = yield* sql.unsafe<{ exists: boolean }>(`SELECT EXISTS(SELECT 1 FROM army_families
-      WHERE lower(name)=lower($1) AND family_id<>$2::bigint) exists`, [name,id])
-    if (conflicts[0]?.exists) return yield* new Conflict({ message: "An army family already uses this name" })
-  }
-  const rows = yield* sql.unsafe<FamilyIdentityRow>(`WITH updated AS (
-      UPDATE army_families SET name=$1,updated_at=now() WHERE family_id=$2::bigint
-      RETURNING family_id,name,representative_share_code
-    ) SELECT updated.family_id::text,updated.name,updated.representative_share_code,composition.heroes hero_ids,
-      ARRAY(SELECT (entry->>'equipmentId')::integer FROM jsonb_array_elements(composition.equipment) entry ORDER BY (entry->>'equipmentId')::integer) equipment_ids
-    FROM updated JOIN army_compositions composition ON composition.share_code=updated.representative_share_code`, [name,id]).pipe(
-      Effect.mapError(cause => cause instanceof SqlError.SqlError && cause.reason._tag === "UniqueViolation"
-        && cause.reason.constraint === "army_families_name_unique"
-        ? new Conflict({ message: "An army family already uses this name" }) : cause),
-    )
-  if (!rows[0]) return yield* new NotFound({ message: "Army family not found" })
-  yield* audit(input, "army_family.rename", "army_family", id, name === null ? "Cleared army family name" : `Renamed army family to ${name}`)
-  return familyIdentity(rows[0])
-}))
 
 interface PostRow {
   readonly also_push_on_publish: boolean
@@ -1459,9 +1426,6 @@ const operationFor = (
     case "adminProxyStats": return proxyStats(input)
     case "adminTrackingSummary": return executeTrackingRead("summary", input.query)
     case "adminTrackingTimeseries": return executeTrackingRead("timeseries", input.query)
-    case "adminArmyFamilies": return listArmyFamilies(input)
-    case "adminArmyFamilyMembers": return listArmyFamilyMembers(input)
-    case "adminUpdateArmyFamily": return updateArmyFamily(input)
     case "adminListDeveloperApplications": return listDeveloperApplications()
     case "adminCreateDeveloperApplication": return createDeveloperApplication(input)
     case "adminGetDeveloperApplication": return getDeveloperApplication(input)
@@ -1501,7 +1465,6 @@ const operationFor = (
 
 const databaseMutations = new Set([
   "adminCreateDeveloperApplication", "adminUpdateDeveloperApplication", "adminDeleteDeveloperApplication",
-  "adminUpdateArmyFamily",
   "adminCreateFeatureFlag", "adminUpdateFeatureFlag", "adminUpdateAppReleaseChannel",
   "adminCreatePost", "adminUpdatePost", "adminArchivePost", "adminRestorePostRevision",
   "adminPublishPost", "adminPushPost", "adminDuplicatePost", "adminCreateCampaign", "adminUpdateCampaign",

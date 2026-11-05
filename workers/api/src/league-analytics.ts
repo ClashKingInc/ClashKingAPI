@@ -24,7 +24,7 @@ import {
 } from "./league-analytics-query.js"
 import { queryLegendDayPerformance } from "./legend-day-performance.js"
 import { rankedPeriodPredicate } from "./ranked-period.js"
-import * as families from "./army-family-analytics.js"
+import { parseAggregateWindow } from "./league-analytics-query.js"
 import { hasStaticItemId, lookupStaticItem, lookupArmyStaticItem, prepareStaticMetadata } from "./static-metadata.js"
 import { WorkerEnvironment } from "./environment.js"
 import { legendSeasonFinish, legendSeasonWindow } from "./legend-season.js"
@@ -88,7 +88,6 @@ interface BattleRow {
   duration_seconds: number
   looted_resources: unknown
   share_code: string | null
-  family_id: string | null
 }
 const battle = (row: BattleRow, mode: "ranked" | "legend") => {
   const stars = number(row.stars), destruction = number(row.destruction_percentage)
@@ -97,13 +96,11 @@ const battle = (row: BattleRow, mode: "ranked" | "legend") => {
   return { time: iso(row.battle_time), townHallLevel: number(row.player_town_hall),
     opponent: { tag: row.opponent_tag, name: row.opponent_name?.trim() || "Unknown", townHallLevel: number(row.opponent_town_hall) },
     stars, destructionPercentage: destruction, duration: number(row.duration_seconds),
-    shareCode: row.share_code, familyId: row.family_id, trophies }
+    shareCode: row.share_code, trophies }
 }
 const battleSql = `SELECT b.battle_time,b.direction,b.player_town_hall,b.opponent_tag,p.name AS opponent_name,
-  b.opponent_town_hall,b.stars,b.destruction_percentage,b.duration_seconds,b.looted_resources,b.share_code,
-  family.family_id::text family_id
-  FROM battles_ranked b LEFT JOIN basic_player p ON p.tag=b.opponent_tag
-  LEFT JOIN army_family_members family ON family.share_code=b.share_code`
+  b.opponent_town_hall,b.stars,b.destruction_percentage,b.duration_seconds,b.looted_resources,b.share_code
+  FROM battles_ranked b LEFT JOIN basic_player p ON p.tag=b.opponent_tag`
 
 interface RankedMemberRow {
   season_id: number | string
@@ -166,10 +163,12 @@ const mainArmyTroops = (rows: ReadonlyArray<{ id: number; quantity: number }>) =
   const item = lookupArmyStaticItem("troops", row.id)
   return item && !item.siegeMachine ? [{ ...row, name: item.name, housing: row.quantity * item.housingSpace }] : []
 }).sort((a, b) => b.housing - a.housing || a.id - b.id)
-const armyCore = (rows: ReadonlyArray<{ id: number; quantity: number }>, storedName: string | null) => {
+// Player summaries describe their observed largest troops; global daily group
+// membership comes only from the scheduled classifier and army-setup endpoints.
+const armyCore = (rows: ReadonlyArray<{ id: number; quantity: number }>) => {
   const core = mainArmyTroops(rows).slice(0, 3)
-  return core.length ? { key: storedName ?? core.map(item => item.id).sort((a, b) => a - b).join("/"),
-    name: storedName ?? core.map(item => item.name).join(" / ") } : undefined
+  return core.length ? { key: core.map(item => item.id).sort((a, b) => a - b).join("/"),
+    name: core.map(item => item.name).join(" / ") } : undefined
 }
 export const queryLegendBattlelog = (rawTag: string, rawDay: string, now = new Date()) => database("Legend battlelog query failed", Effect.gen(function* () {
   const window = legendWindow(rawDay)
@@ -180,9 +179,8 @@ export const queryLegendBattlelog = (rawTag: string, rawDay: string, now = new D
   const values = rows.map((row) => battle(row, "legend"))
   const attacks = values.filter((_, index) => rows[index]?.direction === 1)
   const realDefenses = values.filter((_, index) => rows[index]?.direction === 2)
-  const compositions = yield* sql.unsafe<{ share_code: string; main_troops: Array<{ id: number; quantity: number }>; name: string | null }>(`
-    SELECT c.share_code,c.main_troops,f.name FROM army_compositions c
-    LEFT JOIN army_family_members m USING(share_code) LEFT JOIN army_families f USING(family_id)
+  const compositions = yield* sql.unsafe<{ share_code: string; main_troops: Array<{ id: number; quantity: number }> }>(`
+    SELECT c.share_code,c.main_troops FROM army_compositions c
     WHERE c.share_code=ANY($1::text[])`, [[...new Set(attacks.flatMap(item => item.shareCode ? [item.shareCode] : []))]])
   const byCode = new Map(compositions.map(item => [item.share_code, item]))
   const groups = new Map<string, { name: string; attacks: number; triples: number }>()
@@ -190,7 +188,7 @@ export const queryLegendBattlelog = (rawTag: string, rawDay: string, now = new D
   // when the selected day has no stored composition.
   for (const attack of attacks) {
     const composition = attack.shareCode ? byCode.get(attack.shareCode) : undefined
-    const core = composition ? armyCore(composition.main_troops, composition.name) : undefined
+    const core = composition ? armyCore(composition.main_troops) : undefined
     if (!core) continue
     const group = groups.get(core.key) ?? { name: core.name, attacks: 0, triples: 0 }
     group.attacks++; group.triples += attack.stars === 3 ? 1 : 0; groups.set(core.key, group)
@@ -227,11 +225,10 @@ export const queryLegendPlayerSeason = (rawTag: string, now = new Date()) => dat
     FROM battles_ranked WHERE player_tag=$1 AND battle_mode=2 AND battle_time >= $2 AND battle_time < $3
     ORDER BY battle_time`, [tag, season.start, new Date(Math.min(now.valueOf(), season.end.valueOf()))])
   const attacks = rows.filter(row => row.direction === 1), defenses = rows.filter(row => row.direction === 2)
-  const compositions = yield* sql.unsafe<{ share_code: string; main_troops: Array<{ id: number; quantity: number }>; name: string | null;
+  const compositions = yield* sql.unsafe<{ share_code: string; main_troops: Array<{ id: number; quantity: number }>;
     spells: Array<{ id: number; quantity: number; clanCastle?: boolean }>; heroes: number[];
     equipment: Array<{ equipmentId: number }>; pet_assignments: Array<{ petId: number }>; siege_machine_id: number | null }>(`
-    SELECT c.share_code,c.main_troops,c.spells,c.heroes,c.equipment,c.pet_assignments,c.siege_machine_id,f.name FROM army_compositions c
-    LEFT JOIN army_family_members m USING(share_code) LEFT JOIN army_families f USING(family_id)
+    SELECT c.share_code,c.main_troops,c.spells,c.heroes,c.equipment,c.pet_assignments,c.siege_machine_id FROM army_compositions c
     WHERE c.share_code=ANY($1::text[])`, [[...new Set(attacks.flatMap(row => row.share_code ? [row.share_code] : []))]])
   const byCode = new Map(compositions.map(row => [row.share_code, row]))
   const favorites = new Map<number, { id: number; name: string; attacks: number; triples: number; housing: number }>()
@@ -268,7 +265,7 @@ export const queryLegendPlayerSeason = (rawTag: string, now = new Date()) => dat
     }
     // Describe the dominant main-army troops; do not invent a named strategy.
     // Housing weight keeps cleanup units from displacing the actual army core.
-    const core = armyCore(composition.main_troops, composition.name)
+    const core = armyCore(composition.main_troops)
     if (!core) continue
     const entry = groups.get(core.key) ?? { name: core.name, attacks: 0, triples: 0 }
     entry.attacks++; entry.triples += number(attack.stars) === 3 ? 1 : 0; groups.set(core.key, entry)
@@ -368,22 +365,20 @@ export const queryLegendPlayerDailySeries = (rawTag: string, query: URLSearchPar
 
 export const queryPlayerBattlelogHistory = (rawTag: string, query: URLSearchParams, now = new Date()) => database("Player battle history query failed", Effect.gen(function* () {
   const tag = yield* normalizeClashTag(rawTag), window = yield* parsePlayerHistoryWindow(query, now), sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<{ battle_mode: "farming" | "ranked" | "legend"; battle_time: Date | string; stars: number; destruction_percentage: number; duration_seconds: number; looted_resources: unknown; share_code: string | null; family_id: string | null }>(`
-    SELECT battle_mode,battle_time,stars,destruction_percentage,duration_seconds,looted_resources,share_code,family_id FROM (
+  const rows = yield* sql.unsafe<{ battle_mode: "farming" | "ranked" | "legend"; battle_time: Date | string; stars: number; destruction_percentage: number; duration_seconds: number; looted_resources: unknown; share_code: string | null }>(`
+    SELECT battle_mode,battle_time,stars,destruction_percentage,duration_seconds,looted_resources,share_code FROM (
       SELECT 'farming'::text battle_mode,battle.battle_time,battle.stars,battle.destruction_percentage,battle.duration_seconds,
-        battle.looted_resources,battle.share_code,family.family_id::text family_id,0 source_order FROM battles_farming battle
-        LEFT JOIN army_family_members family ON family.share_code=battle.share_code
+        battle.looted_resources,battle.share_code,0 source_order FROM battles_farming battle
         WHERE battle.player_tag=$1 AND battle.battle_time BETWEEN $2 AND $3
       UNION ALL
       SELECT CASE battle.battle_mode WHEN 1 THEN 'ranked'::text ELSE 'legend'::text END,
         battle.battle_time,battle.stars,battle.destruction_percentage,battle.duration_seconds,battle.looted_resources,
-        battle.share_code,family.family_id::text family_id,1 source_order FROM battles_ranked battle
-        LEFT JOIN army_family_members family ON family.share_code=battle.share_code
+        battle.share_code,1 source_order FROM battles_ranked battle
         WHERE battle.player_tag=$1 AND battle.direction=1 AND battle.battle_time BETWEEN $2 AND $3
     ) history ORDER BY battle_time DESC,source_order`, [tag, window.start, window.end])
   return { items: rows.map((row) => ({ battleMode: row.battle_mode, battleTime: iso(row.battle_time), stars: number(row.stars),
     destructionPercentage: number(row.destruction_percentage), duration: number(row.duration_seconds),
-    lootedResources: normalizedLoot(row.looted_resources), shareCode: row.share_code, familyId: row.family_id })) }
+    lootedResources: normalizedLoot(row.looted_resources), shareCode: row.share_code })) }
 }))
 
 export const queryRankedGroup = (rawSeason: string, rawGroup: string) => database("Ranked group query failed", Effect.gen(function* () {
@@ -450,7 +445,7 @@ export const queryHitRateHistory = (query: URLSearchParams, now = new Date()) =>
   }
   if (options.mode === "ranked") return { items: ranked }
   const time = new URLSearchParams(query); time.delete("mode")
-  const window = yield* families.aggregateWindow(time, now)
+  const window = yield* parseAggregateWindow(time, now)
   const rows = yield* sql.unsafe<HitRateRow & { day: Date | string }>(`SELECT day,attack_count attacks,
     zero_star_count zero,one_star_count one,two_star_count two,three_star_count three FROM legend_daily_stats
     WHERE day BETWEEN $1::date AND $2::date AND cohort='legend_i' ORDER BY day DESC`, [window.firstDay,window.lastDay])

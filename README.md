@@ -100,15 +100,15 @@ This project is licensed under the [GNU General Public License v3.0](LICENSE).
 
 This project is not affiliated with, endorsed, sponsored, or specifically approved by Supercell. Clash of Clans and its related assets belong to Supercell. Use this API in line with Supercell's [Fan Content Policy](https://supercell.com/en/fan-content-policy/) and Terms of Service.
 
-### Army setups and battle history (next release)
+### Army setups and battle history
 
 Current army statistics use `/v2/stats/army-setups` and its `/timeline` and
 `/rank-history` routes. Daily observations identify troop groups and supported
 variants with `groupKey` and `variantKey`. The retired `/v2/stats/armies`,
-`/detail`, and `/timeline` family routes return an explicit404. No numeric family
+`/detail`, and `/timeline` family routes return an explicit 404. No numeric family
 ID is mapped to a new group key. Player Legend comparisons return overall
 cohort results only, not stale legacy-family comparisons. Supported current
-cohorts are all Legend I, top1,000, and top200.
+cohorts are all Legend I, top 1,000, and top 200.
 
 Aggregate date-only `time[after]` and `time[before]` select inclusive Legend day
 labels. Day `2026-09-08` covers `[2026-09-08T05:00:00Z,
@@ -120,12 +120,9 @@ Current setup responses expose completed days, total observed attacks, and
 classified attacks. Missing observations stay missing rather than becoming
 zero usage. Usage denominators include attacks without a classified army.
 
-Historical admin family browsing supports search by name/ID/code/link, named/unnamed,
-representative filters, sorting, and `page`/`limit`/`hasMore`. Inactive families
-remain discoverable. PATCH `/v2/admin/stats/armies/:familyId` accepts a manual
-name or null to clear it. GET `/:familyId/members` lists codes and similarity
-scores; `includeStats=true` returns retained-window results, or null when
-coverage is unavailable.
+Admin uses the same daily troop-group and setup observations as the App. Legacy
+permanent-family browsing, manual names, and numeric family IDs are removed.
+Raw battle history and stored historical data are retained.
 
 Detailed Ranked tournament and Legend-day battle responses omit loot on both
 attacks and defenses. GET `/v2/player/:playerTag/battlelog/history` returns all

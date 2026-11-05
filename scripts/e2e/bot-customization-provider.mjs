@@ -14,6 +14,12 @@ export async function startBotCustomizationProvider(){
   if(webhookList){const channel=webhookList[1];if(!hooks.has(channel))hooks.set(channel,channel.endsWith('1')?[{id:'999999999999994911',type:1,guild_id:'999999999999995901',channel_id:channel,user:{id:'999999999999999999'},token:'local-only',name:'Existing log hook'}]:[]);
    if(req.method==='POST'){const h={id:'999999999999994912',type:1,guild_id:'999999999999995901',channel_id:channel,application_id:'999999999999999999',token:'local-only'};hooks.get(channel).push(h);webhookCreates.push(channel);res.end(JSON.stringify(h));return;}
    res.end(JSON.stringify(hooks.get(channel)));return;}
+  if(req.url==='/api/v10/guilds/999999999999995901/roles'){
+   res.end(JSON.stringify([{id:'999999999999995911',name:'Recruit alerts',color:0,position:1,managed:false,mentionable:true}]));return;
+  }
+  if(req.url==='/api/v10/guilds/999999999999995901/webhooks'){
+   res.end(JSON.stringify([...hooks.values()].flat()));return;
+  }
   const match=/^\/api\/v10\/guilds\/(\d+)\/members\/@me$/.exec(req.url??'');
   if(match && req.method==='PATCH'){
    let raw='';for await(const chunk of req)raw+=chunk;

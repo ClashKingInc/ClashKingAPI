@@ -1,12 +1,20 @@
-import { mkdir, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { createHash } from "node:crypto"
 
 import * as contracts from "@clashking/api-contracts"
 import * as SchemaRepresentation from "effect/SchemaRepresentation"
+import { validateReleaseVersion } from "./api-release-version.mjs"
 
 const outputPath = resolve(process.argv[2] ?? "dist/openapi.json")
 const schemaComponents = {}
+// Documentation is deployed with these packages, so it must identify the same
+// immutable release instead of retaining a version from an earlier generator.
+const apiVersion = validateReleaseVersion(...await Promise.all(
+  ["api-contracts", "api-client"].map(async (name) => JSON.parse(
+    await readFile(new URL(`../packages/${name}/package.json`, import.meta.url), "utf8"),
+  )),
+))
 
 // JSON Schema has no portable equivalent for JavaScript's /i flag. Preserve
 // the UUID constraint with explicit ASCII case ranges instead of dropping it.
@@ -204,7 +212,7 @@ const document = {
   openapi: "3.1.1",
   info: {
     title: "ClashKing API",
-    version: "0.1.0-rc.4",
+    version: apiVersion,
     description: `### Clash of Clans Based API 👑
 
 - No Auth Required, Free to Use

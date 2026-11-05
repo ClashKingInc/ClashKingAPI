@@ -61,7 +61,8 @@ export const discordWebhookAvatar = (url: string | null | undefined) => url == n
     for (let attempt = 0; attempt < 3; attempt++) {
       let response: Response
       try {
-        response = await fetch(target, { redirect: "error", signal: AbortSignal.timeout(4_000) })
+        // Keep redirects visible so the status check cannot leave Discord CDN.
+        response = await fetch(target, { redirect: "manual", signal: AbortSignal.timeout(4_000) })
       } catch {
         if (attempt === 2) throw new AvatarLoadError("cdn_network_failure")
         continue

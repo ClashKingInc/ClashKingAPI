@@ -14,8 +14,10 @@ export interface SearchBindings {
   readonly ELASTICSEARCH_CLANS_ALIAS: string
   readonly DATA_ENCRYPTION_KEY: string
 }
-const ClanSource = Schema.Struct({ tag: Schema.String, name: Schema.String, clan_level: Schema.optionalKey(Schema.Number), badge_token: Schema.optionalKey(Schema.String), location_id: Schema.optionalKey(Schema.Number), cwl_league_id: Schema.optionalKey(Schema.Number), member_count: Schema.optionalKey(Schema.Number) })
-const PlayerSource = Schema.Struct({ tag: Schema.String, name: Schema.String, league_id: Schema.optionalKey(Schema.Number), clan_tag: Schema.optionalKey(Schema.String), townhall_level: Schema.Number })
+// PGSync retains SQL NULL in _source; absent clan, league and location values
+// must decode before the public response omits those optional relationships.
+const ClanSource = Schema.Struct({ tag: Schema.String, name: Schema.String, clan_level: Schema.optionalKey(Schema.Number), badge_token: Schema.optionalKey(Schema.String), location_id: Schema.optionalKey(Schema.NullOr(Schema.Number)), cwl_league_id: Schema.optionalKey(Schema.Number), member_count: Schema.optionalKey(Schema.Number) })
+const PlayerSource = Schema.Struct({ tag: Schema.String, name: Schema.String, league_id: Schema.optionalKey(Schema.NullOr(Schema.Number)), clan_tag: Schema.optionalKey(Schema.NullOr(Schema.String)), townhall_level: Schema.Number })
 const SearchHit = Schema.Struct({ _source: JsonValue, sort: Schema.Array(JsonValue) })
 const SearchResponse = Schema.Struct({ pit_id: Schema.optionalKey(Schema.String), hits: Schema.Struct({ hits: Schema.Array(SearchHit) }) })
 const Cursor = Schema.Struct({ v: Schema.Number, entity: Schema.String, pit_id: Schema.String, search_after: Schema.Array(JsonValue), request_hash: Schema.String, expires_at: Schema.Number })
@@ -86,9 +88,11 @@ export const elasticsearchQuery = (text: string, filters: Filters) => {
 }
 
 const esRequest = async (bindings: SearchBindings, path: string, method: "POST" | "DELETE", body?: unknown, signal?: AbortSignal): Promise<unknown> => {
+  // Workerd supports manual/follow only. A redirect stays non-successful and
+  // is rejected below without forwarding the Elasticsearch credential.
   const response = await bindings.ELASTICSEARCH.fetch(`http://elasticsearch:9200${path}`, {
     method, headers: { authorization: `ApiKey ${bindings.ELASTICSEARCH_API_KEY}`, "content-type": "application/json" },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }), ...(signal ? { signal } : {}), redirect: "error",
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }), ...(signal ? { signal } : {}), redirect: "manual",
   })
   if (!response.ok) { await response.body?.cancel(); throw new Error(`Elasticsearch returned ${response.status}`) }
   if (method === "DELETE") { await response.body?.cancel(); return {} }
@@ -169,8 +173,8 @@ export const searchClanSources = (bindings: SearchBindings, query: URLSearchPara
   return { clans, pagination: result.pagination }
 })
 
-const leagueReference = (category: string, id: number | undefined) => {
-  if (id === undefined) return undefined
+const leagueReference = (category: string, id: number | null | undefined) => {
+  if (id === undefined || id === null) return undefined
   const item = lookupStaticItem(category, id)
   return item ? { id, name: item.name } : undefined
 }

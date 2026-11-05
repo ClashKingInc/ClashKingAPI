@@ -49,7 +49,7 @@ export class GuildActivityStore extends Context.Service<GuildActivityStore, {
             const signal = AbortSignal.any([interruption, AbortSignal.timeout(15_000)])
             const response = await bindings.CLASH_PROXY.fetch(new Request(
               `http://clash-proxy.internal/v1/clans/${encodeURIComponent(clan.tag)}`,
-              { signal, redirect: "error" },
+              { signal, redirect: "manual" },
             ))
             if (!response.ok) {
               await response.body?.cancel()

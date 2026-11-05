@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: ClashKingInc/DevKit
-          ref: f7baccc68890fae9c133daec3038afb274251600
+          ref: 94db48facf18fbfb08be6602ce4651685eeea0dc
           path: .ci-schema
           persist-credentials: false
 
@@ -69,3 +69,9 @@ jobs:
         env:
           CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
         run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/legend-day-performance.mjs
+
+      - name: Verify search against real local Elasticsearch
+        env:
+          CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
+          CLASHKING_E2E_SCHEMA_ROOT: ${{ github.workspace }}/.ci-schema
+        run: bash .ci-schema/scripts/with-test-timescale.sh --profile retained-api -- node scripts/e2e/search-nullability.mjs

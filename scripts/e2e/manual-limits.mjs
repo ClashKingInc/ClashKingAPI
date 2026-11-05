@@ -17,6 +17,21 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  await db.query('INSERT INTO discord_cache.guilds(id,data,application_id,shard_id,generation,available,metadata_complete,members_complete) VALUES($1,$2,$3,0,$4,true,true,true)',[server,{owner_id:actor},'999999999999999999',generation]);
  const userHeaders={authorization:'Bearer '+token};
  await request(origin,'/v2/server/'+server+'/limits','GET',undefined,userHeaders);
+ // Actual API requests: reminders share a preexisting log hook, including threads.
+ const reminderBody={type:'War',clan_tag:'#PYLQ',channel_id:'999999999999994901',time:'60 min'};
+ const first=await request(origin,'/v2/server/'+server+'/reminders','POST',reminderBody,userHeaders);
+ const second=await request(origin,'/v2/server/'+server+'/reminders','POST',{...reminderBody,time:'120 min',thread_id:'999999999999994903'},userHeaders);
+ let stored=(await db.query('SELECT webhook_id,webhook_token FROM reminders WHERE id=ANY($1::uuid[])',[[first.reminder_id,second.reminder_id]])).rows;
+ assert(stored.every(x=>x.webhook_id==='999999999999994911'&&x.webhook_token===''));
+ assert.equal(profileProvider.webhookCreates.length,0,'Reuse existing log webhook without creating another');
+ await Promise.all([180,240].map(time=>request(origin,'/v2/server/'+server+'/reminders','POST',{...reminderBody,time:time+' min',channel_id:'999999999999994902'},userHeaders)));
+ assert.equal(profileProvider.webhookCreates.length,1,'Concurrent reminder creation shares one channel webhook');
+ await request(origin,'/v2/server/'+server+'/reminders/'+first.reminder_id,'PUT',{channel_id:'999999999999994902'},userHeaders);
+ assert.equal((await db.query('SELECT webhook_id FROM reminders WHERE id=$1',[first.reminder_id])).rows[0].webhook_id,'999999999999994912');
+ await request(origin,'/v2/server/'+server+'/reminders','POST',{...reminderBody,time:'300 min',channel_id:'999999999999994904'},userHeaders,400);
+ assert.equal(profileProvider.webhookCreates.length,1,'Cross-server destination cannot create webhooks');
+ console.log('PASS reminder API: reuses log hooks, shares one hook across concurrent reminders, retains threads, changes destination, rejects cross-server channel');
+
  await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:0,autoboardLimit:0,aiMonthlyLimitUsd:.05});
  await request(origin,'/v2/server/'+server+'/clans','POST',{tag:'#PYLQRRJC'},userHeaders,409);
  await request(origin,'/v2/server/'+server+'/autoboards','POST',{boardType:'donations',targetScope:'family',targets:[],deliveryMode:'refresh',channelId:'999999999999995999',enabled:true},userHeaders,400);

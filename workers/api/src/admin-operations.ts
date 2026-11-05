@@ -1425,7 +1425,7 @@ const updateServerLimits=(input:AdminOperationInput)=>Effect.gen(function*(){
  return yield* sql.withTransaction(Effect.gen(function*(){
   const before=yield* readServerLimits(serverId)
   yield* sql`SELECT id FROM servers WHERE id=${serverId} FOR UPDATE`
-  yield* sql`UPDATE servers SET clan_limit=${body.clanLimit},autoboard_limit=${body.autoboardLimit},ai_monthly_limit_usd=${body.aiMonthlyLimitUsd},bot_customization_enabled=COALESCE(${body.botCustomizationEnabled ?? null}::boolean,bot_customization_enabled) WHERE id=${serverId}`
+  yield* sql`UPDATE servers SET custom_autoboard_interval_enabled=COALESCE(${body.customAutoboardIntervalEnabled ?? null}::boolean,custom_autoboard_interval_enabled),clan_limit=${body.clanLimit},autoboard_limit=${body.autoboardLimit},ai_monthly_limit_usd=${body.aiMonthlyLimitUsd},bot_customization_enabled=COALESCE(${body.botCustomizationEnabled ?? null}::boolean,bot_customization_enabled) WHERE id=${serverId}`
   yield* audit(input,"server_limits.update","server",serverId,"Updated manual server limits",{before,after:body})
   return yield* readServerLimits(serverId)
  }))

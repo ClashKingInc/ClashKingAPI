@@ -57,7 +57,7 @@ export const exportAccount = (userId: string) => Effect.gen(function* () {
     yield* sql`SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY`
     const account = yield* sql<{ data: JsonObject }>`SELECT jsonb_strip_nulls(jsonb_build_object(
       'user_id', user_id, 'provider', provider, 'auth_methods', jsonb_build_array(provider),
-      'username', username, 'created_at', created_at, 'updated_at', updated_at)) AS data
+      'username', username, 'avatar_id', avatar_id, 'created_at', created_at, 'updated_at', updated_at)) AS data
       FROM auth_users WHERE user_id = ${userId}`
     if (account[0] === undefined) return yield* new Unauthenticated({ message: "User session is no longer valid" })
     const section = (name: keyof typeof exportQueries) => sql.unsafe<{ data: JsonObject }>(

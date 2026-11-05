@@ -1,4 +1,4 @@
-import { limitMessage } from "./server-limits.js"
+import { readServerLimits, limitMessage } from "./server-limits.js"
 import { AutoBoardCapability, AutoBoardWrite, DecimalSnowflake } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
@@ -12,16 +12,11 @@ import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, RateLim
 export const dashboardAutoboardOperationIds = ["autoboardCapabilities", "serverAutoboards", "createAutoboard", "replaceAutoboard", "deleteAutoboard"] as const
 type Capability = Schema.Schema.Type<typeof AutoBoardCapability>
 type Write = Schema.Schema.Type<typeof AutoBoardWrite>
-// Canonical Go registry explicitly publishes sample boards; no executor/product
-// catalog is inferred from arbitrary stored rows.
+// Only production executors are exposed. Historical sample rows do not become
+// supported products merely because they remain in an installation database.
 export const autoboardCapabilities: ReadonlyArray<Capability> = [
-  { boardType: "farming", label: "Farming leaderboard", targetKind: "clan", minTargets: 1, maxTargets: 1, allowedScopes: ["custom"], allowedModes: ["refresh"], refreshInterval: null, refreshSeconds: { min: 30, max: 86400, default: 30 }, uiCapabilities: ["rowLimit", "farmingWindow"] },
-  { boardType: "donations", label: "Donation leaderboard", targetKind: "clan", minTargets: 0, maxTargets: 50, allowedScopes: ["family", "custom"], allowedModes: ["refresh", "send"], refreshInterval: { minMinutes: 1, maxMinutes: 1440, defaultMinutes: 1 }, uiCapabilities: ["rowLimit"] },
-  { boardType: "sample-clan-activity", label: "Sample · Clan activity", targetKind: "clan", minTargets: 1, maxTargets: 5, allowedScopes: ["custom"], allowedModes: ["refresh"], refreshInterval: { minMinutes: 15, maxMinutes: 360, defaultMinutes: 30 }, uiCapabilities: [] },
-  { boardType: "sample-family-overview", label: "Sample · Family overview", targetKind: "clan", minTargets: 0, maxTargets: 0, allowedScopes: ["family"], allowedModes: ["refresh", "send"], refreshInterval: { minMinutes: 15, maxMinutes: 1440, defaultMinutes: 60 }, uiCapabilities: [] },
-  { boardType: "sample-location-rankings", label: "Sample · Location rankings", targetKind: "location", minTargets: 1, maxTargets: 1, allowedScopes: ["custom"], allowedModes: ["refresh", "send"], refreshInterval: { minMinutes: 30, maxMinutes: 1440, defaultMinutes: 120 }, uiCapabilities: [] },
-  { boardType: "sample-player-leaderboard", label: "Sample · Player leaderboard", targetKind: "player", minTargets: 1, maxTargets: 25, allowedScopes: ["custom"], allowedModes: ["send"], refreshInterval: null, uiCapabilities: [] },
-  { boardType: "sample-war-summary", label: "Sample · War summary", targetKind: "war", minTargets: 1, maxTargets: 1, allowedScopes: ["custom"], allowedModes: ["send"], refreshInterval: null, uiCapabilities: [] },
+  { boardType: "farming", label: "Farming leaderboard", targetKind: "clan", minTargets: 1, maxTargets: 1, allowedScopes: ["custom"], allowedModes: ["refresh"], refreshInterval: null, refreshSeconds: { min: 30, max: 86400, default: 300 }, uiCapabilities: ["rowLimit", "farmingWindow"] },
+  { boardType: "donations", label: "Donation leaderboard", targetKind: "clan", minTargets: 0, maxTargets: 50, allowedScopes: ["family", "custom"], allowedModes: ["refresh", "send"], refreshInterval: { minMinutes: 1, maxMinutes: 1440, defaultMinutes: 5 }, uiCapabilities: ["rowLimit"] },
 ]
 const invalid = (field: string, message: string) => new InvalidRequest({ message: "Invalid autoboard configuration", details: [{ field, message }] })
 const decodeDiscord = <A>(schema: Schema.Codec<A, unknown, never, never>, value: unknown) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Discord webhook response failed schema validation" })))
@@ -63,6 +58,7 @@ export const validateAutoboardWrite = (body: unknown, now = new Date()) => Effec
   if (input.boardType === "farming") {
     if (!/^#[0289PYLQGRJCUV]+$/u.test(targets[0] ?? "")) return yield* invalid("targets", "must contain one valid clan tag")
     if ((input.rowLimit ?? 5) > 5) return yield* invalid("rowLimit", "must be between 1 and 5")
+    if (input.farming?.window === "rolling_days" && !input.farming.days) return yield* invalid("farming.days", "Choose between 1 and 180 days")
     if (!input.farming) return yield* invalid("farming", "window and timezone are required")
     try { new Intl.DateTimeFormat("en", { timeZone: input.farming.timezone }).format(now) }
     catch { return yield* invalid("farming.timezone", "must be a valid IANA timezone") }
@@ -91,11 +87,12 @@ export const validateAutoboardWrite = (body: unknown, now = new Date()) => Effec
 
 interface BoardRow { readonly id: string; readonly board_type: string; readonly target_scope: "family" | "custom"; readonly targets: ReadonlyArray<string>; readonly delivery_mode: "refresh" | "send"; readonly webhook_id: string; readonly thread_id: string | null; readonly message_id: string | null; readonly enabled: boolean; readonly interval_minutes: number | null; readonly schedule_kind: string | null; readonly schedule_time: string | null; readonly schedule_weekdays: ReadonlyArray<number> | null; readonly schedule_day_of_month: number | null; readonly next_run_at: Date | string | null; readonly last_run_at: Date | string | null; readonly created_at: Date | string; readonly updated_at: Date | string }
 interface BoardRow { readonly row_limit: number }
-interface BoardRow { readonly interval_seconds: number | null; readonly farming_window: "since_start" | "calendar_month" | "game_season" | null; readonly farming_timezone: string | null; readonly counting_from: Date | string | null }
+interface BoardRow { readonly interval_seconds: number | null; readonly rolling_days: number | null; readonly farming_window: "since_start" | "calendar_month" | "game_season" | "rolling_days" | null; readonly farming_timezone: string | null; readonly counting_from: Date | string | null }
 const select = `SELECT a.id::text, a.board_type, a.row_limit, a.target_scope, COALESCE(array_agg(t.target ORDER BY t.position) FILTER (WHERE t.target IS NOT NULL), ARRAY[]::text[]) AS targets,
  a.delivery_mode, a.webhook_id, a.thread_id, a.message_id, a.enabled, a.interval_minutes, a.interval_seconds,
  (SELECT window_mode FROM autoboard_farming_settings f WHERE f.autoboard_id=a.id) AS farming_window,
  (SELECT time_zone FROM autoboard_farming_settings f WHERE f.autoboard_id=a.id) AS farming_timezone,
+ (SELECT rolling_days FROM autoboard_farming_settings f WHERE f.autoboard_id=a.id) AS rolling_days,
  (SELECT counting_from FROM autoboard_farming_settings f WHERE f.autoboard_id=a.id) AS counting_from,
  a.schedule_kind, to_char(a.schedule_time, 'HH24:MI') AS schedule_time, a.schedule_weekdays, a.schedule_day_of_month, a.next_run_at, a.last_run_at, a.created_at, a.updated_at
  FROM autoboards a LEFT JOIN autoboard_targets t ON t.autoboard_id = a.id WHERE a.server_id = $1`
@@ -108,7 +105,7 @@ const boardValue = (row: BoardRow, knownChannelId?: string) => Effect.gen(functi
   const channelId = hook !== undefined && [1, 2].includes(hook.type) ? hook.channel_id ?? null : null
   return { id: row.id, rowLimit: row.row_limit, boardType: row.board_type, targetKind: autoboardCapabilities.find((item) => item.boardType === row.board_type)?.targetKind ?? "", targetScope: row.target_scope, targets: row.targets, deliveryMode: row.delivery_mode, channelId, channelDeleted: channelId === null,
     threadId: row.thread_id, messageId: row.message_id, enabled: row.enabled, intervalMinutes: row.interval_minutes, intervalSeconds: row.interval_seconds,
-    farming: row.farming_window === null ? null : { window: row.farming_window, timezone: row.farming_timezone ?? "UTC", countingFrom: iso(row.counting_from) },
+    farming: row.farming_window === null ? null : { days: row.rolling_days ?? undefined, window: row.farming_window, timezone: row.farming_timezone ?? "UTC", countingFrom: iso(row.counting_from) },
     schedule: row.schedule_kind === null || row.schedule_time === null ? null : { kind: row.schedule_kind, timeOfDay: row.schedule_time, weekdays: row.schedule_weekdays ?? [], ...(row.schedule_day_of_month === null ? {} : { dayOfMonth: row.schedule_day_of_month }) },
     nextRunAt: row.board_type === "donations" && row.delivery_mode === "refresh" && row.next_run_at !== null && new Date(row.next_run_at).getUTCFullYear() === 9999 ? null : iso(row.next_run_at), lastRunAt: iso(row.last_run_at), createdAt: iso(row.created_at), updatedAt: iso(row.updated_at) }
 })
@@ -150,9 +147,12 @@ export const executeDashboardAutoboards = <R>(input: DashboardServerOperationInp
     if (prepared === undefined) return yield* Effect.die("Missing autoboard preparation")
     const { write, user } = prepared
     if (operation === "createAutoboard") {
-      const count = yield* sql<{ count: number; limit: number }>`SELECT (SELECT count(*)::int FROM autoboards WHERE server_id = ${serverId}) AS count, autoboard_limit AS limit FROM servers WHERE id = ${serverId}`
+      const count = yield* sql<{ count: number; limit: number }>`SELECT (SELECT count(*)::int FROM autoboards WHERE server_id = ${serverId} AND board_type NOT LIKE 'sample-%') AS count, autoboard_limit AS limit FROM servers WHERE id = ${serverId}`
       if (count[0] === undefined || count[0].count >= count[0].limit) return yield* invalid("autoboards", limitMessage("AutoBoard"))
     }
+    const limits = yield* readServerLimits(serverId)
+    if (write.deliveryMode === "refresh" && !limits.customAutoboardIntervalEnabled && (write.intervalSeconds ?? (write.intervalMinutes ?? 0) * 60) !== 300)
+      return yield* invalid("intervalMinutes", "Refreshes every 5 minutes. A custom interval requires an admin grant.")
     let webhookId = prepared.webhookId
     if (webhookId === undefined) {
       const hooks = yield* decodeDiscord(Schema.Array(Hook), yield* discord.request(`/guilds/${serverId}/webhooks`))
@@ -178,9 +178,9 @@ export const executeDashboardAutoboards = <R>(input: DashboardServerOperationInp
       yield* sql`DELETE FROM autoboard_targets WHERE autoboard_id = ${id}::uuid`
     }
     if (write.farming && write.boardType === "farming") {
-      yield* sql`INSERT INTO autoboard_farming_settings (autoboard_id,window_mode,time_zone)
-        VALUES (${id}::uuid,${write.farming.window},${write.farming.timezone})
-        ON CONFLICT (autoboard_id) DO UPDATE SET window_mode=EXCLUDED.window_mode,time_zone=EXCLUDED.time_zone`
+      yield* sql`INSERT INTO autoboard_farming_settings (autoboard_id,window_mode,time_zone,rolling_days)
+        VALUES (${id}::uuid,${write.farming.window},${write.farming.timezone},${write.farming.days ?? 30})
+        ON CONFLICT (autoboard_id) DO UPDATE SET window_mode=EXCLUDED.window_mode,time_zone=EXCLUDED.time_zone,rolling_days=EXCLUDED.rolling_days`
     }
     for (const [position, target] of write.targets.entries()) yield* sql`INSERT INTO autoboard_targets (autoboard_id, position, target) VALUES (${id}::uuid, ${position}, ${target})`
     const row = (yield* readBoards(serverId, id))[0]

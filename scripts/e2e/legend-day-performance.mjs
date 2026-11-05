@@ -1,3 +1,4 @@
+import { verifyAccountAvatars } from "./account-avatar.mjs"
 import { startBotCustomizationProvider } from "./bot-customization-provider.mjs"
 import { verifyManualLimits } from "./manual-limits.mjs"
 import { verifyScopedDashboardAccess } from "./scoped-dashboard-access.mjs"
@@ -265,6 +266,7 @@ try {
   assert.equal(exported.bookmarks[0].war_notifications_enabled,true)
   const serialized=JSON.stringify(exported)
   assert(!serialized.includes('refresh_hash')&&!serialized.includes('token_hash')&&!serialized.includes('pkce_challenge'),'Exports must not disclose authentication material')
+  await verifyAccountAvatars({db,origin:`http://127.0.0.1:${port}`,signingKey})
   await verifyScopedDashboardAccess({db,origin:`http://127.0.0.1:${port}`,signingKey,applicationId:'999999999999999999'})
   await verifyManualLimits({db,origin:`http://127.0.0.1:${port}`,adminOrigin:'http://127.0.0.1:8804',signingKey,meteringKey,profileProvider})
   console.log('PASS: real local API/Timescale; weighted periods, distinct players, disjoint rank bands, coverage, source windows, cohorts, query validation and missing observation reconciliation, unranked observed cohorts and partial current day')

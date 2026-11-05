@@ -71,12 +71,12 @@ const lockTicketAndPanel = (ticketId: string, panelId: string) => Effect.gen(fun
 
 export const prepareTicketApproval = (interaction: VerifiedRuntimeInteraction) => Effect.gen(function* () {
   const action = yield* parseTicketStaffAction(interaction)
-  if (action.action !== "approve") return yield* new InvalidRequest({ message: "A matching ticket approval button is required" })
+  if (action.action !== "approve" && action.action !== "messages") return yield* new InvalidRequest({ message: "A matching ticket approval button is required" })
   const sql = yield* SqlClient.SqlClient
   const replay = (yield* sql.unsafe<Operation>(`SELECT ${columns} FROM ticket_runtime_operations WHERE interaction_id=$1`, [interaction.id]))[0]
   const replayResponse = (row: Operation) => Effect.gen(function* () {
     yield* scope(row, interaction)
-    if (row.ticket_id !== action.ticketId || row.request_hash !== interaction.requestHash || row.origin_message_id !== interaction.messageId) {
+    if ((action.ticketId !== undefined && row.ticket_id !== action.ticketId) || row.request_hash !== interaction.requestHash || row.origin_message_id !== (interaction.messageId ?? interaction.id)) {
       return yield* new Conflict({ message: "Ticket approval interaction identity was reused" })
     }
     return yield* response(row)
@@ -106,7 +106,7 @@ export const prepareTicketApproval = (interaction: VerifiedRuntimeInteraction) =
     const rows = yield* sql.unsafe<Operation>(`INSERT INTO ticket_runtime_operations(id,interaction_id,action,ticket_id,server_id,actor_user_id,panel_id,
       origin_channel_id,origin_message_id,context,request,request_hash,progress,expires_at)
       VALUES($1::uuid,$2,'approve',$3::uuid,$4,$5,$6::uuid,$7,$8,$9::jsonb,$10::jsonb,$11,$12::jsonb,clock_timestamp()+interval '10 minutes') RETURNING ${columns}`,
-    [id, interaction.id, ticket.id, ticket.server_id, interaction.actorId, ticket.panel_id, ticket.channel_id, interaction.messageId,
+    [id, interaction.id, ticket.id, ticket.server_id, interaction.actorId, ticket.panel_id, ticket.channel_id, interaction.messageId ?? interaction.id,
       JSON.stringify(context), JSON.stringify(action), interaction.requestHash, JSON.stringify(initialApprovalProgress())])
     if (!rows[0]) return yield* failure(undefined)
     return yield* response(rows[0])

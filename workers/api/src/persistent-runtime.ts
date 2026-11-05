@@ -106,7 +106,7 @@ export const dispatchPersistentRuntime = (request: Request, bindings: DeferredRu
     const interaction = ticketPrepare ? yield* adoptLegacyTicketPanel(verified,bindings.DISCORD_APPLICATION_ID) : verified
     if (ticketAccounts) return Response.json(yield* ticketAccountInteraction(interaction), { headers: { "cache-control":"no-store" } })
     if (ticketAction || ticketApprove) {
-      const approval = ticketApprove || ("custom_id" in interaction.data && interaction.data.custom_id.startsWith("ck:ticket:approve:"))
+      const approval = (interaction.type === 2 && "options" in interaction.data && (interaction.data.options?.[0] as {name?:string}|undefined)?.name === "messages") || ticketApprove || ("custom_id" in interaction.data && interaction.data.custom_id.startsWith("ck:ticket:approve:"))
       const result = yield* (approval ? prepareTicketApproval(interaction) : prepareTicketStaff(interaction))
       if (result.outcome === "accepted") yield* wakeTicketOperation(bindings,result.operationId,interaction.guildId,result.ticketId)
       return Response.json(result,{headers:{"cache-control":"no-store"}})

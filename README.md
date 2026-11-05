@@ -47,7 +47,7 @@ This path is deliberately best-effort: there is no request table, delivery lease
 The API runs on Cloudflare Workers with Effect and TypeScript. It stays on
 `/v2`, uses POST for the six former QUERY operations, retains Dashboard business
 handlers, and owns Admin business handlers. Dashboard and Admin frontends are
-separate Workers; Bot runtime work remains a separate plan.
+separate Workers; the Bot Worker sends signed command and component requests to this API.
 
 Use Node 26 and npm 12, with the pinned Effect/TypeScript versions:
 

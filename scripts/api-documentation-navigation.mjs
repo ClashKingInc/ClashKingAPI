@@ -45,6 +45,8 @@ const additions = new Map([
   ["GET /v2/app/updates/manifest", "Mobile App"],
   ["GET /v2/notifications/clans", "Mobile App"],
   ["PUT /v2/notifications/clans/{}", "Mobile App"],
+  ["GET /v2/auth/avatar", "App Authentication"],
+  ["PUT /v2/auth/avatar", "App Authentication"],
   ["GET /v2/auth/export", "App Authentication"],
   ["DELETE /v2/auth/me", "App Authentication"],
   ["GET /v2/health", "Health"],

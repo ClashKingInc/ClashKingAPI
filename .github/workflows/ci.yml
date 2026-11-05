@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: ClashKingInc/DevKit
-          ref: 6bbb39616aaf407bdc0293e0a8770a48eba8a68b
+          ref: 1db64257e552af142710412ada72d022de93ec50
           path: .ci-schema
           persist-credentials: false
 

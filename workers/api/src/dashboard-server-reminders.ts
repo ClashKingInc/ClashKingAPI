@@ -4,9 +4,10 @@ import { SqlClient } from "effect/sql"
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
 import { DiscordApi } from "./discord-api.js"
 import { validateDiscordDestination } from "./discord-destination.js"
-import { lockServerDiscordResources } from "./discord-managed-resources.js"
+import { compensateCreatedDiscordResource, createLogWebhook, lockServerDiscordResources } from "./discord-managed-resources.js"
 import { Conflict, DatabaseFailure, InvalidRequest, NotFound, RateLimited, Unauthenticated, Forbidden, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { notifyTracking } from "./tracking-wake.js"
+import { reminderWebhook } from "./reminder-webhook.js"
 import { requestManualReminders } from "./manual-reminders.js"
 
 export const dashboardReminderOperationIds = ["serverReminders", "createServerReminder", "updateServerReminder", "deleteServerReminder", "sendServerReminder"] as const
@@ -83,6 +84,7 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
       yield* validateDiscordDestination(serverId, validatedChannel, body.thread_id || null)
     }
   }
+  let created: Effect.Success<ReturnType<typeof createLogWebhook>> | undefined
   const result = yield* sql.withTransaction(Effect.gen(function* () {
     yield* lockServerDiscordResources(serverId)
     const operation = input.endpoint.operationId
@@ -91,8 +93,10 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
       yield* validateFields(body)
       if (!Object.hasOwn(groups, body.type)) return yield* new InvalidRequest({ message: "Unsupported reminder type" })
       yield* rejectDuplicateReminder(sql, serverId, body.type, tag(body.clan_tag ?? ""), body.time, body.roster_id ?? null)
+      const hook = yield* reminderWebhook(input.bindings.DISCORD_CLIENT_ID, serverId, body.channel_id)
+      created = hook.created
       const data = { type: body.type, server: serverId, channel: body.channel_id, time: body.time, clan: tag(body.clan_tag ?? ""), custom_text: body.custom_text ?? "", [body.type === "Clan Capital" || body.type === "Clan Games" ? "townhalls" : "townhall_filter"]: body.townhall_filter ?? [], roles: body.roles ?? [], types: body.war_types ?? [], point_threshold: body.point_threshold, attack_threshold: body.attack_threshold, roster: body.roster_id, ping_type: body.ping_type }
-      const rows = yield* sql.unsafe<{ id: string }>(`INSERT INTO reminders (server_id,type,type_name,clan_tag,webhook_token,channel_id,thread_id,minutes_remaining,trigger_time,custom_text,townhalls,roles,war_type_names,trigger_threshold,point_threshold,attack_threshold,roster_id,ping_type,data) VALUES ($1,$2,$3,$4,'',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,NULLIF($16,''),NULLIF($17,''),$18::jsonb) RETURNING id::text`, [serverId, reminderTypeIds[body.type as keyof typeof reminderTypeIds], body.type, tag(body.clan_tag ?? ""), body.channel_id, body.thread_id || null, reminderMinutes(body.time), body.time, body.custom_text ?? "", body.townhall_filter ?? null, body.roles ?? [], body.war_types ?? [], body.point_threshold ?? body.attack_threshold ?? null, body.point_threshold === undefined ? null : JSON.stringify(body.point_threshold), body.attack_threshold === undefined ? null : JSON.stringify(body.attack_threshold), body.roster_id ?? "", body.ping_type ?? "", JSON.stringify(data)])
+      const rows = yield* sql.unsafe<{ id: string }>(`INSERT INTO reminders (server_id,type,type_name,clan_tag,webhook_token,channel_id,thread_id,minutes_remaining,trigger_time,custom_text,townhalls,roles,war_type_names,trigger_threshold,point_threshold,attack_threshold,roster_id,ping_type,data,webhook_id) VALUES ($1,$2,$3,$4,'',$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15::jsonb,NULLIF($16,''),NULLIF($17,''),$18::jsonb,$19) RETURNING id::text`, [serverId, reminderTypeIds[body.type as keyof typeof reminderTypeIds], body.type, tag(body.clan_tag ?? ""), body.channel_id, body.thread_id || null, reminderMinutes(body.time), body.time, body.custom_text ?? "", body.townhall_filter ?? null, body.roles ?? [], body.war_types ?? [], body.point_threshold ?? body.attack_threshold ?? null, body.point_threshold === undefined ? null : JSON.stringify(body.point_threshold), body.attack_threshold === undefined ? null : JSON.stringify(body.attack_threshold), body.roster_id ?? "", body.ping_type ?? "", JSON.stringify(data), hook.id])
       if (rows[0] === undefined) return yield* new DatabaseFailure({ cause: undefined, message: "Reminder insertion returned no identifier" })
       yield* notifyTracking(sql, { kind: "reminder_config", clanTag: tag(body.clan_tag ?? ""), reminderType: body.type })
       return { message: "Reminder created successfully", reminder_id: rows[0].id, server_id: serverId }
@@ -113,10 +117,13 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
     if (destinationChanged && (channel ?? "") !== validatedChannel) {
       return yield* new Conflict({ message: "Reminder destination changed during validation; reload and retry" })
     }
+    yield* validateDiscordDestination(serverId, channel ?? "", destinationChanged ? body.thread_id || null : existing.thread_id)
+    const hook = yield* reminderWebhook(input.bindings.DISCORD_CLIENT_ID, serverId, channel ?? "")
+    created = hook.created
     const data = { channel: body.channel_id, time: body.time, custom_text: body.custom_text, [existing.type_name === "Clan Capital" || existing.type_name === "Clan Games" ? "townhalls" : "townhall_filter"]: body.townhall_filter, roles: body.roles, types: body.war_types, point_threshold: body.point_threshold, attack_threshold: body.attack_threshold, ping_type: body.ping_type }
-    yield* sql.unsafe(`UPDATE reminders SET channel_id=COALESCE($3,channel_id),trigger_time=COALESCE($4,trigger_time),minutes_remaining=COALESCE($5,minutes_remaining),custom_text=COALESCE($6,custom_text),townhalls=COALESCE($7,townhalls),roles=COALESCE($8,roles),war_type_names=COALESCE($9,war_type_names),point_threshold=COALESCE($10::jsonb,point_threshold),attack_threshold=COALESCE($11::jsonb,attack_threshold),ping_type=COALESCE($12,ping_type),trigger_threshold=COALESCE($13,trigger_threshold),data=data||$14::jsonb,thread_id=CASE WHEN $15 THEN $16 ELSE thread_id END,disabled=false,disabled_reason=NULL,updated_at=now() WHERE server_id=$1 AND id=$2::uuid`, [serverId,id,body.channel_id ?? null,body.time ?? null,body.time === undefined ? null : reminderMinutes(body.time),body.custom_text ?? null,body.townhall_filter ?? null,body.roles ?? null,body.war_types ?? null,body.point_threshold === undefined ? null : JSON.stringify(body.point_threshold),body.attack_threshold === undefined ? null : JSON.stringify(body.attack_threshold),body.ping_type ?? null,body.point_threshold ?? body.attack_threshold ?? null,JSON.stringify(data),destinationChanged,body.thread_id || null])
+    yield* sql.unsafe(`UPDATE reminders SET webhook_id=$17,webhook_token='',channel_id=COALESCE($3,channel_id),trigger_time=COALESCE($4,trigger_time),minutes_remaining=COALESCE($5,minutes_remaining),custom_text=COALESCE($6,custom_text),townhalls=COALESCE($7,townhalls),roles=COALESCE($8,roles),war_type_names=COALESCE($9,war_type_names),point_threshold=COALESCE($10::jsonb,point_threshold),attack_threshold=COALESCE($11::jsonb,attack_threshold),ping_type=COALESCE($12,ping_type),trigger_threshold=COALESCE($13,trigger_threshold),data=data||$14::jsonb,thread_id=CASE WHEN $15 THEN $16 ELSE thread_id END,disabled=false,disabled_reason=NULL,updated_at=now() WHERE server_id=$1 AND id=$2::uuid`, [serverId,id,body.channel_id ?? null,body.time ?? null,body.time === undefined ? null : reminderMinutes(body.time),body.custom_text ?? null,body.townhall_filter ?? null,body.roles ?? null,body.war_types ?? null,body.point_threshold === undefined ? null : JSON.stringify(body.point_threshold),body.attack_threshold === undefined ? null : JSON.stringify(body.attack_threshold),body.ping_type ?? null,body.point_threshold ?? body.attack_threshold ?? null,JSON.stringify(data),destinationChanged,body.thread_id || null,hook.id])
     yield* notifyTracking(sql, { kind: "reminder_config", clanTag: existing.clan_tag, reminderType: existing.type_name })
     return { message: "Reminder updated successfully", reminder_id: id, server_id: serverId }
-  }))
+  })).pipe(Effect.catch((failure) => created === undefined ? Effect.fail(failure) : compensateCreatedDiscordResource(created).pipe(Effect.andThen(Effect.fail(failure)))))
   return result
 }).pipe(Effect.mapError((cause) => cause instanceof Conflict || cause instanceof InvalidRequest || cause instanceof NotFound || cause instanceof RateLimited || cause instanceof Unauthenticated || cause instanceof Forbidden || cause instanceof UpstreamUnavailable || cause instanceof DatabaseFailure ? cause : new DatabaseFailure({ cause, message: "Reminder database operation failed" })))

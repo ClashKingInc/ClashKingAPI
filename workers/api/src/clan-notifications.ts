@@ -11,15 +11,15 @@ interface ClanRow {
   war_tracked: boolean; raid_tracked: boolean
 }
 const iso = (date: Date | string | null) => date === null ? null : new Date(date).toISOString()
-// Beta supports ten choices. Disabling beta preserves existing choices; only additions
+// Beta supports two choices. Disabling beta preserves existing choices; only additions
 // require room under the new allowance. No billing or subscription writes occur here.
-export function clanNotificationLimit(beta: boolean, paid: boolean): number { return beta || paid ? 10 : 1 }
+export function clanNotificationLimit(beta: boolean, paid: boolean): number { return beta || paid ? 2 : 1 }
 export function clanNotificationChangeAllowed(current: number, next: number, limit: number): boolean {
   return next <= limit || next <= current
 }
 export const getNotificationClans = (principal: UserPrincipal, _beta = true) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const limit = 10
+  const limit = 2
   const rows = yield* sql<ClanRow>`SELECT bookmark.tag, war_notifications_enabled, raid_notifications_enabled,
     war_active_until, raid_active_until, COALESCE(interest.war_tracked,false) AS war_tracked,
     COALESCE(interest.raid_tracked,false) AS raid_tracked
@@ -44,6 +44,9 @@ export const putNotificationClan = (principal: UserPrincipal, rawTag: string, bo
       return yield* new Unauthenticated({ message: "User session is no longer valid" })
     const current = yield* getNotificationClans(principal, beta)
     const existing = current.clans.find((clan) => clan.tag === tag)
+    const enabledClans = current.clans.filter(clan => clan.warEnabled || clan.raidEnabled).length
+    if (!existing?.warEnabled && !existing?.raidEnabled && (body.warEnabled || body.raidEnabled) && enabledClans >= 2)
+      return yield* new Conflict({ message: "Notifications are limited to two clans. Turn off another clan first." })
     const war = current.usage.war - Number(existing?.warEnabled ?? false) + Number(body.warEnabled)
     const raid = current.usage.raid - Number(existing?.raidEnabled ?? false) + Number(body.raidEnabled)
     if (!clanNotificationChangeAllowed(current.usage.war, war, current.limits.war) ||

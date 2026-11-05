@@ -36,7 +36,8 @@ export const AutoBoardWrite = Schema.Struct({
   intervalMinutes: OptionalNullableNumber,
   intervalSeconds: OptionalNullableNumber,
   farming: Schema.optionalKey(Schema.NullOr(Schema.Struct({
-    window: Schema.Literals(["since_start", "calendar_month", "game_season"]),
+    window: Schema.Literals(["since_start", "calendar_month", "game_season", "rolling_days"]),
+    days: Schema.optionalKey(Schema.Int.check(Schema.isBetween({minimum:1,maximum:180}))),
     timezone: Schema.String,
   }))),
   schedule: Schema.optionalKey(Schema.NullOr(AutoBoardSchedule)),
@@ -57,7 +58,8 @@ export const AutoBoardConfig = Schema.Struct({
   intervalMinutes: Schema.NullOr(Schema.Number),
   intervalSeconds: OptionalNullableNumber,
   farming: Schema.optionalKey(Schema.NullOr(Schema.Struct({
-    window: Schema.Literals(["since_start", "calendar_month", "game_season"]),
+    window: Schema.Literals(["since_start", "calendar_month", "game_season", "rolling_days"]),
+    days: Schema.optionalKey(Schema.Int.check(Schema.isBetween({minimum:1,maximum:180}))),
     timezone: Schema.String,
     countingFrom: NullableString,
   }))),

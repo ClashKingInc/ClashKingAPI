@@ -1,4 +1,4 @@
-import { DecimalSnowflake, type AuthUser, type CurrentUserResponse } from "@clashking/api-contracts"
+import { type AccountAvatarId, DecimalSnowflake, type AuthUser, type CurrentUserResponse } from "@clashking/api-contracts"
 import { Context, Effect, Layer, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 import type { UserPrincipal } from "./auth.js"
@@ -22,6 +22,7 @@ export interface DiscordLogin {
 }
 
 export class AuthProfiles extends Context.Service<AuthProfiles, {
+  readonly avatar: (principal: UserPrincipal, avatarId?: typeof AccountAvatarId.Type) => Effect.Effect<{ avatar_id: typeof AccountAvatarId.Type | null }, ApiFailure>
   readonly discordLogin: (input: DiscordLogin, kind: SessionKind) => Effect.Effect<AuthSession, ApiFailure>
   readonly currentUser: (principal: UserPrincipal) => Effect.Effect<typeof CurrentUserResponse.Type, ApiFailure>
 }>()("clashking/AuthProfiles") {
@@ -37,6 +38,15 @@ export class AuthProfiles extends Context.Service<AuthProfiles, {
         ? new UpstreamUnavailable({ cause, message: "Discord profile response is invalid" }) : cause),
     )
     return AuthProfiles.of({
+      avatar: (principal, avatarId) => Effect.gen(function* () {
+        // The authenticated principal is the only account selector. Never accept
+        // an owner ID from the request or require Discord to read a saved choice.
+        const rows = avatarId === undefined
+          ? yield* database(sql<{ avatar_id: typeof AccountAvatarId.Type | null }>`SELECT avatar_id FROM auth_users WHERE user_id = ${principal.userId}`)
+          : yield* database(sql<{ avatar_id: typeof AccountAvatarId.Type | null }>`UPDATE auth_users SET avatar_id = ${avatarId}, updated_at = now() WHERE user_id = ${principal.userId} RETURNING avatar_id`)
+        if (rows[0] === undefined) return yield* new Unauthenticated({ message: "User session is no longer valid" })
+        return rows[0]
+      }),
       discordLogin: (input, kind) => Effect.gen(function* () {
         yield* requireSessionDevice(input.device_id, kind)
         if (!input.code.trim() || !input.code_verifier.trim() || !input.redirect_uri.trim()) {

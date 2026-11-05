@@ -6,4 +6,4 @@ Dashboard create/edit/read, mobile library reads, bot vote/remove-vote, legacy r
 
 Images use ordered URLs (up to four), with internal empty slots supported during legacy staging. Votes use a user-ID keyed JSON object holding vote and its existing update timestamp. Downloads retain their immutable first-download map. SQL updates change only the relevant field/key, so votes cannot overwrite downloads or images.
 
-Cutover must drain old base traffic, apply 021, deploy this API and resume traffic. Old base handlers cannot run against 021 because their tables are removed. The existing leaderboard rollout prerequisites for migration 020 still apply. No production migration or deployment is part of these commits.
+Installations below schema 021 must drain old base traffic before applying 021 and deploying compatible handlers. Old base handlers cannot run against 021 because their tables are removed. Existing installations already on 021 retain their inline data during later upgrades.

@@ -31,6 +31,21 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  await request(origin,'/v2/server/'+server+'/reminders','POST',{...reminderBody,time:'300 min',channel_id:'999999999999994904'},userHeaders,400);
  assert.equal(profileProvider.webhookCreates.length,1,'Cross-server destination cannot create webhooks');
  console.log('PASS reminder API: reuses log hooks, shares one hook across concurrent reminders, retains threads, changes destination, rejects cross-server channel');
+ const redditPath='/v2/server/'+server+'/logs';
+ const redditBody={channel_id:'999999999999994901',thread_id:'999999999999994903',log_types:['reddit_feed'],reddit_role_id:'999999999999995911',reddit_accounts:['Recruiter']};
+ await request(origin,redditPath,'PUT',redditBody,userHeaders);
+ let reddit=(await request(origin,redditPath,'GET',undefined,userHeaders)).logs.find(row=>row.type==='reddit_feed');
+ assert.equal(reddit.reddit_role_id,redditBody.reddit_role_id);assert.deepEqual(reddit.reddit_accounts,['Recruiter']);
+ await request(origin,redditPath,'PUT',{channel_id:'999999999999994902',log_types:['reddit_feed']},userHeaders);
+ reddit=(await request(origin,redditPath,'GET',undefined,userHeaders)).logs.find(row=>row.type==='reddit_feed');
+ assert.equal(reddit.reddit_role_id,redditBody.reddit_role_id);assert.deepEqual(reddit.reddit_accounts,['Recruiter'],'Old clients must preserve omitted options');
+ await request(origin,redditPath,'PUT',{...redditBody,reddit_role_id:'999999999999995912'},userHeaders,400);
+ await request(origin,redditPath,'PUT',{...redditBody,reddit_accounts:['Recruiter','recruiter']},userHeaders,400);
+ await request(origin,redditPath,'PUT',{...redditBody,reddit_role_id:null,reddit_accounts:[]},userHeaders);
+ reddit=(await request(origin,redditPath,'GET',undefined,userHeaders)).logs.find(row=>row.type==='reddit_feed');
+ assert.equal(reddit.reddit_role_id,null);assert.deepEqual(reddit.reddit_accounts,[]);
+ console.log('PASS Reddit API: role/account settings round-trip, older clients retain options, foreign role/duplicate account rejected, explicit clearing works');
+
 
  await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:0,autoboardLimit:0,aiMonthlyLimitUsd:.05});
  await request(origin,'/v2/server/'+server+'/clans','POST',{tag:'#PYLQRRJC'},userHeaders,409);

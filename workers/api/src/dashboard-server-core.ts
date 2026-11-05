@@ -656,13 +656,13 @@ const countdownMutationOperation = (input: DashboardServerOperationInput) => dat
 
 const logTypes = new Set(["clash_maintenance", "join_log", "leave_log", "clan_achievement_log", "clan_requirements_log", "clan_description_log", "war_log", "war_panel", "cwl_lineup_change_log", "capital_donations", "capital_attacks", "raid_panel", "capital_weekly_summary", "role_change", "troop_upgrade", "super_troop_boost", "th_upgrade", "league_change", "spell_upgrade", "hero_upgrade", "hero_equipment_upgrade", "name_change", "legend_log_attacks", "legend_log_defenses", "ban_alert", "reddit_feed"])
 const Webhook = Schema.Struct({ id: DecimalSnowflake, channel_id: Schema.optionalKey(Schema.NullOr(DecimalSnowflake)) })
-interface LogRow { readonly clan_tag: string | null; readonly type: string; readonly webhook_id: string; readonly thread_id: string | null; readonly disabled: boolean; readonly disabled_reason: string | null }
+interface LogRow { readonly clan_tag: string | null; readonly type: string; readonly webhook_id: string; readonly thread_id: string | null; readonly disabled: boolean; readonly disabled_reason: string | null; readonly reddit_role_id: string | null; readonly reddit_accounts: ReadonlyArray<string> }
 const logsReadStateOperation = (input: DashboardServerOperationInput) => database("Server logs could not be loaded or updated", Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient, discord = yield* DiscordApi, serverId = serverIdFor(input)
   const hooks = yield* decodeDiscord(Schema.Array(Webhook), yield* discord.request(`/guilds/${serverId}/webhooks`))
-  const enrich = (items: ReadonlyArray<LogRow>) => items.map((row) => ({ type: row.type, webhook_id: row.webhook_id, thread_id: row.thread_id, disabled: row.disabled, disabled_reason: row.disabled_reason, ...optional("clan_tag", row.clan_tag), ...optional("channel_id", hooks.find((hook) => hook.id === row.webhook_id)?.channel_id) }))
+  const enrich = (items: ReadonlyArray<LogRow>) => items.map((row) => ({ type: row.type, webhook_id: row.webhook_id, thread_id: row.thread_id, disabled: row.disabled, disabled_reason: row.disabled_reason, ...(row.type === "reddit_feed" ? { reddit_role_id: row.reddit_role_id, reddit_accounts: row.reddit_accounts } : {}), ...optional("clan_tag", row.clan_tag), ...optional("channel_id", hooks.find((hook) => hook.id === row.webhook_id)?.channel_id) }))
   if (input.endpoint.operationId === "serverLogs") {
-    const rows = yield* sql<LogRow>`SELECT clan_tag, type, webhook_id, thread_id, disabled, disabled_reason FROM server_logs WHERE server_id = ${serverId} ORDER BY clan_tag NULLS FIRST, type`
+    const rows = yield* sql<LogRow>`SELECT clan_tag, type, webhook_id, thread_id, disabled, disabled_reason, reddit_role_id, reddit_accounts FROM server_logs WHERE server_id = ${serverId} ORDER BY clan_tag NULLS FIRST, type`
     return { logs: enrich(rows), count: rows.length }
   }
   const body = record(input.body)
@@ -676,7 +676,7 @@ const logsReadStateOperation = (input: DashboardServerOperationInput) => databas
     if (["reddit_feed", "clash_maintenance"].includes(type) && tag !== null) return yield* new InvalidRequest({ message: `clan_tag is not allowed for log type: ${type}` })
   }
   if (tag !== null) yield* requireRow(yield* sql<{ tag: string }>`SELECT tag FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag}`, "Clan not found on this server")
-  const rows = yield* sql<LogRow>`UPDATE server_logs SET disabled = ${body.disabled}, disabled_reason = NULL, updated_at = now() WHERE server_id = ${serverId} AND clan_tag IS NOT DISTINCT FROM ${tag} AND type = ANY(${selected}) RETURNING clan_tag, type, webhook_id, thread_id, disabled, disabled_reason`
+  const rows = yield* sql<LogRow>`UPDATE server_logs SET disabled = ${body.disabled}, disabled_reason = NULL, updated_at = now() WHERE server_id = ${serverId} AND clan_tag IS NOT DISTINCT FROM ${tag} AND type = ANY(${selected}) RETURNING clan_tag, type, webhook_id, thread_id, disabled, disabled_reason, reddit_role_id, reddit_accounts`
   yield* requireRow(rows, "Server log setup not found")
   return { message: "Server log state updated successfully", server_id: serverId, ...optional("clan_tag", tag), updated_log_types: selected, logs: enrich(rows) }
 }))
@@ -694,6 +694,16 @@ const logsMutationOperation = (input: DashboardServerOperationInput) => database
     if (!logTypes.has(type)) return yield* new InvalidRequest({ message: `Unknown log type: ${type}` })
     if (!["reddit_feed", "clash_maintenance"].includes(type) && tag === null) return yield* new InvalidRequest({ message: `clan_tag is required for log type: ${type}` })
     if (["reddit_feed", "clash_maintenance"].includes(type) && tag !== null) return yield* new InvalidRequest({ message: `clan_tag is not allowed for log type: ${type}` })
+  }
+  const hasRedditRole = Object.hasOwn(body, "reddit_role_id"), hasRedditAccounts = Object.hasOwn(body, "reddit_accounts")
+  if ((hasRedditRole || hasRedditAccounts) && (selected.length !== 1 || selected[0] !== "reddit_feed")) return yield* new InvalidRequest({ message: "Reddit options require only reddit_feed" })
+  const redditRole = body.reddit_role_id === null || body.reddit_role_id === undefined || body.reddit_role_id === "" ? null : yield* discordDestinationId(body.reddit_role_id, "reddit_role_id")
+  const redditAccounts = Array.isArray(body.reddit_accounts) ? body.reddit_accounts.map(value => text(value).trim().replace(/^u\//iu, "")) : []
+  if (redditAccounts.some(value => !/^[a-z0-9_-]{1,30}$/iu.test(value))) return yield* new InvalidRequest({ message: "Invalid Reddit account name" })
+  if (new Set(redditAccounts.map(value => value.toLowerCase())).size !== redditAccounts.length) return yield* new InvalidRequest({ message: "Duplicate Reddit account name" })
+  if (redditRole !== null) {
+    const roles = yield* decodeDiscord(Schema.Array(RawRole), yield* discord.request(`/guilds/${serverId}/roles`))
+    if (redditRole === serverId || !roles.some(role => role.id === redditRole)) return yield* new InvalidRequest({ message: "Reddit mention role is not in this server" })
   }
   let created: Effect.Success<ReturnType<typeof createLogWebhook>> | undefined
   const prepared = operation === "deleteServerLogs" ? undefined : yield* Effect.gen(function* () {
@@ -727,10 +737,14 @@ const logsMutationOperation = (input: DashboardServerOperationInput) => database
       created = yield* createLogWebhook(serverId, channelId, prepared.name, prepared.avatar)
       webhookId = created.id
     }
+    // Older clients omit Reddit options. Destination changes must preserve them.
     const logs: Array<LogRow & { readonly channel_id: string }> = []
     for (const type of selected) {
-      const rows = yield* sql<LogRow>`INSERT INTO server_logs (server_id, clan_tag, type, webhook_id, thread_id) VALUES (${serverId}, ${tag}, ${type}, ${webhookId}, ${threadId})
-        ON CONFLICT (server_id, clan_tag, type) DO UPDATE SET webhook_id = EXCLUDED.webhook_id, thread_id = EXCLUDED.thread_id, disabled = false, disabled_reason = NULL, updated_at = now() RETURNING clan_tag, type, webhook_id, thread_id, disabled, disabled_reason`
+      const rows = yield* sql<LogRow>`INSERT INTO server_logs (server_id, clan_tag, type, webhook_id, thread_id, reddit_role_id, reddit_accounts) VALUES (${serverId}, ${tag}, ${type}, ${webhookId}, ${threadId}, ${redditRole}, ${redditAccounts})
+        ON CONFLICT (server_id, clan_tag, type) DO UPDATE SET webhook_id = EXCLUDED.webhook_id, thread_id = EXCLUDED.thread_id, disabled = false, disabled_reason = NULL,
+          reddit_role_id = CASE WHEN ${hasRedditRole} THEN EXCLUDED.reddit_role_id ELSE server_logs.reddit_role_id END,
+          reddit_accounts = CASE WHEN ${hasRedditAccounts} THEN EXCLUDED.reddit_accounts ELSE server_logs.reddit_accounts END,
+          updated_at = now() RETURNING clan_tag, type, webhook_id, thread_id, disabled, disabled_reason, reddit_role_id, reddit_accounts`
       logs.push({ ...(yield* requireRow(rows, "Server log could not be saved")), channel_id: channelId })
     }
     return { message: "Server logs updated successfully", server_id: serverId, ...optional("clan_tag", tag), updated_log_types: selected, logs: logs.map(({ clan_tag, ...row }) => ({ ...row, ...optional("clan_tag", clan_tag) })) }

@@ -301,6 +301,8 @@ export const ServerLog = Schema.Struct({
   thread_id: OptionalNullableString,
   disabled: Schema.Boolean,
   disabled_reason: OptionalNullableString,
+  reddit_role_id: OptionalNullableString,
+  reddit_accounts: Schema.optionalKey(Schema.Array(Schema.String)),
 })
 export const ServerLogsResponse = Schema.Struct({
   logs: Schema.Array(ServerLog),
@@ -311,6 +313,8 @@ export const UpdateServerLogsRequest = Schema.Struct({
   channel_id: Schema.String,
   thread_id: OptionalNullableString,
   log_types: Schema.Array(Schema.String),
+  reddit_role_id: OptionalNullableString,
+  reddit_accounts: Schema.optionalKey(Schema.Array(Schema.String)),
 })
 export const UpdateServerLogsDisabledRequest = Schema.Struct({
   clan_tag: OptionalString,

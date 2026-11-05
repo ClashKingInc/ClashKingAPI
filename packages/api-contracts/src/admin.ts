@@ -2,7 +2,6 @@ import { AdminServerLimitsEndpoint, AdminUpdateServerLimitsEndpoint, AdminResetB
 import { Schema } from "effect"
 
 import { ignoreObject, strictObject } from "./strict-object.js"
-import { ArmyFamilyId, ArmyResultStatistics, ArmySearchQuery } from "./league-analytics.js"
 
 import { defineEndpoint, NoBody, NoContent, NoPathParams, NoQuery } from "./endpoint.js"
 
@@ -393,36 +392,6 @@ export const AppUpdateChannel = Schema.Struct({ channel: AppReleaseTrack, platfo
 export const AppUpdateChannelInput = strictObject(Schema.Struct({ expectedUpdatedAt: Schema.NullOr(AppReleaseDateTimeInput), activeVersion: Schema.NullOr(AppReleaseVersionInput), rollbackTargetVersion: Schema.NullOr(AppReleaseVersionInput), rolloutBasisPoints: IntBetween(0, 10_000), paused: Schema.Boolean, schedule: Schema.NullOr(AppUpdateScheduleInput) }))
 export const AppReleasesResponse = Schema.Struct({ releases: Schema.Array(AppReleaseMarker), channels: Schema.Array(AppUpdateChannel) })
 
-export const AdminArmyFamily = Schema.Struct({
-  familyId: ArmyFamilyId,
-  name: Schema.NullOr(Schema.String),
-  shareCode: Schema.String,
-  heroIds: Schema.Array(Schema.Int),
-  equipmentIds: Schema.Array(Schema.Int),
-})
-export const AdminArmyFamilyStatistics = Schema.Struct({ ...ArmyResultStatistics.fields, totalLegendAttacks: Schema.Int })
-export const AdminArmyFamilyListItem = Schema.Struct({ ...AdminArmyFamily.fields, statistics: AdminArmyFamilyStatistics })
-export const AdminArmyFamiliesQuery = Schema.Struct({
-  ...ArmySearchQuery.fields,
-  search: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(8192))),
-  named: Schema.optionalKey(Schema.Literals(["all", "named", "unnamed"])),
-  page: Schema.optionalKey(IntBetween(1, 1_000_000)),
-  limit: Schema.optionalKey(IntBetween(1, 200)),
-})
-const ArmyPagination = { page: Schema.Int, limit: Schema.Int, hasMore: Schema.Boolean }
-export const AdminArmyFamiliesResponse = Schema.Struct({ items: Schema.Array(AdminArmyFamilyListItem), ...ArmyPagination })
-export const AdminArmyFamilyMember = Schema.Struct({
-  shareCode: Schema.String,
-})
-export const AdminArmyFamilyMembersQuery = Schema.Struct({
-  page: Schema.optionalKey(IntBetween(1, 1_000_000)),
-  limit: Schema.optionalKey(IntBetween(1, 200)),
-})
-export const AdminArmyFamilyMembersResponse = Schema.Struct({ familyId: ArmyFamilyId, items: Schema.Array(AdminArmyFamilyMember), ...ArmyPagination })
-export const UpdateAdminArmyFamilyInput = strictObject(Schema.Struct({
-  name: Schema.NullOr(Schema.Trim.check(Schema.isMinLength(1), Schema.isMaxLength(120))),
-}))
-
 const adminRead = { auth: "admin" as const, body: NoBody, bodyMode: "none" as const, responseMode: "json" as const, successStatus: 200 }
 const adminJson = { auth: "admin" as const, bodyMode: "json" as const, responseMode: "json" as const, successStatus: 200 }
 const IdPath = Schema.Struct({ id: UUID })
@@ -434,9 +403,6 @@ export const AdminAuditEndpoint = defineEndpoint({ ...adminRead, operationId: "a
 export const AdminProxyStatsEndpoint = defineEndpoint({ ...adminRead, operationId: "adminProxyStats", method: "GET", path: "/v2/admin/proxy/stats", summary: "Get proxy statistics", pathParams: NoPathParams, query: Schema.Struct({ series: Schema.optionalKey(Schema.Literals(["1m", "5m", "15m", "30m", "1h"])), lookback: Schema.optionalKey(Schema.Literals(["1h", "6h", "12h", "24h", "48h"])), endpoints: Schema.optionalKey(Schema.Literals(["24h", "7d"])), limit: Schema.optionalKey(IntBetween(1, 100)) }), response: ProxyStatsResponse })
 export const AdminTrackingSummaryEndpoint = defineEndpoint({ ...adminRead, auth: "admin-or-bot", operationId: "adminTrackingSummary", method: "GET", path: "/v2/admin/tracking/summary", summary: "Get tracking health summary", pathParams: NoPathParams, query: NoQuery, response: TrackingSummaryResponse })
 export const AdminTrackingTimeseriesEndpoint = defineEndpoint({ ...adminRead, auth: "admin-or-bot", operationId: "adminTrackingTimeseries", method: "GET", path: "/v2/admin/tracking/timeseries", summary: "Get tracking timeseries", pathParams: NoPathParams, query: Schema.Struct({ window: Schema.Literals(["15m", "1h", "6h", "24h"]), script: Schema.optionalKey(Schema.String), domain: Schema.optionalKey(Schema.String) }), response: TrackingTimeSeriesResponse })
-export const AdminArmyFamiliesEndpoint = defineEndpoint({ ...adminRead, operationId: "adminArmyFamilies", method: "GET", path: "/v2/admin/stats/armies", summary: "Browse all army families; hero and equipment filters describe representatives", pathParams: NoPathParams, query: AdminArmyFamiliesQuery, response: AdminArmyFamiliesResponse })
-export const AdminUpdateArmyFamilyEndpoint = defineEndpoint({ ...adminJson, operationId: "adminUpdateArmyFamily", method: "PATCH", path: "/v2/admin/stats/armies/:familyId", summary: "Set or clear a family's manual name", pathParams: Schema.Struct({ familyId: ArmyFamilyId }), query: NoQuery, body: UpdateAdminArmyFamilyInput, response: AdminArmyFamily })
-export const AdminArmyFamilyMembersEndpoint = defineEndpoint({ ...adminRead, operationId: "adminArmyFamilyMembers", method: "GET", path: "/v2/admin/stats/armies/:familyId/members", summary: "Browse exact share-code variants", pathParams: Schema.Struct({ familyId: ArmyFamilyId }), query: AdminArmyFamilyMembersQuery, response: AdminArmyFamilyMembersResponse })
 
 export const AdminListDeveloperApplicationsEndpoint = defineEndpoint({ ...adminRead, operationId: "adminListDeveloperApplications", method: "GET", path: "/v2/admin/developer-applications", summary: "List developer applications", pathParams: NoPathParams, query: NoQuery, response: Schema.Array(DeveloperApplication) })
 export const AdminCreateDeveloperApplicationEndpoint = defineEndpoint({ ...adminJson, successStatus: 201, operationId: "adminCreateDeveloperApplication", method: "POST", path: "/v2/admin/developer-applications", summary: "Create a developer application", pathParams: NoPathParams, query: NoQuery, body: CreateDeveloperApplicationInput, response: CreatedDeveloperApplication })
@@ -483,7 +449,6 @@ export const adminEndpoints = {
   me: AdminMeEndpoint, dashboard: AdminDashboardEndpoint, audit: AdminAuditEndpoint,
   proxyStats: AdminProxyStatsEndpoint, trackingSummary: AdminTrackingSummaryEndpoint,
   trackingTimeseries: AdminTrackingTimeseriesEndpoint,
-  armyFamilies: AdminArmyFamiliesEndpoint, updateArmyFamily: AdminUpdateArmyFamilyEndpoint, armyFamilyMembers: AdminArmyFamilyMembersEndpoint,
   listDeveloperApplications: AdminListDeveloperApplicationsEndpoint,
   createDeveloperApplication: AdminCreateDeveloperApplicationEndpoint,
   getDeveloperApplication: AdminGetDeveloperApplicationEndpoint,

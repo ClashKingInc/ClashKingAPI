@@ -269,6 +269,30 @@ try {
   await verifyAccountAvatars({db,origin:`http://127.0.0.1:${port}`,signingKey})
   await verifyScopedDashboardAccess({db,origin:`http://127.0.0.1:${port}`,signingKey,applicationId:'999999999999999999'})
   await verifyManualLimits({db,origin:`http://127.0.0.1:${port}`,adminOrigin:'http://127.0.0.1:8804',signingKey,meteringKey,profileProvider})
+  // The running API must not depend on retired permanent-family tables. Rename
+  // them only inside this disposable fixture while retaining their rows.
+  for (const table of ['army_family_daily_stats','army_family_members','army_families']) {
+    await db.query(`ALTER TABLE ${table} RENAME TO retired_${table}`)
+  }
+  for (const path of [
+    `/v2/player/%23PYP/legend/${first}/battlelog`,
+    `/v2/player/%23PYP/battlelog/history?time[after]=${first}&time[before]=${last}`,
+  ]) {
+    const response = await fetch(`http://127.0.0.1:${port}${path}`)
+    const result = await response.json()
+    assert.equal(response.status,200,JSON.stringify(result))
+    assert.ok(!JSON.stringify(result).includes('familyId'),'Retired numeric family IDs are absent')
+  }
+  await db.query(`INSERT INTO legend_daily_stats(day,cohort,attack_count,distinct_player_count,zero_star_count,one_star_count,two_star_count,three_star_count,destruction_percentage_sum,duration_seconds_sum,classified_army_attacks)
+    VALUES($1,'legend_i',10,2,0,0,0,10,1000,1200,10) ON CONFLICT(day,cohort) DO UPDATE SET classified_army_attacks=10`,[first])
+  await db.query(`INSERT INTO army_setup_daily_stats(day,league_tier_id,group_key,core_troops,representative_share_code,attack_count,zero_star_count,one_star_count,two_star_count,three_star_count,destruction_percentage_sum)
+    VALUES($1,105000036,'[4000008]',ARRAY[4000008],'u1x8',10,0,0,0,10,1000)`,[first])
+  const groupsResponse = await fetch(`http://127.0.0.1:${port}/v2/stats/army-setups?time[after]=${first}&time[before]=${first}`)
+  const groups = await groupsResponse.json()
+  assert.equal(groupsResponse.status,200,JSON.stringify(groups))
+  assert.equal(groups.items[0].groupKey,'[4000008]')
+  assert.equal(groups.items[0].attacks,10)
+  console.log('PASS: actual API battle history and daily army-group reads with legacy family tables unavailable')
   console.log('PASS: real local API/Timescale; weighted periods, distinct players, disjoint rank bands, coverage, source windows, cohorts, query validation and missing observation reconciliation, unranked observed cohorts and partial current day')
 } finally {
   if(api&&api.exitCode===null){api.kill('SIGTERM');await Promise.race([once(api,'exit'),new Promise(r=>setTimeout(r,5000))]);if(api.exitCode===null)api.kill('SIGKILL')}

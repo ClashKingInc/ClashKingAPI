@@ -7,10 +7,6 @@ import { ErrorResponse } from "./errors.js"
 
 export const LeagueBattleMode = Schema.Literals(["ranked", "legend"])
 export const LegendCohort = Schema.Literals(["legend_i", "top_1000", "top_200"])
-export const LeagueAnalyticsSortDirection = Schema.Literals(["asc", "desc"])
-export const ArmyFamilyId = Schema.String.check(Schema.isPattern(/^[1-9][0-9]*$/u)).annotate({
-  description: "Permanent family ID as a decimal string; never convert to a JavaScript number.",
-})
 export const LeagueReference = Schema.Struct({ id: Schema.Int, name: Schema.String })
 export const StarCounts = Schema.Struct({ zero: Schema.Int, one: Schema.Int, two: Schema.Int, three: Schema.Int })
 export const LootedResources = Schema.Struct({ gold: Schema.Int, elixir: Schema.Int, darkElixir: Schema.Int })
@@ -27,7 +23,6 @@ const LeagueBattleFields = {
   destructionPercentage: Schema.Number,
   duration: Schema.Int,
   shareCode: Schema.NullOr(Schema.String),
-  familyId: Schema.NullOr(ArmyFamilyId),
   trophies: Schema.Int,
 } as const
 export const LeagueBattle = strictObject(Schema.Struct(LeagueBattleFields))
@@ -103,7 +98,6 @@ export const PlayerBattlelogHistoryItem = Schema.Struct({
   duration: Schema.Int,
   lootedResources: LootedResources,
   shareCode: Schema.NullOr(Schema.String),
-  familyId: Schema.NullOr(ArmyFamilyId),
 })
 export const PlayerBattlelogHistoryResponse = Schema.Struct({ items: Schema.Array(PlayerBattlelogHistoryItem) })
 
@@ -148,51 +142,6 @@ export const LegendLeagueHistoryItem = Schema.Struct({
 })
 export const PlayerLeagueHistoryResponse = Schema.Struct({
   items: Schema.Array(Schema.Union([RankedLeagueHistoryItem, LegendLeagueHistoryItem])),
-})
-
-export const ArmySearchQuery = Schema.Struct({
-  ...TimeRangeQuery.fields,
-  cohort: Schema.optionalKey(LegendCohort),
-  heroIds: Schema.optionalKey(Schema.String),
-  equipmentIds: Schema.optionalKey(Schema.String),
-  minimumAttacks: Schema.optionalKey(Schema.Number),
-  minimumPlayers: Schema.optionalKey(Schema.Number),
-  minimumTripleRate: Schema.optionalKey(Schema.Number),
-  sort: Schema.optionalKey(Schema.Literals(["usage", "tripleRate", "zeroStarRate", "averageDuration", "averageDestruction"])),
-  direction: Schema.optionalKey(LeagueAnalyticsSortDirection),
-  limit: Schema.optionalKey(Schema.Number),
-})
-export const ArmyResultStatistics = Schema.Struct({
-  attacks: Schema.Int,
-  players: Schema.NullOr(Schema.Int).annotate({ description: "Exact collected players. Null when retained raw rows cannot reproduce every selected daily closeout population; never a sum of player-days." }),
-  starCounts: StarCounts,
-  averageDuration: Schema.NullOr(Schema.Number),
-  averageDestruction: Schema.NullOr(Schema.Number),
-})
-export const ArmyStatistics = Schema.Struct({
-  familyId: ArmyFamilyId,
-  name: Schema.NullOr(Schema.String),
-  shareCode: Schema.String,
-  ...ArmyResultStatistics.fields,
-  totalLegendAttacks: Schema.Int.annotate({ description: "All selected Legend attacks including missing army codes; usage is attacks divided by this total." }),
-})
-export const ArmySearchResponse = Schema.Struct({ cohort: LegendCohort, items: Schema.Array(ArmyStatistics) })
-export const ArmyDetailResponse = Schema.Struct({ cohort: LegendCohort, ...ArmyStatistics.fields })
-export const ArmyTimelineItem = Schema.Struct({
-  day: Schema.String,
-  totalLegendAttacks: Schema.Int,
-  attacks: Schema.Int,
-  players: Schema.Int,
-  starCounts: StarCounts,
-  averageDuration: Schema.NullOr(Schema.Number),
-  averageDestruction: Schema.NullOr(Schema.Number),
-})
-export const ArmyTimelineResponse = Schema.Struct({
-  cohort: LegendCohort,
-  familyId: ArmyFamilyId,
-  name: Schema.NullOr(Schema.String),
-  shareCode: Schema.String,
-  items: Schema.Array(ArmyTimelineItem),
 })
 
 export const LeagueHitRateQuery = Schema.Struct({
@@ -337,7 +286,6 @@ const publicGet = <P extends Schema.Codec<unknown, unknown, never, never>, Q ext
   response, responseMode: "json", successStatus: 200, errors: PublicErrors })
 
 const PlayerSeasonPath = Schema.Struct({ playerTag: Schema.String, seasonId: Schema.String })
-export const ArmyLinkQuery = Schema.Struct({ ...TimeRangeQuery.fields, cohort: Schema.optionalKey(LegendCohort), armyLink: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(8192)).annotate({ description: "Clash CopyArmy link or raw army share code. URL-encode links when supplying this query parameter." }) })
 export const PlayerBattlelogHistoryEndpoint = publicGet("getPlayerBattlelogHistory", "/v2/player/:playerTag/battlelog/history",
   Schema.Struct({ playerTag: Schema.String }), TimeRangeQuery, PlayerBattlelogHistoryResponse, "Get stored player battle history")
 export const RankedBattlelogEndpoint = publicGet("getRankedBattlelog", "/v2/player/:playerTag/ranked/:seasonId/battlelog",

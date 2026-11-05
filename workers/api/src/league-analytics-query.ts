@@ -3,25 +3,12 @@ import { Effect } from "effect"
 import { InvalidRequest } from "./errors.js"
 
 export type LeagueMode = "legend" | "ranked"
-export type ArmySort = "averageDestruction" | "averageDuration" | "tripleRate" | "usage" | "zeroStarRate"
 export interface AnalyticsWindow {
   readonly start: Date
   readonly end: Date
   readonly firstDay: string
   readonly lastDay: string
   readonly calendarDays: number
-}
-export interface ArmySearchOptions {
-  readonly window: AnalyticsWindow
-  readonly cohort: "legend_i" | "top_1000" | "top_200"
-  readonly heroIds: readonly number[]
-  readonly equipmentIds: readonly number[]
-  readonly minimumAttacks: number
-  readonly minimumPlayers: number
-  readonly minimumTripleRate: number
-  readonly sort: ArmySort
-  readonly direction: "asc" | "desc"
-  readonly limit: number
 }
 export interface LeagueHitRateOptions {
   readonly window: AnalyticsWindow
@@ -51,20 +38,6 @@ const integer = (query: URLSearchParams, key: string, minimum: number, maximum: 
   const value = Number(raw)
   if (!/^\d+$/u.test(raw) || !Number.isSafeInteger(value) || value < minimum || value > maximum) throw invalid(`Invalid ${key}`)
   return value
-}
-const decimal = (query: URLSearchParams, key: string, minimum: number, maximum: number): number | undefined => {
-  const raw = single(query, key)
-  if (raw === undefined) return undefined
-  const value = Number(raw)
-  if (!Number.isFinite(value) || value < minimum || value > maximum) throw invalid(`Invalid ${key}`)
-  return value
-}
-const idList = (query: URLSearchParams, key: string): readonly number[] => {
-  const raw = single(query, key)
-  if (raw === undefined) return []
-  const ids = [...new Set(raw.split(",").map((entry) => entry.trim()))]
-  if (ids.length > 10 || ids.some((entry) => !/^\d+$/u.test(entry) || Number(entry) > 2_147_483_647)) throw invalid(`Invalid ${key}`)
-  return ids.map(Number)
 }
 const parseTime = (raw: string, key: string, end: boolean): Date => {
   if (/^\d{4}-\d{2}-\d{2}$/u.test(raw)) {
@@ -123,33 +96,6 @@ export const parseAnalyticsWindow = (
   return { start, end, firstDay, lastDay, calendarDays }
 }
 
-export const parseArmySearchQuery = (query: URLSearchParams, now = new Date()) => Effect.try({
-  try: (): ArmySearchOptions => {
-    assertKeys(query, new Set(["time[after]", "time[before]", "cohort", "heroIds", "equipmentIds", "minimumAttacks", "minimumPlayers", "minimumTripleRate", "sort", "direction", "limit"]))
-    const window = parseLegendAggregateWindow(query, now, { maximumDays: 30 })
-    const sort = single(query, "sort") ?? "usage"
-    if (!["usage", "tripleRate", "zeroStarRate", "averageDuration", "averageDestruction"].includes(sort)) throw invalid("Invalid sort")
-    const direction = single(query, "direction") ?? "desc"
-    if (direction !== "asc" && direction !== "desc") throw invalid("Invalid direction")
-    const cohort = single(query, "cohort") ?? "legend_i"
-    if (cohort !== "legend_i" && cohort !== "top_1000" && cohort !== "top_200") throw invalid("Invalid cohort")
-    const maximumLimit = window.calendarDays === 1 ? 250 : 10
-    return {
-      window,
-      cohort,
-      heroIds: idList(query, "heroIds"),
-      equipmentIds: idList(query, "equipmentIds"),
-      minimumAttacks: integer(query, "minimumAttacks", 0, 1_000_000_000) ?? 0,
-      minimumPlayers: integer(query, "minimumPlayers", 0, 1_000_000_000) ?? 0,
-      minimumTripleRate: decimal(query, "minimumTripleRate", 0, 1) ?? 0,
-      sort: sort as ArmySort,
-      direction,
-      limit: integer(query, "limit", 1, maximumLimit) ?? Math.min(10, maximumLimit),
-    }
-  },
-  catch: (cause) => cause instanceof InvalidRequest ? cause : invalid("Invalid army search query"),
-})
-
 export const parseLeagueHitRateQuery = (query: URLSearchParams, now = new Date()) => Effect.try({
   try: (): LeagueHitRateOptions => {
     assertKeys(query, new Set(["time[after]", "time[before]", "mode", "leagueTierId", "townHallLevel"]))
@@ -188,4 +134,11 @@ export const parsePlayerHistoryWindow = (query: URLSearchParams, now = new Date(
     return parseAnalyticsWindow(query, now, { maximumDays })
   },
   catch: (cause) => cause instanceof InvalidRequest ? cause : invalid("Invalid player history query"),
+})
+
+export const parseAggregateWindow = (query: URLSearchParams, now = new Date(), maximumDays = 90, defaultDays = 30) => Effect.try({
+  try: () => {
+    for (const key of query.keys()) if (key !== "time[after]" && key !== "time[before]") throw new InvalidRequest({ message: `Unsupported query parameter: ${key}` })
+    return parseLegendAggregateWindow(query, now, { maximumDays, defaultDays })
+  }, catch: (cause) => cause instanceof InvalidRequest ? cause : new InvalidRequest({ message: "Invalid Legend aggregate window" }),
 })

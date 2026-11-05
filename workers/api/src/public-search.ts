@@ -90,11 +90,23 @@ export const elasticsearchQuery = (text: string, filters: Filters) => {
 const esRequest = async (bindings: SearchBindings, path: string, method: "POST" | "DELETE", body?: unknown, signal?: AbortSignal): Promise<unknown> => {
   // Workerd supports manual/follow only. A redirect stays non-successful and
   // is rejected below without forwarding the Elasticsearch credential.
-  const response = await bindings.ELASTICSEARCH.fetch(`http://elasticsearch:9200${path}`, {
-    method, headers: { authorization: `ApiKey ${bindings.ELASTICSEARCH_API_KEY}`, "content-type": "application/json" },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }), ...(signal ? { signal } : {}), redirect: "manual",
-  })
-  if (!response.ok) { await response.body?.cancel(); throw new Error(`Elasticsearch returned ${response.status}`) }
+  // Log only the operation and status. Response bodies and exception causes can
+  // contain indexed data or credentials and must stay out of production logs.
+  const operation = path.startsWith("/_search") ? "search" : path.includes("/_mget") ? "enrich" : method === "DELETE" ? "close_pit" : "open_pit"
+  let response: Response
+  try {
+    response = await bindings.ELASTICSEARCH.fetch(`http://elasticsearch:9200${path}`, {
+      method, headers: { authorization: `ApiKey ${bindings.ELASTICSEARCH_API_KEY}`, "content-type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }), ...(signal ? { signal } : {}), redirect: "manual",
+    })
+  } catch (cause) {
+    console.error(JSON.stringify({ event: "search_upstream_failed", operation, failure: "transport" }))
+    throw cause
+  }
+  if (!response.ok) {
+    console.error(JSON.stringify({ event: "search_upstream_failed", operation, failure: "http", status: response.status }))
+    await response.body?.cancel(); throw new Error(`Elasticsearch returned ${response.status}`)
+  }
   if (method === "DELETE") { await response.body?.cancel(); return {} }
   if (!response.body) throw new Error("Missing Elasticsearch response body")
   const reader = response.body.getReader()

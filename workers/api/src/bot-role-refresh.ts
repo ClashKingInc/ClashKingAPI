@@ -119,7 +119,7 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
         AND (${requestId ?? null}::text IS NULL OR request_id=${requestId ?? null})
         AND (${serverId ?? null}::text IS NULL OR server_id=${serverId ?? null})
         AND NOT EXISTS(SELECT 1 FROM role_refresh_leases lease WHERE lease.server_id=job.server_id AND lease.user_id=job.user_id AND lease.expires_at>now())
-      ORDER BY due_at,job.id LIMIT ${requestId ? 1 : 20} FOR UPDATE OF job SKIP LOCKED`
+      ORDER BY due_at,job.id LIMIT 20 FOR UPDATE OF job SKIP LOCKED`
     const jobs = []
     for (const row of candidates) {
       const lease = yield* sql<{ token: string; expires_at: string }>`INSERT INTO role_refresh_leases(server_id,user_id,job_id,revision,expires_at)

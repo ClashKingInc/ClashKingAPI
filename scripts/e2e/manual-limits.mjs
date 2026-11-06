@@ -45,6 +45,22 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  reddit=(await request(origin,redditPath,'GET',undefined,userHeaders)).logs.find(row=>row.type==='reddit_feed');
  assert.equal(reddit.reddit_role_id,null);assert.deepEqual(reddit.reddit_accounts,[]);
  console.log('PASS Reddit API: role/account settings round-trip, older clients retain options, foreign role/duplicate account rejected, explicit clearing works');
+ // Exercise the real HTTP/authorization/SQL path with Discord unavailable.
+ // State writes must not need destination enrichment or lose the saved hook.
+ const beforeToggle=(await db.query('SELECT webhook_id,thread_id FROM server_logs WHERE server_id=$1 AND type=$2',[server,'reddit_feed'])).rows[0];
+ const webhookReads=profileProvider.webhookReads;
+ profileProvider.failWebhookReads=true;
+ try {
+  for(const disabled of [true,false]){
+   const result=await request(origin,redditPath,'PATCH',{log_types:['reddit_feed'],disabled},userHeaders);
+   assert.equal(result.logs[0].disabled,disabled);
+   assert.equal(result.logs[0].channel_id,undefined);
+   const stored=(await db.query('SELECT webhook_id,thread_id,disabled FROM server_logs WHERE server_id=$1 AND type=$2',[server,'reddit_feed'])).rows[0];
+   assert.deepEqual(stored,{...beforeToggle,disabled});
+  }
+  assert.equal(profileProvider.webhookReads,webhookReads,'State writes must not request Discord webhooks');
+ } finally {profileProvider.failWebhookReads=false;}
+ console.log('PASS log state: actual authorized HTTP/SQL disable and enable without Discord webhook access; destination retained');
 
 
  await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:0,autoboardLimit:0,aiMonthlyLimitUsd:.05});

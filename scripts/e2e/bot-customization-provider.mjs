@@ -2,7 +2,7 @@
 import { createServer } from 'node:http';
 export async function startBotCustomizationProvider(){
  const writes=[];
- const control={failNextReset:false,guilds:[]};
+ const control={failNextReset:false,failWebhookReads:false,webhookReads:0,guilds:[]};
  const profiles=new Map();
  const hooks=new Map(), webhookCreates=[];
  const server=createServer(async(req,res)=>{
@@ -19,6 +19,8 @@ export async function startBotCustomizationProvider(){
    res.end(JSON.stringify([{id:'999999999999995911',name:'Recruit alerts',color:0,position:1,managed:false,mentionable:true}]));return;
   }
   if(req.url==='/api/v10/guilds/999999999999995901/webhooks'){
+   control.webhookReads++;
+   if(control.failWebhookReads){res.statusCode=403;res.end(JSON.stringify({message:'Missing webhook permissions'}));return;}
    res.end(JSON.stringify([...hooks.values()].flat()));return;
   }
   if(req.url==='/api/v10/guilds/999999999999996101'){res.end(JSON.stringify({id:'999999999999996101',owner_id:'999999999999996102'}));return;}
@@ -38,5 +40,5 @@ export async function startBotCustomizationProvider(){
   res.statusCode=404;res.end(JSON.stringify({message:'Unexpected local Discord request'}));
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- return {set guilds(value){control.guilds=value},webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
+ return {set guilds(value){control.guilds=value},get webhookReads(){return control.webhookReads},set failWebhookReads(value){control.failWebhookReads=value},webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
 }

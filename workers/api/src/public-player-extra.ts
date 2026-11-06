@@ -166,9 +166,11 @@ export const queryPlayerStatHistory = (rawTag: string, query: URLSearchParams, n
 
 export const queryCapitalGoldLeaderboard = (rawLocation: string, query: URLSearchParams) => Effect.gen(function* () {
   const location = yield* integerPath(rawLocation, "location identifier"), sql = yield* SqlClient.SqlClient
+  // Other ranking categories may retain a clan whose country placement is absent.
   const rows = yield* sql<{ tag: string; name: string; location_id: number; badge_token: string; value: string; war_win_streak: number; rank: string }>`
     SELECT c.tag, c.name, c.location_id, c.badge_token, c.capital_gold_total::text AS value, c.war_win_streak, l.location_capital_gold_rank::text AS rank
-    FROM clan_leaderboards l JOIN basic_clan c ON c.tag = l.tag WHERE c.location_id = ${location}
+    FROM clan_leaderboards l JOIN basic_clan c ON c.tag = l.tag
+    WHERE c.location_id = ${location} AND l.location_capital_gold_rank IS NOT NULL
     ORDER BY l.location_capital_gold_rank LIMIT ${leaderboardLimit(query)}`.pipe(Effect.mapError(failure))
   const items = []
   for (const row of rows) { const badges = badgeUrls(row.badge_token)

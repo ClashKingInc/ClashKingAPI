@@ -155,16 +155,25 @@ export const loadRefreshData = (bindings: WorkerBindings, serverId: string, user
     FROM player_links links LEFT JOIN player_links_settings settings ON settings.tag=links.tag AND settings.server_id=${serverId}
     WHERE links.user_id=${userId} AND links.hidden=false ORDER BY links.order_index,links.tag`
   if (links.length > 100) return yield* new InvalidRequest({ message: "Too many visible linked accounts" })
-  const accounts = yield* Effect.forEach(links, link => Effect.gen(function* () {
+  const loaded = yield* Effect.forEach(links, link => Effect.gen(function* () {
     const response = yield* Effect.tryPromise({ try: signal => bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy.internal/v1/players/${encodeURIComponent(link.tag)}`, { signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) })),
       catch: cause => new UpstreamUnavailable({ cause, message: "Player data unavailable; refresh left unchanged" }) })
-    if (!response.ok) { yield* Effect.promise(() => response.body?.cancel().catch(() => undefined) ?? Promise.resolve()); return yield* new UpstreamUnavailable({ cause: response.status, message: "Player data unavailable; refresh left unchanged" }) }
+    if (!response.ok) {
+      yield* Effect.promise(() => response.body?.cancel().catch(() => undefined) ?? Promise.resolve())
+      // Confirmed missing accounts behave as absent for role planning. Keep
+      // their saved links and include their tags in the later link-set fence.
+      // Other failures must still abort; an outage is not account deletion.
+      if (response.status === 404) return { missingTag: link.tag }
+      return yield* new UpstreamUnavailable({ cause: response.status, message: "Player data unavailable; refresh left unchanged" })
+    }
     const player = yield* Schema.decodeUnknownEffect(Player)(yield* readBoundedJson(response, 300_000))
     if (player.tag !== link.tag) return yield* new UpstreamUnavailable({ cause: "Mismatched player", message: "Player data unavailable; refresh left unchanged" })
-    return player
+    return { player }
   }), { concurrency: 5 })
+  const accounts = loaded.flatMap(item => item.player ? [item.player] : [])
+  const skippedAccountTags = loaded.flatMap(item => item.missingTag ? [item.missingTag] : [])
   const roster = yield* rosterRoleState(sql,serverId,userId)
-  return { settings, rules, clans, accounts, roster, mainTag: links.find(link => link.server_main)?.tag ?? links.find(link => link.is_main)?.tag ?? null }
+  return { settings, rules, clans, accounts, skippedAccountTags, roster, mainTag: links.find(link => link.server_main)?.tag ?? links.find(link => link.is_main)?.tag ?? null }
 })
 
 export const setServerMainAccount = (serverId: string, userId: string, rawTag: string) => Effect.gen(function* () {
@@ -191,7 +200,7 @@ export const finishRefreshJob = (body: Record<string, unknown>) => Effect.gen(fu
     if (!leases[0]) return { accepted: false }
     yield* sql`UPDATE role_refresh_jobs SET completed_at=CASE WHEN ${body.success === true} THEN now() ELSE NULL END,
       due_at=CASE WHEN ${body.success === true} THEN due_at ELSE now()+make_interval(secs=>COALESCE(${typeof body.retryAfterSeconds==='number'?Math.ceil(body.retryAfterSeconds):null}::double precision,LEAST(300,attempts*30))) END,
-      result=COALESCE(result,'{}'::jsonb)||${JSON.stringify(object(body.result))}::jsonb,updated_at=now(),
+      result=(CASE WHEN ${body.success===true} THEN COALESCE(result,'{}'::jsonb)-'error' ELSE COALESCE(result,'{}'::jsonb) END)||${JSON.stringify(object(body.result))}::jsonb,updated_at=now(),
       attempts=CASE WHEN ${typeof body.retryAfterSeconds==='number'} THEN GREATEST(0,attempts-1) ELSE attempts END
       WHERE id=${String(body.id)} AND revision=${leases[0].revision}::bigint`
     yield* sql`UPDATE role_refresh_requests SET updated_at=clock_timestamp() WHERE id=(SELECT request_id FROM role_refresh_jobs WHERE id=${String(body.id)})`

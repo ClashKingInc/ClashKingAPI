@@ -45,12 +45,14 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
   const sql = yield* SqlClient.SqlClient
   const encoded = yield* sql.withTransaction(Effect.gen(function* () {
     yield* sql`SELECT pg_advisory_xact_lock(hashtext('roster_ai_free_monthly_budget'))`
-    // Zero-token rows are pending admissions, not free capacity. Allow one
-    // active request per server/person; abandoned calls expire without a charge.
-    // This bounds concurrency without inventing estimated settled usage.
+    // A confirmed provider rejection settles its step at zero cost. Such a
+    // completed admission must not block retries; absent or unsettled steps
+    // remain pending, including calls whose billable outcome is unknown.
     const pending = yield* sql`SELECT id FROM roster_ai_usage
       WHERE total_tokens=0 AND created_at>now()-interval '10 minutes'
-        AND (server_id=${body.serverId} OR discord_user_id=${principal.userId}) LIMIT 1`
+        AND (server_id=${body.serverId} OR discord_user_id=${principal.userId})
+        AND (NOT EXISTS(SELECT 1 FROM roster_ai_step_budgets b WHERE b.usage_id=roster_ai_usage.id)
+          OR EXISTS(SELECT 1 FROM roster_ai_step_budgets b WHERE b.usage_id=roster_ai_usage.id AND b.settled_at IS NULL)) LIMIT 1`
     if (pending.length) return yield* new RateLimited({ message: "A roster AI request is already in progress", retryAfterSeconds: 30 })
     const identity = yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${principal.userId} AND provider = 'discord' FOR SHARE`
     if (identity.length !== 1) return yield* new Forbidden({ message: "A Discord identity is required for roster management" })

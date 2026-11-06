@@ -67,12 +67,27 @@ export const lazyDatabaseLayer = (acquire: ReturnType<typeof PgClient.make>) => 
   }),
 ).pipe(Layer.provide(Reactivity.layer))
 
-export const databaseLayer = (bindings: WorkerBindings) => lazyDatabaseLayer(
+/** Operational records must reflect committed writes. Hyperdrive does not
+ * invalidate cached SELECTs after mutations, so these requests use the separate
+ * cache-disabled binding while historical/statistics reads retain their cache. */
+export const needsFreshDatabaseReads = (request: Request): boolean => {
+  const path = new URL(request.url).pathname
+  return /^\/v2\/(?:server|admin|auth|users|links|runtime|tickets|bot)(?:\/|$)/u.test(path) ||
+    /^\/v2\/app\/(?:posts|announcements)(?:\/|$)/u.test(path)
+}
+
+export const databaseLayer = (bindings: WorkerBindings, fresh = false) => {
+  const connection = fresh ? bindings.HYPERDRIVE_FRESH : bindings.HYPERDRIVE
+  // Never silently serve stale moderation/authorization data if a deployment
+  // omitted the fresh binding. Local service runners supply both bindings too.
+  if (!connection) throw new Error("Cache-disabled database binding is required for operational requests")
+  return lazyDatabaseLayer(
   PgClient.makeClient({
-    url: Redacted.make(bindings.HYPERDRIVE.connectionString),
+    url: Redacted.make(connection.connectionString),
     applicationName: "clashking-api-worker",
     connectTimeout: "10 seconds",
     acquireForStream: true,
     types: makeDatabaseTypes(),
   }),
 )
+}

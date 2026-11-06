@@ -3,6 +3,7 @@ import { Context, Layer } from "effect"
 // Wrangler owns resource and public-var types. Only secret-store values and
 // explicitly optional deployment settings are augmented here.
 interface WorkerSecrets {
+  readonly HYPERDRIVE_FRESH?: Hyperdrive
   readonly PROFILE_MEDIA_PUBLIC_ORIGIN?: string
   readonly GIVEAWAY_MEDIA_ORIGIN?: string
   readonly CLAN_NOTIFICATION_BETA?: string

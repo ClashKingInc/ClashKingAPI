@@ -42,6 +42,12 @@ This path is deliberately best-effort: there is no request table, delivery lease
   served by the Worker.
 - `locales` contains messages sent to users in supported languages.
 
+## Operational read freshness
+
+Production uses the existing `HYPERDRIVE` cache for statistics and other reads that tolerate a short delay. `HYPERDRIVE_FRESH` points to the same database through a separate Hyperdrive configuration with query caching disabled. Requests under `/v2/server`, `/v2/admin`, `/v2/auth`, `/v2/users`, `/v2/links`, `/v2/runtime`, `/v2/tickets`, `/v2/bot`, and the app post/announcement feeds use the fresh connection. This also keeps the permission checks performed within those requests current.
+
+Hyperdrive does not invalidate matching cached reads after database writes. Do not route editable settings, moderation lists, or newly published posts through the cached binding. Deploy the cache-disabled configuration and bind it before publishing this Worker. The local service runner supplies both bindings to its disposable database; it does not emulate Cloudflare's cache.
+
 ## Local development
 
 The API runs on Cloudflare Workers with Effect and TypeScript. It stays on

@@ -76,12 +76,31 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
   await request(`/v2/roster/${roster}?server_id=${server}&server_id=${other}`,{status:403})
   await request(`/v2/roster/${roster}`,{status:400})
   await request(`/v2/roster/${roster}?server_id=${server}`,{method:'PATCH',body:{alias:'Denied'},status:403})
+  await request(`/v2/roster-group?server_id=${server}`,{method:'POST',body:{server_id:server,alias:'Denied'},status:403})
   await request(`/v2/roster/membership-changes?server_id=${server}`,{method:'POST',body:{serverId:server,changes:[],expectedRevisions:{}},status:403})
   assert.equal((await db.query('SELECT alias FROM rosters WHERE id=$1',[roster])).rows[0].alias,'Original alias')
   await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{rosters:'manage'}}])
   await request(`/v2/links/server/${server}`,{status:403})
   await request(`/v2/roster/${roster}?server_id=${server}`,{method:'PATCH',body:{alias:'Allowed'}})
   assert.equal((await db.query('SELECT alias FROM rosters WHERE id=$1',[roster])).rows[0].alias,'Allowed')
+  // Exercise the exact dashboard payload through authentication, decoding and SQL.
+  const groupPath=`/v2/roster-group?server_id=${server}`
+  const aliasGroup=await request(groupPath,{method:'POST',body:{server_id:server,alias:'Beuken'},status:201})
+  assert.equal(aliasGroup.group.name,'Beuken')
+  assert.equal(aliasGroup.group.alias,'Beuken')
+  const savedGroup=await request(`/v2/roster-group/${aliasGroup.group_id}?server_id=${server}`)
+  assert.equal(savedGroup.group.name,'Beuken')
+  assert.equal(savedGroup.group.alias,'Beuken')
+  const namedGroup=await request(groupPath,{method:'POST',body:{name:'Canonical name',alias:'Display alias'},status:201})
+  assert.equal(namedGroup.group.name,'Canonical name')
+  assert.equal(namedGroup.group.alias,'Display alias')
+  await request(groupPath,{method:'POST',body:{alias:'   '},status:400})
+  await request(groupPath,{method:'POST',body:{},status:400})
+  await request(`/v2/roster-group?server_id=${other}`,{method:'POST',body:{alias:'Foreign'},status:403})
+  for(const group of [aliasGroup,namedGroup]) {
+    await request(`/v2/roster-group/${group.group_id}?server_id=${server}`,{method:'DELETE'})
+  }
+  console.log('PASS roster group creation: dashboard alias payload, persisted readback, explicit-name priority, blank rejection and permissions')
   for(const inQuery of [true,false]) {
     await db.query("INSERT INTO roster_members(roster_id,tag,name) VALUES($1,'#P2Y','Local member')",[roster])
     const revision=Number((await db.query('SELECT revision FROM rosters WHERE id=$1',[roster])).rows[0].revision)

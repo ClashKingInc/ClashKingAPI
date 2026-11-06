@@ -193,17 +193,24 @@ export const browserCors = (request: Request, response: Response, bindings: Work
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
-const publicCors = (request: Request, response: Response): Response => {
-  if (request.headers.get("origin") === null) return response
+const publicCors = (request: Request, response: Response, bindings: WorkerBindings): Response => {
+  const origin = request.headers.get("origin")
+  if (origin === null) return response
+  // Dashboard reads include credentials even for public game data. Browsers
+  // reject wildcard CORS in that mode; only trusted web origins may use it.
+  if (bindings.WEB_ALLOWED_ORIGINS.split(",").some(value => value.trim() === origin)) {
+    return browserCors(request, response, bindings)
+  }
   const headers = new Headers(response.headers)
   headers.set("access-control-allow-origin", "*")
+  headers.append("vary", "Origin")
   headers.set("access-control-expose-headers", "X-Request-ID, Retry-After, Content-Disposition")
   headers.delete("access-control-allow-credentials")
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
 export const applyCors = (request: Request, response: Response, bindings: WorkerBindings): Response => {
-  if (isOpenPublicRequest(request)) return publicCors(request, response)
+  if (isOpenPublicRequest(request)) return publicCors(request, response, bindings)
   return new URL(request.url).pathname.startsWith("/v2/admin/") ? adminCors(request, response, bindings) : browserCors(request, response, bindings)
 }
 
@@ -218,7 +225,7 @@ export const adminPreflight = (request: Request, bindings: WorkerBindings): Resp
 }
 
 export const browserPreflight = (request: Request, bindings: WorkerBindings): Response => {
-  const withOrigin = isOpenPublicRequest(request) ? publicCors(request, new Response(null, { status: 204 })) : browserCors(request, new Response(null, { status: 204 }), bindings)
+  const withOrigin = isOpenPublicRequest(request) ? publicCors(request, new Response(null, { status: 204 }), bindings) : browserCors(request, new Response(null, { status: 204 }), bindings)
   const headers = new Headers(withOrigin.headers)
   headers.set("access-control-allow-methods", "DELETE, GET, PATCH, POST, PUT")
   headers.set("access-control-allow-headers", "Accept, Authorization, Content-Type, X-Device-ID, X-Request-ID, Traceparent, Tracestate")

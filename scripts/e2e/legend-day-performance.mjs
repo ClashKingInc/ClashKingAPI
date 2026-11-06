@@ -1,3 +1,4 @@
+import { verifyEmailLookupKey } from './email-lookup-key.mjs'
 import { verifyCappedClanRankings } from "./capped-clan-rankings.mjs"
 import { verifyManualRefreshTargets } from "./manual-refresh-targets.mjs"
 import { verifyGuildListCache } from "./guild-list-cache.mjs"
@@ -26,6 +27,7 @@ let api, logs = ''
 const profileProvider=await startBotCustomizationProvider()
 const encryptionKey = randomBytes(32).toString('base64url')
 const signingKey = randomBytes(32).toString('base64url')
+const emailLookupKey = randomBytes(32).toString('base64url')
 const meteringKey = randomBytes(32).toString('base64url')
 const botKey = randomBytes(32).toString('base64url')
 const date = offset => new Date(Date.now() - offset * 86400000).toISOString().slice(0,10)
@@ -60,7 +62,7 @@ try {
     }
   }
   api=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{
-    env:{...process.env,CLASHKING_LOCAL_DISCORD_TEST_ORIGIN:profileProvider.origin,CLASHKING_LOCAL_DISCORD_BOT_TOKEN:"local-discord-token",CLASHKING_LOCAL_ADMIN_IDENTITY:"1",CLASHKING_LOCAL_ADMIN_PORT:"8804",CLASHKING_E2E_DATA_ENCRYPTION_KEY:encryptionKey,CLASHKING_E2E_AI_USAGE_SECRET:meteringKey,CLASHKING_E2E_JWT_ACCESS_SECRET:signingKey,CLASHKING_E2E_API_BOT_TOKEN:botKey,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',
+    env:{...process.env,CLASHKING_LOCAL_DISCORD_TEST_ORIGIN:profileProvider.origin,CLASHKING_LOCAL_DISCORD_BOT_TOKEN:"local-discord-token",CLASHKING_LOCAL_ADMIN_IDENTITY:"1",CLASHKING_LOCAL_ADMIN_PORT:"8804",CLASHKING_E2E_DATA_ENCRYPTION_KEY:encryptionKey,CLASHKING_E2E_AI_USAGE_SECRET:meteringKey,CLASHKING_E2E_JWT_ACCESS_SECRET:signingKey,CLASHKING_E2E_EMAIL_HASH_SECRET:emailLookupKey,CLASHKING_E2E_API_BOT_TOKEN:botKey,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',
       CLASHKING_LOCAL_DISCORD_CLIENT_ID:'999999999999999999',CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'local-only',
       CLASHKING_LOCAL_PRODUCTION_READS:'0',CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_E2E_STATIC_ASSETS_ROOT??resolve('../clashking_assets/assets/static_data')},stdio:['ignore','pipe','pipe']})
   api.stdout.on('data',d=>logs+=d);api.stderr.on('data',d=>logs+=d)
@@ -73,6 +75,7 @@ try {
     await new Promise(r=>setTimeout(r,500))
   }
   assert(ready,logs.slice(-2000))
+  await verifyEmailLookupKey({db,origin:`http://127.0.0.1:${port}`,signingKey,emailLookupKey})
   await verifyCappedClanRankings({db,origin:`http://127.0.0.1:${port}`})
   await verifyManualRefreshTargets({db,origin:`http://127.0.0.1:${port}`,botKey})
   const endpoint=(extra='')=>`http://127.0.0.1:${port}/v2/stats/legend/performance?time[after]=${first}&time[before]=${last}${extra}`

@@ -12,7 +12,7 @@ import { AuthSessions } from "./auth-sessions.js"
 import { BotAdjacentStore } from "./bot-adjacent-runtime.js"
 import { BotModerationStore } from "./bot-runtime.js"
 import { DashboardRosterOperations } from "./dashboard-roster-runtime.js"
-import { databaseLayer } from "./database.js"
+import { databaseLayer, needsFreshDatabaseReads } from "./database.js"
 import { DiscordApi } from "./discord-api.js"
 import { DiscordCredentials } from "./discord-credentials.js"
 import { StoredTokenCipher } from "./fernet.js"
@@ -30,7 +30,7 @@ import { captureWorkerError, recordRequestTiming, requestRouteTemplate, sentryOp
 export { TicketRuntimeCoordinator } from "./ticket-runtime-coordinator.js"
 export { RuntimeRecoveryCoordinator } from "./runtime-recovery-coordinator.js"
 
-const liveLayer = (bindings: WorkerBindings) => {
+const liveLayer = (bindings: WorkerBindings, request: Request) => {
   const environment = WorkerEnvironment.layer(bindings)
   const services = Layer.mergeAll(
     AccessIdentity.layer,
@@ -41,7 +41,7 @@ const liveLayer = (bindings: WorkerBindings) => {
     StoredTokenCipher.layer,
   ).pipe(
     Layer.provideMerge(environment),
-    Layer.provideMerge(databaseLayer(bindings)),
+    Layer.provideMerge(databaseLayer(bindings, needsFreshDatabaseReads(request))),
   )
   const credentials = DiscordCredentials.layer.pipe(Layer.provideMerge(services))
   const authorization = ServerAuthorization.layer.pipe(Layer.provideMerge(credentials))
@@ -77,7 +77,7 @@ const handler = {
       context.waitUntil(Effect.runPromise(observeProxySearch(principal, proxyRequest, response).pipe(
         Effect.provide(databaseLayer(bindings)), Effect.scoped,
       )))
-    }).pipe(Effect.provide(liveLayer(bindings)), Effect.scoped)).pipe(
+    }).pipe(Effect.provide(liveLayer(bindings, request)), Effect.scoped)).pipe(
       Effect.tapError((failure) => Effect.sync(() => {
         if (failure._tag === "DatabaseFailure") captureWorkerError("database", routeTemplate, request.method, 503)
         else if (failure._tag === "UpstreamUnavailable") captureWorkerError("upstream", routeTemplate, request.method, 503)

@@ -1,3 +1,4 @@
+import { verifyOperationalReads } from "./operational-reads.mjs"
 import { verifyEmailLookupKey } from './email-lookup-key.mjs'
 import { verifyCappedClanRankings } from "./capped-clan-rankings.mjs"
 import { verifyManualRefreshTargets } from "./manual-refresh-targets.mjs"
@@ -75,6 +76,7 @@ try {
     await new Promise(r=>setTimeout(r,500))
   }
   assert(ready,logs.slice(-2000))
+  await verifyOperationalReads({db,origin:`http://127.0.0.1:${port}`,botKey})
   await verifyEmailLookupKey({db,origin:`http://127.0.0.1:${port}`,signingKey,emailLookupKey})
   await verifyCappedClanRankings({db,origin:`http://127.0.0.1:${port}`})
   await verifyManualRefreshTargets({db,origin:`http://127.0.0.1:${port}`,botKey})

@@ -218,7 +218,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     { type: "Data", path: "/local-api/dictionary.bin", contents: readFileSync("workers/api/assets/war-json.zdict") },
   ],
   compatibilityDate: config.compatibility_date, compatibilityFlags: ["nodejs_compat"],
-  hyperdrives: { HYPERDRIVE: database.href },
+  hyperdrives: { HYPERDRIVE: database.href, HYPERDRIVE_FRESH: database.href },
   kvNamespaces: ["API_CACHE"],
   r2Buckets: ["ASSETS", "WAR_ARCHIVE", "POSTS", "APP_UPDATES", "MEDIA", "TICKETING"],
   durableObjects: {

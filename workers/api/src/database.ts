@@ -1,3 +1,4 @@
+import { endpoints } from "@clashking/api-contracts"
 import { PgClient, PgTypes } from "@effect/sql-pg"
 import { Effect, Layer, Redacted, Result, Scope } from "effect"
 import { SqlClient, Statement } from "effect/sql"
@@ -67,12 +68,30 @@ export const lazyDatabaseLayer = (acquire: ReturnType<typeof PgClient.make>) => 
   }),
 ).pipe(Layer.provide(Reactivity.layer))
 
-export const databaseLayer = (bindings: WorkerBindings) => lazyDatabaseLayer(
+/** Cache only explicitly public, read-only Clash data contracts. New routes
+ * default to fresh reads, so adding a dashboard endpoint cannot accidentally
+ * cache editable settings or its authorization queries for five minutes. */
+const cachedClashPath = /^\/v2\/(?:stats|player|players|clan|clans|leaderboard|leaderboards|legends|ranked|army-setups|league|wars|war|esports)(?:\/|$)/u
+const cachedClashReads = Object.values(endpoints)
+  .filter(endpoint => endpoint.method === "GET" && endpoint.auth === "public" && cachedClashPath.test(endpoint.path))
+  .map(endpoint => new RegExp(`^${endpoint.path.split("/").map(segment =>
+    segment.startsWith(":") ? "[^/]+" : segment.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("/")}$`, "u"))
+
+export const needsFreshDatabaseReads = (request: Request): boolean =>
+  request.method !== "GET" || !cachedClashReads.some(pattern => pattern.test(new URL(request.url).pathname))
+
+export const databaseLayer = (bindings: WorkerBindings, fresh = false) => {
+  const connection = fresh ? bindings.HYPERDRIVE_FRESH : bindings.HYPERDRIVE
+  // Never silently serve stale moderation/authorization data if a deployment
+  // omitted the fresh binding. Local service runners supply both bindings too.
+  if (!connection) throw new Error("Cache-disabled database binding is required for operational requests")
+  return lazyDatabaseLayer(
   PgClient.makeClient({
-    url: Redacted.make(bindings.HYPERDRIVE.connectionString),
+    url: Redacted.make(connection.connectionString),
     applicationName: "clashking-api-worker",
     connectTimeout: "10 seconds",
     acquireForStream: true,
     types: makeDatabaseTypes(),
   }),
 )
+}

@@ -62,6 +62,10 @@
     {
       "binding": "HYPERDRIVE",
       "id": "aca44651f2604a208a96cae255265d0b"
+    },
+    {
+      "binding": "HYPERDRIVE_FRESH",
+      "id": "30ebb4a7f82a4923ae0982d4bd2d407b"
     }
   ],
   "kv_namespaces": [

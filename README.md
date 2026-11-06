@@ -44,7 +44,7 @@ This path is deliberately best-effort: there is no request table, delivery lease
 
 ## Operational read freshness
 
-Production uses the existing `HYPERDRIVE` cache for statistics and other reads that tolerate a short delay. `HYPERDRIVE_FRESH` points to the same database through a separate Hyperdrive configuration with query caching disabled. Requests under `/v2/server`, `/v2/admin`, `/v2/auth`, `/v2/users`, `/v2/links`, `/v2/runtime`, `/v2/tickets`, `/v2/bot`, and the app post/announcement feeds use the fresh connection. This also keeps the permission checks performed within those requests current.
+Production caches only GET routes that are explicitly public Clash data contracts (player, clan, statistics, ranking, army, league, war and esports data) through `HYPERDRIVE`. Every other request uses `HYPERDRIVE_FRESH`, a separate connection to the same database with query caching disabled. Dashboard settings, rosters, moderation, permissions, authentication, Admin and app posts therefore stay fresh. New endpoints default to fresh reads; adding an operational route cannot silently enable caching.
 
 Hyperdrive does not invalidate matching cached reads after database writes. Do not route editable settings, moderation lists, or newly published posts through the cached binding. Deploy the cache-disabled configuration and bind it before publishing this Worker. The local service runner supplies both bindings to its disposable database; it does not emulate Cloudflare's cache.
 

@@ -1,3 +1,4 @@
+import { endpoints } from "@clashking/api-contracts"
 import { PgClient, PgTypes } from "@effect/sql-pg"
 import { Effect, Layer, Redacted, Result, Scope } from "effect"
 import { SqlClient, Statement } from "effect/sql"
@@ -67,14 +68,17 @@ export const lazyDatabaseLayer = (acquire: ReturnType<typeof PgClient.make>) => 
   }),
 ).pipe(Layer.provide(Reactivity.layer))
 
-/** Operational records must reflect committed writes. Hyperdrive does not
- * invalidate cached SELECTs after mutations, so these requests use the separate
- * cache-disabled binding while historical/statistics reads retain their cache. */
-export const needsFreshDatabaseReads = (request: Request): boolean => {
-  const path = new URL(request.url).pathname
-  return /^\/v2\/(?:server|admin|auth|users|links|runtime|tickets|bot)(?:\/|$)/u.test(path) ||
-    /^\/v2\/app\/(?:posts|announcements)(?:\/|$)/u.test(path)
-}
+/** Cache only explicitly public, read-only Clash data contracts. New routes
+ * default to fresh reads, so adding a dashboard endpoint cannot accidentally
+ * cache editable settings or its authorization queries for five minutes. */
+const cachedClashPath = /^\/v2\/(?:stats|player|players|clan|clans|leaderboard|leaderboards|legends|ranked|army-setups|league|wars|war|esports)(?:\/|$)/u
+const cachedClashReads = Object.values(endpoints)
+  .filter(endpoint => endpoint.method === "GET" && endpoint.auth === "public" && cachedClashPath.test(endpoint.path))
+  .map(endpoint => new RegExp(`^${endpoint.path.split("/").map(segment =>
+    segment.startsWith(":") ? "[^/]+" : segment.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")).join("/")}$`, "u"))
+
+export const needsFreshDatabaseReads = (request: Request): boolean =>
+  request.method !== "GET" || !cachedClashReads.some(pattern => pattern.test(new URL(request.url).pathname))
 
 export const databaseLayer = (bindings: WorkerBindings, fresh = false) => {
   const connection = fresh ? bindings.HYPERDRIVE_FRESH : bindings.HYPERDRIVE

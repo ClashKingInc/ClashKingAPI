@@ -189,3 +189,5 @@ operation for the bot profile. It clears the server's name, avatar, banner and
 bio overrides, restoring global inheritance. It works while customization access
 is disabled, leaves that grant unchanged, and audits only a successful reset.
 Revoke and save separately if further customization should also be prevented.
+
+Email account lookup uses `EMAIL_HASH_SECRET` when configured, otherwise `JWT_ACCESS_SECRET`. Preserve the key used to create existing `auth_users.email_hash` values when rotating session-signing secrets. Setting the dedicated lookup key does not change passwords or invalidate sessions.

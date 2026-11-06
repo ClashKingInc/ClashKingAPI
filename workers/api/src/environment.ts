@@ -13,6 +13,7 @@ interface WorkerSecrets {
   readonly DISCORD_CLIENT_ID: string
   readonly DISCORD_CLIENT_SECRET: string
   readonly ELASTICSEARCH_API_KEY: string
+  readonly EMAIL_HASH_SECRET?: string
   readonly JWT_ACCESS_SECRET: string
   readonly JWT_REFRESH_SECRET: string
   readonly MOBILE_PUSH_FCM_PROJECT_ID?: string

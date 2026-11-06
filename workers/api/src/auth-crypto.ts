@@ -32,6 +32,9 @@ export class AuthCrypto extends Context.Service<AuthCrypto, {
 }>()("clashking/AuthCrypto") {
   static readonly layer = Layer.effect(AuthCrypto, Effect.gen(function* () {
     const env = yield* WorkerEnvironment
+    // Email hashes are persisted account identifiers. Preserve their original
+    // key across session-signing rotations; changing it hides existing accounts.
+    const emailHashSecret = env.EMAIL_HASH_SECRET || env.JWT_ACCESS_SECRET
     const accessKey = encoder.encode(env.JWT_ACCESS_SECRET)
     const refreshKey = encoder.encode(env.JWT_REFRESH_SECRET)
     if (accessKey.length === 0 || refreshKey.length === 0) {
@@ -44,7 +47,7 @@ export class AuthCrypto extends Context.Service<AuthCrypto, {
     const digest = (value: string) => cryptographic(() => crypto.subtle.digest("SHA-256", encoder.encode(value)).then(hex))
     return AuthCrypto.of({
       // These formats match existing stored authentication rows.
-      emailHash: (email) => digest(email.trim().toLowerCase() + env.JWT_ACCESS_SECRET),
+      emailHash: (email) => digest(email.trim().toLowerCase() + emailHashSecret),
       tokenHash: digest,
       codeHash: (emailHash, code) => cryptographic(async () => {
         const key = await crypto.subtle.importKey("raw", accessKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"])

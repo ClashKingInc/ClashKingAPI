@@ -173,7 +173,9 @@ export const DashboardRosterAIContextResponse = Schema.Struct({
 })
 export const DashboardRosterAIContextEndpoint = defineEndpoint({
   operationId: "dashboardRosterAIContext", method: "POST", path: "/v2/roster/ai/context",
-  auth: "user", body: DashboardRosterAIContextRequest, bodyMode: "json", pathParams: NoPathParams, query: NoQuery,
+  // Admission manages server rosters; metadata must also permit scoped /setup
+  // sessions to reach the normal consent, permissions and budget checks.
+  auth: "server-write", body: DashboardRosterAIContextRequest, bodyMode: "json", pathParams: NoPathParams, query: NoQuery,
   response: DashboardRosterAIContextResponse, responseMode: "json", successStatus: 200, errors,
   summary: "Authorize and reserve an AI request with trusted roster context",
 })

@@ -44,6 +44,8 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
   await request(notice,{method:'POST',body:{version}})
   await request(notice,{method:'POST',body:{version:'outdated'},status:400})
 
+  await request('/v2/roster/ai/context',{method:'POST',body:{serverId:server,rosterIds:[],messages:[{role:'user',content:'List my roster'}]},status:403})
+
   // A real bot-issued grant signs in a first-use Discord actor without OAuth.
   // Its short lifetime, one-use transaction and current server access remain.
   const firstUser='999999999999994904'
@@ -81,6 +83,12 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
   assert.equal((await db.query('SELECT alias FROM rosters WHERE id=$1',[roster])).rows[0].alias,'Original alias')
   await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{rosters:'manage'}}])
   await request(`/v2/links/server/${server}`,{status:403})
+  const aiBody={serverId:server,rosterIds:[roster],messages:[{role:'user',content:'List my roster'}]}
+  const aiContext=await request('/v2/roster/ai/context',{method:'POST',body:aiBody})
+  assert.equal(aiContext.context.attachments[0].rosterId,roster)
+  await request('/v2/roster/ai/context',{method:'POST',body:{...aiBody,serverId:other},status:403})
+  await db.query('DELETE FROM roster_ai_usage WHERE id=$1',[aiContext.requestId])
+  console.log('PASS scoped roster AI admission: nondeveloper manager accepted; view-only and foreign server rejected; no model calls')
   await request(`/v2/roster/${roster}?server_id=${server}`,{method:'PATCH',body:{alias:'Allowed'}})
   assert.equal((await db.query('SELECT alias FROM rosters WHERE id=$1',[roster])).rows[0].alias,'Allowed')
   // Exercise the exact dashboard payload through authentication, decoding and SQL.

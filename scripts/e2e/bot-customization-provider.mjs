@@ -21,6 +21,7 @@ export async function startBotCustomizationProvider(){
   if(req.url==='/api/v10/guilds/999999999999995901/webhooks'){
    res.end(JSON.stringify([...hooks.values()].flat()));return;
   }
+  if(req.url==='/api/v10/guilds/999999999999996101'){res.end(JSON.stringify({id:'999999999999996101',owner_id:'999999999999996102'}));return;}
   const match=/^\/api\/v10\/guilds\/(\d+)\/members\/@me$/.exec(req.url??'');
   if(match && req.method==='PATCH'){
    let raw='';for await(const chunk of req)raw+=chunk;

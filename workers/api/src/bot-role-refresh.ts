@@ -73,7 +73,7 @@ export const manualRefreshTargets = (bindings:WorkerBindings,serverId:string,bod
 
 })
 
-export const claimRefreshJobs = (requestId?: string, serverId?: string, includeTenure = false, includeRoster = false, includeRoleTreatment = false, includeAutomaticPolicy = false) => Effect.gen(function* () {
+export const claimRefreshJobs = (requestId?: string, serverId?: string, includeTenure = false, includeRoster = false, includeRoleTreatment = false, includeAutomaticPolicy = false, automaticOnly = false) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   // A single lease per member serializes manual and automatic refreshes. Token
   // fencing prevents a crashed/expired attempt acknowledging a newer revision.
@@ -120,6 +120,7 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
         AND (${includeAutomaticPolicy} OR job.request_id IS NOT NULL
           OR job.categories <@ ARRAY['tenure','roster']::text[]
           OR (server.auto_role_treatment='both' AND cardinality(server.auto_role_blacklist_ids)=0))
+        AND (NOT ${automaticOnly} OR job.request_id IS NULL)
         AND (${requestId ?? null}::text IS NULL OR request_id=${requestId ?? null})
         AND (${serverId ?? null}::text IS NULL OR server_id=${serverId ?? null})
         AND NOT EXISTS(SELECT 1 FROM role_refresh_leases lease WHERE lease.server_id=job.server_id AND lease.user_id=job.user_id AND lease.expires_at>now())
@@ -206,8 +207,8 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
   yield* auth.requireBot(request)
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/claim") {
     const body = object(yield* readBoundedJson(request, 4096))
-    yield* requireInput((body.requestId === undefined || snowflake(body.requestId)) && (body.serverId === undefined || snowflake(body.serverId)) && (body.includeTenure === undefined || typeof body.includeTenure === "boolean") && (body.includeRoster === undefined || typeof body.includeRoster === "boolean") && (body.includeRoleTreatment === undefined || typeof body.includeRoleTreatment === "boolean") && (body.includeAutomaticPolicy === undefined || typeof body.includeAutomaticPolicy === "boolean"))
-    return Response.json(yield* claimRefreshJobs(body.requestId as string | undefined, body.serverId as string | undefined, body.includeTenure === true, body.includeRoster === true, body.includeRoleTreatment === true, body.includeAutomaticPolicy === true))
+    yield* requireInput((body.requestId === undefined || snowflake(body.requestId)) && (body.serverId === undefined || snowflake(body.serverId)) && (body.includeTenure === undefined || typeof body.includeTenure === "boolean") && (body.automaticOnly === undefined || typeof body.automaticOnly === "boolean") && !(body.automaticOnly === true && body.requestId !== undefined) && (body.includeRoster === undefined || typeof body.includeRoster === "boolean") && (body.includeRoleTreatment === undefined || typeof body.includeRoleTreatment === "boolean") && (body.includeAutomaticPolicy === undefined || typeof body.includeAutomaticPolicy === "boolean"))
+    return Response.json(yield* claimRefreshJobs(body.requestId as string | undefined, body.serverId as string | undefined, body.includeTenure === true, body.includeRoster === true, body.includeRoleTreatment === true, body.includeAutomaticPolicy === true, body.automaticOnly === true))
   }
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/validate") {
     const body = object(yield* readBoundedJson(request, 8192))

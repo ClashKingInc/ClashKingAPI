@@ -12,7 +12,9 @@ import { readBoundedJson } from "./request-body.js"
 export const roleRefreshCategories = ["family", "clan", "leadership", "townhall", "builderhall", "league", "builder_league", "category", "nicknames", "tenure", "roster"] as const
 const idPattern = /^[0-9]{15,20}$/u
 const uuid = /^[0-9a-f-]{36}$/iu
-const Member = Schema.Struct({ user: Schema.Struct({ id: Schema.String, bot: Schema.optionalKey(Schema.Boolean) }), roles: Schema.Array(Schema.String) })
+// The Gateway serializes role-less members without `roles` (Disgo omitempty).
+// Missing roles means an empty assignment, never an unknown or privileged user.
+const Member = Schema.Struct({ user: Schema.Struct({ id: Schema.String, bot: Schema.optionalKey(Schema.Boolean) }), roles: Schema.optionalKey(Schema.Array(Schema.String)) })
 const Roles = Schema.Array(Schema.Struct({ id: Schema.String, permissions: Schema.String }))
 const Player = Schema.Struct({ tag: Schema.String, name: Schema.String, townHallLevel: Schema.Number,
   builderHallLevel: Schema.optionalKey(Schema.Number), trophies: Schema.optionalKey(Schema.Number),
@@ -35,9 +37,9 @@ export const refreshActorAllowed = (bindings: WorkerBindings, serverId: string, 
   const discord = yield* DiscordApi
   const guild = object(yield* discord.request(`/guilds/${serverId}`))
   const settings = yield* sql<{ full_whitelist_role_id: string | null }>`SELECT full_whitelist_role_id FROM servers WHERE id=${serverId}`
-  const permissions = roles.filter(role => role.id === serverId || member.roles.includes(role.id)).reduce((bits, role) => bits | BigInt(role.permissions), 0n)
+  const permissions = roles.filter(role => role.id === serverId || (member.roles ?? []).includes(role.id)).reduce((bits, role) => bits | BigInt(role.permissions), 0n)
   if (guild.owner_id !== actor && (permissions & (8n | 32n)) === 0n
-    && !member.roles.includes(settings[0]?.full_whitelist_role_id ?? "")) return yield* new Forbidden({ message: "Manage Server or the configured whitelist role is required" })
+    && !(member.roles ?? []).includes(settings[0]?.full_whitelist_role_id ?? "")) return yield* new Forbidden({ message: "Manage Server or the configured whitelist role is required" })
 })
 
 // Resolve manual subjects without creating jobs. Gateway authorization and
@@ -58,7 +60,9 @@ export const manualRefreshTargets = (bindings:WorkerBindings,serverId:string,bod
         AND ((rule.type='clan_role' AND rule.option='member' AND rule.clan_tag=clan.tag)
           OR (rule.type='family' AND rule.option='family')))`
     const eligible = new Set(linked.map(row => row.user_id))
-    users = members.filter(member => !member.user.bot && (member.roles.includes(target) || eligible.has(member.user.id))).map(member => member.user.id)
+    // Discord does not list @everyone in member.roles: its ID is the guild ID.
+    // Expanding this target selects humans; it does not enable message mentions.
+    users = members.filter(member => !member.user.bot && (target === serverId || (member.roles ?? []).includes(target) || eligible.has(member.user.id))).map(member => member.user.id)
   }
   yield* requireInput(users.length > 0 && users.length <= 3000)
   return users

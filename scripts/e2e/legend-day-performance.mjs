@@ -1,3 +1,4 @@
+import { verifyManualRefreshTargets } from "./manual-refresh-targets.mjs"
 import { verifyGuildListCache } from "./guild-list-cache.mjs"
 import { verifyAccountAvatars } from "./account-avatar.mjs"
 import { startBotCustomizationProvider } from "./bot-customization-provider.mjs"
@@ -71,6 +72,7 @@ try {
     await new Promise(r=>setTimeout(r,500))
   }
   assert(ready,logs.slice(-2000))
+  await verifyManualRefreshTargets({db,origin:`http://127.0.0.1:${port}`,botKey})
   const endpoint=(extra='')=>`http://127.0.0.1:${port}/v2/stats/legend/performance?time[after]=${first}&time[before]=${last}${extra}`
   const response=await fetch(endpoint());const body=await response.json()
   assert.equal(response.status,200,JSON.stringify(body))

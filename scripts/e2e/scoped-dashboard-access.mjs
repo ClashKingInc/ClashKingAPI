@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { SignJWT } from 'jose'
 
-export async function verifyScopedDashboardAccess({ db, origin, signingKey, applicationId, botKey }) {
+export async function verifyScopedDashboardAccess({ db, origin, signingKey, applicationId, botKey, meteringKey }) {
   assert.equal(process.env.CLASHKING_DISPOSABLE_TIMESCALE, '1')
   const actor='999999999999994901', server='999999999999994902', other='999999999999994903'
   const generation=randomUUID(), roster=randomUUID(), foreignRoster=randomUUID()
@@ -86,6 +86,18 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
   const aiBody={serverId:server,rosterIds:[roster],messages:[{role:'user',content:'List my roster'}]}
   const aiContext=await request('/v2/roster/ai/context',{method:'POST',body:aiBody})
   assert.equal(aiContext.context.attachments[0].rosterId,roster)
+  await request('/v2/roster/ai/context',{method:'POST',body:aiBody,status:429})
+  const budgetCall=async(path,body)=>{
+    const response=await fetch(origin+path,{method:'POST',headers:{'content-type':'application/json','x-clashking-ai-metering':meteringKey},body:JSON.stringify(body)})
+    assert.equal(response.status,200,await response.clone().text());return response.json()
+  }
+  await budgetCall('/v2/runtime/roster-ai/reserve',{requestId:aiContext.requestId,step:0,inputTokenLimit:1000,outputTokenLimit:1000})
+  await request('/v2/roster/ai/context',{method:'POST',body:aiBody,status:429})
+  await budgetCall('/v2/runtime/roster-ai/settle',{requestId:aiContext.requestId,step:0,inputTokens:0,outputTokens:0})
+  const retryContext=await request('/v2/roster/ai/context',{method:'POST',body:aiBody})
+  await db.query('DELETE FROM roster_ai_usage WHERE id=$1',[retryContext.requestId])
+  console.log('PASS rejected AI admission: unsettled call blocks retry; zero-cost settled rejection permits retry')
+
   await request('/v2/roster/ai/context',{method:'POST',body:{...aiBody,serverId:other},status:403})
   await db.query('DELETE FROM roster_ai_usage WHERE id=$1',[aiContext.requestId])
   console.log('PASS scoped roster AI admission: nondeveloper manager accepted; view-only and foreign server rejected; no model calls')

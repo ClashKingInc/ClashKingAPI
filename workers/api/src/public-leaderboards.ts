@@ -91,9 +91,12 @@ export const queryClanLeaderboard = (kind: "donations" | "war_wins" | "win_strea
   const sql = yield* SqlClient.SqlClient
   const rank = kind === "win_streak" ? sql`l.war_win_streak_rank` : kind === "war_wins" ? (global ? sql`l.war_wins_rank` : sql`l.location_war_wins_rank`) : (global ? sql`l.donated_rank` : sql`l.location_donated_rank`)
   const value = kind === "donations" ? sql`c.troops_donated` : sql`c.war_wins`
+  // The capped view retains the union of all ranking categories. A row can
+  // exist without a placement in this category, especially after country changes.
   const rows = yield* sql<ClanLeaderboardRow>`SELECT c.tag, c.name, c.location_id, c.badge_token, ${value}::text AS value,
     c.war_win_streak, ${rank}::text AS rank FROM clan_leaderboards l JOIN basic_clan c ON c.tag = l.tag
-    WHERE ${kind === "win_streak" ? sql`l.war_win_streak_rank IS NOT NULL` : global ? sql`TRUE` : sql`c.location_id = ${location}`}
+    WHERE ${rank} IS NOT NULL
+      AND ${kind === "win_streak" || global ? sql`TRUE` : sql`c.location_id = ${location}`}
     ORDER BY ${rank} LIMIT ${leaderboardLimit(query)}`.pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Clan leaderboard query failed" })))
   const items = rows.map((row) => {
     const badge = badgeUrls(row.badge_token)

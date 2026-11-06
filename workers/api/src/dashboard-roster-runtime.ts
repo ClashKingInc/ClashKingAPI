@@ -1224,7 +1224,9 @@ const loadGroups = (sql: SqlClient.SqlClient, serverId: string, groupId?: string
 const createGroup = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
   const body = yield* decodeJson(input.request)
   const serverId = yield* requireServerId(input, body)
-  const name = yield* requireString(body.name, "name")
+  // The dashboard's create dialog sends alias, which the shared request contract
+  // permits. Store it as the required name too; explicit names still take priority.
+  const name = yield* requireString(body.name ?? body.alias, "name or alias")
   const id = crypto.randomUUID().replaceAll("-", "").slice(0, 12)
   const rows = yield* database("Unable to create roster group", sql<GroupRow>`
     INSERT INTO roster_groups (

@@ -13,6 +13,12 @@ const routes = Object.values(endpoints).filter(endpoint => endpoint.auth.startsW
 
 export const authorizeAdditionalDashboardRoute = (request: Request, scopedServerId: string) => Effect.gen(function* () {
   const url = new URL(request.url), parts = url.pathname.split("/")
+  // A server session may acknowledge only its own person's AI notice. This
+  // exact exception grants no access to profiles, exports or other user routes.
+  if (url.pathname === "/v2/users/me/ai-notice" && !url.search && ["GET", "POST"].includes(request.method)) {
+    yield* (yield* ServerAuthorization).require(request, scopedServerId, { section: "rosters" })
+    return true
+  }
   const route = routes.find(endpoint => endpoint.method === request.method
     && endpoint.path.split("/").length === parts.length
     && endpoint.path.split("/").every((part, index) => part.startsWith(":") || part === parts[index]))

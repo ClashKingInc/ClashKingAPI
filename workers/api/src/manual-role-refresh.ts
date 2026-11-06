@@ -32,7 +32,7 @@ export const manualRefreshReport=(serverId:string,requestId:string)=>Effect.gen(
   const sql=yield* SqlClient.SqlClient
   const header=(yield* sql<Header>`SELECT id,server_id,actor_id,target_id,target_kind,channel_id,message_id,preview,categories,role_treatment,created_at::text,updated_at::text,published_complete FROM role_refresh_requests WHERE id=${requestId} AND server_id=${serverId}`)[0]
   if(!header)return yield* new NotFound({message:'Refresh request not found'})
-  const rows=yield* sql<{user_id:string;result:Record<string,unknown>|null;done:boolean;failed:boolean;next_retry_at:string}>`SELECT job.user_id,job.result,job.due_at::text AS next_retry_at,job.completed_at IS NOT NULL AS done,
+  const rows=yield* sql<{user_id:string;result:Record<string,unknown>|null;done:boolean;failed:boolean;next_retry_at:string}>`SELECT job.user_id,CASE WHEN job.completed_at IS NOT NULL THEN job.result-'error' ELSE job.result END AS result,job.due_at::text AS next_retry_at,job.completed_at IS NOT NULL AS done,
     job.completed_at IS NULL AND job.attempts>=12 AND NOT EXISTS(SELECT 1 FROM role_refresh_leases l WHERE l.job_id=job.id AND l.expires_at>now()) AS failed
     FROM role_refresh_jobs job WHERE job.server_id=${serverId} AND job.request_id=${requestId} ORDER BY job.user_id`
   const complete=rows.filter(r=>r.done).length,failed=rows.filter(r=>r.failed).length

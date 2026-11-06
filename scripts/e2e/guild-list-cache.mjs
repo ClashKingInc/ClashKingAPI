@@ -1,16 +1,16 @@
 // Actual local Worker -> encrypted OAuth credential -> loopback Discord -> SQL.
 import assert from 'node:assert/strict'
-import { createCipheriv, createHmac, randomBytes, randomUUID } from 'node:crypto'
+import { randomUUID } from 'node:crypto'
+import { build } from 'esbuild'
 import { SignJWT } from 'jose'
 
 export async function verifyGuildListCache({db,origin,signingKey,encryptionKey,provider}) {
  const actor='999999999999994951',server='999999999999994952',role='999999999999994953',app='999999999999999999'
  const generation=randomUUID(),device='guild-list-cache'
- const key=Buffer.from(encryptionKey,'base64url'),iv=randomBytes(16),header=Buffer.alloc(9)
- header[0]=128;header.writeBigUInt64BE(BigInt(Math.floor(Date.now()/1000)),1)
- const cipher=createCipheriv('aes-128-cbc',key.subarray(16),iv)
- const signed=Buffer.concat([header,iv,cipher.update('local-oauth-token'),cipher.final()])
- const encrypted=Buffer.concat([signed,createHmac('sha256',key.subarray(0,16)).update(signed).digest()]).toString('base64url')
+ // Use the service's actual credential encoder to prepare its local OAuth row.
+ const bundled=await build({entryPoints:['workers/api/src/fernet.ts'],bundle:true,write:false,platform:'node',format:'esm'})
+ const {encryptStoredFernet}=await import('data:text/javascript;base64,'+Buffer.from(bundled.outputFiles[0].text).toString('base64'))
+ const encrypted=await encryptStoredFernet('local-oauth-token',encryptionKey)
  await db.query("INSERT INTO auth_users(user_id,provider) VALUES($1,'discord')",[actor])
  await db.query("INSERT INTO auth_discord_tokens(user_id,device_id,access_token_ciphertext,refresh_token_ciphertext,expires_at) VALUES($1,$2,$3,$3,now()+interval '1 hour')",[actor,device,encrypted])
  await db.query("INSERT INTO servers(id,name) VALUES($1,'Cache E2E')",[server])

@@ -82,6 +82,7 @@ if (!/^\d+$/u.test(discordClientId) || discordClientSecret.length === 0) {
 const config = JSON.parse(readFileSync("wrangler.jsonc", "utf8")
   .split("\n").filter(line => !line.trimStart().startsWith("//")).join("\n"))
 const secret = () => randomBytes(32).toString("base64url")
+const emailHashSecret = persistent ? process.env.CLASHKING_LOCAL_EMAIL_HASH_SECRET : process.env.CLASHKING_E2E_EMAIL_HASH_SECRET
 const localSecret = (name) => {
   if (!persistent) {
     const value = process.env[`CLASHKING_E2E_${name}`]
@@ -248,7 +249,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     ...notificationLab.bindings,
     POSTS_PUBLIC_ORIGIN: publicOrigin, APP_UPDATES_PUBLIC_ORIGIN: publicOrigin,
     PROFILE_MEDIA_PUBLIC_ORIGIN: publicOrigin,
-    EMAIL_HASH_SECRET: process.env.CLASHKING_E2E_EMAIL_HASH_SECRET || undefined,
+    ...(emailHashSecret ? { EMAIL_HASH_SECRET: emailHashSecret } : {}),
     JWT_ACCESS_SECRET: localSecret("JWT_ACCESS_SECRET"), JWT_REFRESH_SECRET: localSecret("JWT_REFRESH_SECRET"), API_BOT_TOKEN: localSecret("API_BOT_TOKEN"),
     AI_USAGE_SECRET: localSecret("AI_USAGE_SECRET"), DATA_ENCRYPTION_KEY: localSecret("DATA_ENCRYPTION_KEY"),
   },

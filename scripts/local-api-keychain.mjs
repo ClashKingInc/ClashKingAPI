@@ -8,12 +8,19 @@ const betaDiscordAccount = "discord-beta-oauth-v1"
 export const betaDiscordApplicationId = "808566437199216691"
 export const localSecretNames = ["DATA_ENCRYPTION_KEY", "JWT_ACCESS_SECRET", "JWT_REFRESH_SECRET", "API_BOT_TOKEN", "AI_USAGE_SECRET", "STRIPE_WEBHOOK_SECRET"]
 export function loadLocalApiSecrets({ environment = process.env, platform = process.platform } = {}) {
+  // Keep the optional lookup key with the stable local keyset, including older
+  // Keychain entries that do not yet contain it. Never generate a new lookup key.
+  const withEmailLookup = (values, storedEmailKey) => {
+    const emailKey = environment.CLASHKING_LOCAL_EMAIL_HASH_SECRET ?? storedEmailKey
+    if (emailKey !== undefined && (typeof emailKey !== "string" || emailKey.length === 0)) throw new Error("Invalid stable local email lookup key")
+    return emailKey === undefined ? values : { ...values, EMAIL_HASH_SECRET: emailKey }
+  }
   const explicit = Object.fromEntries(localSecretNames.map(name => [name, environment[`CLASHKING_LOCAL_${name}`]]))
   if (localSecretNames.some(name => explicit[name] !== undefined)) {
     if (localSecretNames.some(name => typeof explicit[name] !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(explicit[name]))) {
       throw new Error("Provide a complete valid CLASHKING_LOCAL_ stable keyset; refusing partial keys or automatic rotation")
     }
-    return explicit
+    return withEmailLookup(explicit)
   }
   if (platform !== "darwin") throw new Error("Provide the complete stable CLASHKING_LOCAL_ keyset on this platform; never regenerate keys for an existing database")
   let value
@@ -36,7 +43,7 @@ export function loadLocalApiSecrets({ environment = process.env, platform = proc
   if (secrets === null || typeof secrets !== "object" || localSecretNames.some((name) => typeof secrets[name] !== "string" || !/^[A-Za-z0-9_-]{43}$/u.test(secrets[name]))) {
     throw new Error("Invalid local API Keychain item; refusing to replace it")
   }
-  return Object.fromEntries(localSecretNames.map((name) => [name, secrets[name]]))
+  return withEmailLookup(Object.fromEntries(localSecretNames.map((name) => [name, secrets[name]])), secrets.EMAIL_HASH_SECRET)
 }
 
 export function loadLocalDiscordCredentials({ environment = process.env, platform = process.platform } = {}) {
@@ -49,7 +56,7 @@ export function loadLocalDiscordCredentials({ environment = process.env, platfor
     if (!/^\d+$/u.test(explicit.clientId ?? "") || (explicit.clientSecret ?? "").length === 0) {
       throw new Error("Provide both valid CLASHKING_LOCAL_DISCORD client credentials")
     }
-    return explicit
+    return withEmailLookup(explicit)
   }
   if (platform !== "darwin") throw new Error("Provide the local Discord client credentials on this platform")
   let value
@@ -77,7 +84,7 @@ export function loadLocalBetaDiscordCredentials({ environment = process.env, pla
     if (explicit.clientId !== betaDiscordApplicationId || !(explicit.clientSecret ?? "").trim() || !(explicit.botToken ?? "").trim()) {
       throw new Error(`Provide the complete beta Discord credential set for application ${betaDiscordApplicationId}`)
     }
-    return explicit
+    return withEmailLookup(explicit)
   }
   if (platform !== "darwin") throw new Error("Provide the complete beta Discord credential set on this platform")
   let value

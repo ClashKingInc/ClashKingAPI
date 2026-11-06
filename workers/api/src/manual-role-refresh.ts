@@ -9,7 +9,7 @@ const snowflake=(v:unknown):v is string=>typeof v==='string'&&/^\d{15,20}$/u.tes
 const requireInput=(v:boolean)=>v?Effect.void:Effect.fail(new InvalidRequest({message:'Invalid manual refresh request'}))
 type Header={id:string;server_id:string;actor_id:string;target_id:string;target_kind:string;channel_id:string;message_id:string|null;preview:boolean;categories:string[];role_treatment:string;created_at:string;updated_at:string;published_complete:boolean}
 export const startManualRefresh=(bindings:WorkerBindings,serverId:string,body:Record<string,unknown>)=>Effect.gen(function*(){
-  yield* requireInput(snowflake(body.requestId)&&snowflake(body.channelId)&&typeof body.preview==='boolean'&&Array.isArray(body.categories)&&body.categories.length>0&&body.categories.every(v=>roleRefreshCategories.includes(v as typeof roleRefreshCategories[number]))&&['add','remove','both'].includes(String(body.treatment)))
+  yield* requireInput(snowflake(body.requestId)&&snowflake(body.channelId)&&(body.messageId===undefined||snowflake(body.messageId))&&typeof body.preview==='boolean'&&Array.isArray(body.categories)&&body.categories.length>0&&body.categories.every(v=>roleRefreshCategories.includes(v as typeof roleRefreshCategories[number]))&&['add','remove','both'].includes(String(body.treatment)))
   const users=yield* manualRefreshTargets(bindings,serverId,body)
   const discord=yield* DiscordApi
   const channel=yield* discord.request(`/channels/${String(body.channelId)}`) as Effect.Effect<{guild_id?:string}, import('./errors.js').ApiFailure>
@@ -17,11 +17,11 @@ export const startManualRefresh=(bindings:WorkerBindings,serverId:string,body:Re
   const sql=yield* SqlClient.SqlClient
   return yield* sql.withTransaction(Effect.gen(function*(){
     // A retry of the same signed invocation must never enqueue a second run.
-    const inserted=yield* sql`INSERT INTO role_refresh_requests(id,server_id,actor_id,target_id,target_kind,channel_id,preview,categories,role_treatment)
-      VALUES(${String(body.requestId)},${serverId},${String(body.actorId)},${String(body.targetId)},${String(body.targetKind)},${String(body.channelId)},${body.preview as boolean},${body.categories as string[]}::text[],${String(body.treatment)}) ON CONFLICT(id) DO NOTHING RETURNING id`
+    const inserted=yield* sql`INSERT INTO role_refresh_requests(id,server_id,actor_id,target_id,target_kind,channel_id,message_id,preview,categories,role_treatment)
+      VALUES(${String(body.requestId)},${serverId},${String(body.actorId)},${String(body.targetId)},${String(body.targetKind)},${String(body.channelId)},${typeof body.messageId==='string'?body.messageId:null},${body.preview as boolean},${body.categories as string[]}::text[],${String(body.treatment)}) ON CONFLICT(id) DO NOTHING RETURNING id`
     const headers=yield* sql<Header>`SELECT * FROM role_refresh_requests WHERE id=${String(body.requestId)} FOR UPDATE`
     const header=headers[0]
-    yield* requireInput(Boolean(header&&header.server_id===serverId&&header.actor_id===body.actorId&&header.channel_id===body.channelId&&header.target_id===body.targetId&&header.target_kind===body.targetKind&&header.preview===body.preview&&header.role_treatment===body.treatment&&JSON.stringify(header.categories)===JSON.stringify(body.categories)))
+    yield* requireInput(Boolean(header&&header.server_id===serverId&&header.actor_id===body.actorId&&header.channel_id===body.channelId&&(body.messageId===undefined||header.message_id===body.messageId)&&header.target_id===body.targetId&&header.target_kind===body.targetKind&&header.preview===body.preview&&header.role_treatment===body.treatment&&JSON.stringify(header.categories)===JSON.stringify(body.categories)))
     if(inserted.length)yield* sql`INSERT INTO role_refresh_jobs(id,server_id,user_id,request_id,actor_id,categories,preview,role_treatment,result)
       SELECT ${String(body.requestId)}||':'||subject,${serverId},subject,${String(body.requestId)},${String(body.actorId)},${body.categories as string[]}::text[],${body.preview as boolean},${String(body.treatment)},jsonb_build_object('displayName',COALESCE(NULLIF(member.data->>'nick',''),NULLIF(member.data->'user'->>'global_name',''),NULLIF(member.data->'user'->>'username',''),'Member '||subject))
       FROM unnest(${users}::text[]) subject LEFT JOIN discord_cache.members member ON member.guild_id=${serverId} AND member.user_id=subject`

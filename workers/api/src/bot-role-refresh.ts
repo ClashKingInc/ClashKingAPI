@@ -11,6 +11,9 @@ import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, UpstreamUnavailab
 import { readBoundedJson } from "./request-body.js"
 
 export const roleRefreshCategories = ["family", "clan", "leadership", "townhall", "builderhall", "league", "builder_league", "category", "nicknames", "tenure", "roster"] as const
+// Temporarily disabled by product decision. Keep saved rules and queued work
+// intact, but do not scan members, claim tenure-only jobs, or alter tenure roles.
+const tenureRefreshEnabled = false
 const idPattern = /^[0-9]{15,20}$/u
 const uuid = /^[0-9a-f-]{36}$/iu
 // The Gateway serializes role-less members without `roles` (Disgo omitempty).
@@ -77,7 +80,7 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
   return yield* sql.withTransaction(Effect.gen(function* () {
     // Time passing is itself a tenure input. Schedule mismatched cached members
     // without requiring a game event or the independent game-autoeval setting.
-    if (!requestId && includeTenure) yield* sql`INSERT INTO role_refresh_jobs(id,server_id,user_id,categories)
+    if (tenureRefreshEnabled && !requestId && includeTenure) yield* sql`INSERT INTO role_refresh_jobs(id,server_id,user_id,categories)
       SELECT 'tenure:'||server.id||':'||member.user_id,server.id,member.user_id,ARRAY['tenure']::text[]
       FROM servers server JOIN discord_cache.members member ON member.guild_id=server.id
       JOIN discord_cache.guilds guild ON guild.id=server.id
@@ -106,6 +109,7 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
       SELECT job.id,job.server_id,job.user_id,job.revision::text,job.request_id,job.preview,job.categories,job.roster_role_ids,job.role_treatment,server.auto_role_treatment,server.auto_role_blacklist_ids FROM role_refresh_jobs job
       JOIN servers server ON server.id=job.server_id
       WHERE completed_at IS NULL AND due_at<=now() AND attempts<12
+        AND (${tenureRefreshEnabled} OR NOT (job.categories <@ ARRAY['tenure']::text[]))
         AND (job.request_id IS NULL OR NOT EXISTS (SELECT 1 FROM role_refresh_requests request WHERE request.id=job.request_id AND request.message_id IS NULL))
         AND (${includeRoster} OR NOT ('roster'=ANY(job.categories)))
         -- Older consumers apply both directions unconditionally. They must not
@@ -119,7 +123,7 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
         AND (${requestId ?? null}::text IS NULL OR request_id=${requestId ?? null})
         AND (${serverId ?? null}::text IS NULL OR server_id=${serverId ?? null})
         AND NOT EXISTS(SELECT 1 FROM role_refresh_leases lease WHERE lease.server_id=job.server_id AND lease.user_id=job.user_id AND lease.expires_at>now())
-      ORDER BY due_at,job.id LIMIT ${requestId ? 1 : 20} FOR UPDATE OF job SKIP LOCKED`
+      ORDER BY due_at,job.id LIMIT 20 FOR UPDATE OF job SKIP LOCKED`
     const jobs = []
     for (const row of candidates) {
       const lease = yield* sql<{ token: string; expires_at: string }>`INSERT INTO role_refresh_leases(server_id,user_id,job_id,revision,expires_at)
@@ -128,7 +132,7 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
         WHERE role_refresh_leases.expires_at<=now() RETURNING token::text,expires_at::text`
       if (lease[0]) {
         yield* sql`UPDATE role_refresh_jobs SET attempts=attempts+1 WHERE id=${row.id}`
-        jobs.push({ ...row, token: lease[0].token, expires_at: lease[0].expires_at })
+        jobs.push({ ...row, categories: tenureRefreshEnabled ? row.categories : row.categories.filter(category => category !== "tenure"), token: lease[0].token, expires_at: lease[0].expires_at })
       }
     }
     return { jobs }

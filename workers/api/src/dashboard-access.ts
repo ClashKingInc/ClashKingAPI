@@ -50,6 +50,9 @@ export const dispatchDashboardAccess=(request:Request)=>Effect.gen(function*(){
    yield* auth.requireBot(request)
    if(!input.userId||!/^\d+$/u.test(input.userId))return yield* new InvalidRequest({message:"Discord user required"})
    userId=input.userId
+   // Discord authenticated this actor before issuing the private /setup link.
+   // Provision identity only; current server permissions are checked below.
+   yield* sql`INSERT INTO auth_users(user_id,provider) VALUES(${userId},'discord') ON CONFLICT(user_id) DO NOTHING`
    // The trusted bot supplies the interaction actor, but cannot bypass that
    // actor's current server access. This internal proof is never returned.
    const internal=yield* Effect.promise(()=>new SignJWT({}).setProtectedHeader({alg:"HS256"}).setSubject(userId).setAudience(env.WEB_TOKEN_AUDIENCE).setIssuedAt().setExpirationTime("15s").sign(key))
@@ -76,7 +79,14 @@ export const dispatchDashboardAccess=(request:Request)=>Effect.gen(function*(){
    const rows=yield* sql<{id:string;user_id:string;server_id:string;source:string;device_id:string|null;permissions:unknown;pkce_challenge:string|null}>`SELECT * FROM dashboard_access_grants WHERE token_hash=${digest} AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`
    const row=rows[0];if(!row)return yield* new Unauthenticated({message:"Grant expired or already used"})
    if(row.source==="app") {if(!input.codeVerifier||input.codeVerifier.length<43||input.codeVerifier.length>128||(yield* Effect.promise(()=>challenge(input.codeVerifier!)))!==row.pkce_challenge)return yield* new Unauthenticated({message:"Grant proof failed"})}
-   else {const user=yield* auth.requireUser(request);if(user.userId!==row.user_id||user.dashboardScope)return yield* new Forbidden({message:"Sign in as the intended Discord user"});row.device_id=user.deviceId??"";}
+   else {
+    // An ephemeral, two-minute, single-use bot grant is the login proof. A
+    // forwarded link is sensitive, just like any other one-use sign-in link.
+    // Retain the account-mismatch check when a main session is supplied.
+    if(bearerToken(request)){const user=yield* auth.requireUser(request);if(user.userId!==row.user_id||user.dashboardScope)return yield* new Forbidden({message:"Sign in as the intended Discord user"})}
+    const internal=yield* Effect.promise(()=>new SignJWT({}).setProtectedHeader({alg:"HS256"}).setSubject(row.user_id).setAudience(env.WEB_TOKEN_AUDIENCE).setIssuedAt().setExpirationTime("15s").sign(key))
+    yield* authorization.require(new Request(request.url,{headers:{authorization:`Bearer ${internal}`}}),row.server_id,{})
+   }
    yield* sql`UPDATE dashboard_access_grants SET consumed_at=now() WHERE id=${row.id}::uuid`
    const expires=new Date(Date.now()+(row.source==="app"&&row.device_id?30*86400:8*3600)*1000)
    const created=yield* sql<{id:string}>`INSERT INTO dashboard_scoped_sessions(grant_id,user_id,server_id,device_id,permissions,refresh_hash,expires_at)

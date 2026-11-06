@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { SignJWT } from 'jose'
 
-export async function verifyScopedDashboardAccess({ db, origin, signingKey, applicationId }) {
+export async function verifyScopedDashboardAccess({ db, origin, signingKey, applicationId, botKey }) {
   assert.equal(process.env.CLASHKING_DISPOSABLE_TIMESCALE, '1')
   const actor='999999999999994901', server='999999999999994902', other='999999999999994903'
   const generation=randomUUID(), roster=randomUUID(), foreignRoster=randomUUID()
@@ -33,6 +33,36 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
     return value
   }
   await request(`/v2/roster/${server}/list`)
+  const notice='/v2/users/me/ai-notice',version='2026-10-28'
+  assert.equal((await request(notice)).acknowledged,false)
+  await db.query("INSERT INTO user_settings(user_id,data) VALUES($1,'{\"retained\":true}')",[actor])
+  assert.deepEqual(await request(notice,{method:'POST',body:{version}}),{version,acknowledged:true})
+  assert.equal((await request(notice)).acknowledged,true)
+  assert.equal((await db.query('SELECT data FROM user_settings WHERE user_id=$1',[actor])).rows[0].data.retained,true)
+  await db.query("UPDATE user_settings SET data=jsonb_set(data,'{ai_notice,acknowledged_at}',to_jsonb((now()+interval '1 day')::text)) WHERE user_id=$1",[actor])
+  assert.equal((await request(notice)).acknowledged,false,'Future consent cannot authorize AI')
+  await request(notice,{method:'POST',body:{version}})
+  await request(notice,{method:'POST',body:{version:'outdated'},status:400})
+
+  // A real bot-issued grant signs in a first-use Discord actor without OAuth.
+  // Its short lifetime, one-use transaction and current server access remain.
+  const firstUser='999999999999994904'
+  await db.query('UPDATE discord_cache.guilds SET data=$2 WHERE id=$1',[server,{owner_id:firstUser}])
+  const issue=()=>request(`/v2/server/${server}/dashboard-access-grants`,{method:'POST',body:{source:'bot',userId:firstUser},bearer:botKey,status:201})
+  const fresh=await issue()
+  const access=await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:fresh.code},bearer:null})
+  assert.equal(access.serverId,server)
+  await request(`/v2/roster/${server}/list`,{bearer:access.access_token})
+  await request(`/v2/roster/${other}/list`,{bearer:access.access_token,status:403})
+  await request('/v2/auth/export',{bearer:access.access_token,status:403})
+  await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:fresh.code},bearer:null,status:401})
+  const expired=await issue()
+  await db.query("UPDATE dashboard_access_grants SET expires_at=now()-interval '1 second' WHERE user_id=$1 AND consumed_at IS NULL",[firstUser])
+  await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:expired.code},bearer:null,status:401})
+  const revoked=await issue()
+  await db.query('UPDATE discord_cache.guilds SET data=$2 WHERE id=$1',[server,{owner_id:actor}])
+  await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:revoked.code},bearer:null,status:403})
+  console.log('PASS bot dashboard sign-in: actual first-use grant, anonymous exchange, replay/expiry rejection, current permission recheck, foreign-server and private-route denial')
   await request(`/v2/roster/${roster}?server_id=${server}`)
   await request(`/v2/links/server/${server}`)
   await request('/v2/roster/members/query',{method:'POST',body:{serverId:server,rosterIds:[roster]}})

@@ -273,7 +273,7 @@ try {
   const serialized=JSON.stringify(exported)
   assert(!serialized.includes('refresh_hash')&&!serialized.includes('token_hash')&&!serialized.includes('pkce_challenge'),'Exports must not disclose authentication material')
   await verifyAccountAvatars({db,origin:`http://127.0.0.1:${port}`,signingKey})
-  await verifyScopedDashboardAccess({db,origin:`http://127.0.0.1:${port}`,signingKey,applicationId:'999999999999999999'})
+  await verifyScopedDashboardAccess({db,origin:`http://127.0.0.1:${port}`,signingKey,applicationId:'999999999999999999',botKey})
   await verifyGuildListCache({db,origin:`http://127.0.0.1:${port}`,signingKey,encryptionKey,provider:profileProvider})
   await verifyManualLimits({db,origin:`http://127.0.0.1:${port}`,adminOrigin:'http://127.0.0.1:8804',signingKey,meteringKey,profileProvider})
   // The running API must not depend on retired permanent-family tables. Rename

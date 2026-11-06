@@ -659,7 +659,12 @@ const Webhook = Schema.Struct({ id: DecimalSnowflake, channel_id: Schema.optiona
 interface LogRow { readonly clan_tag: string | null; readonly type: string; readonly webhook_id: string; readonly thread_id: string | null; readonly disabled: boolean; readonly disabled_reason: string | null; readonly reddit_role_id: string | null; readonly reddit_accounts: ReadonlyArray<string> }
 const logsReadStateOperation = (input: DashboardServerOperationInput) => database("Server logs could not be loaded or updated", Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient, discord = yield* DiscordApi, serverId = serverIdFor(input)
-  const hooks = yield* decodeDiscord(Schema.Array(Webhook), yield* discord.request(`/guilds/${serverId}/webhooks`))
+  // Pausing delivery changes only SQL state. A missing Discord permission or
+  // upstream outage must not prevent a manager from stopping an existing log.
+  // Mutation responses omit channel_id; clients retain the known destination.
+  const hooks = input.endpoint.operationId === "serverLogs"
+    ? yield* decodeDiscord(Schema.Array(Webhook), yield* discord.request(`/guilds/${serverId}/webhooks`))
+    : []
   const enrich = (items: ReadonlyArray<LogRow>) => items.map((row) => ({ type: row.type, webhook_id: row.webhook_id, thread_id: row.thread_id, disabled: row.disabled, disabled_reason: row.disabled_reason, ...(row.type === "reddit_feed" ? { reddit_role_id: row.reddit_role_id, reddit_accounts: row.reddit_accounts } : {}), ...optional("clan_tag", row.clan_tag), ...optional("channel_id", hooks.find((hook) => hook.id === row.webhook_id)?.channel_id) }))
   if (input.endpoint.operationId === "serverLogs") {
     const rows = yield* sql<LogRow>`SELECT clan_tag, type, webhook_id, thread_id, disabled, disabled_reason, reddit_role_id, reddit_accounts FROM server_logs WHERE server_id = ${serverId} ORDER BY clan_tag NULLS FIRST, type`

@@ -56,7 +56,7 @@ export function loadLocalDiscordCredentials({ environment = process.env, platfor
     if (!/^\d+$/u.test(explicit.clientId ?? "") || (explicit.clientSecret ?? "").length === 0) {
       throw new Error("Provide both valid CLASHKING_LOCAL_DISCORD client credentials")
     }
-    return withEmailLookup(explicit)
+    return explicit
   }
   if (platform !== "darwin") throw new Error("Provide the local Discord client credentials on this platform")
   let value
@@ -84,7 +84,7 @@ export function loadLocalBetaDiscordCredentials({ environment = process.env, pla
     if (explicit.clientId !== betaDiscordApplicationId || !(explicit.clientSecret ?? "").trim() || !(explicit.botToken ?? "").trim()) {
       throw new Error(`Provide the complete beta Discord credential set for application ${betaDiscordApplicationId}`)
     }
-    return withEmailLookup(explicit)
+    return explicit
   }
   if (platform !== "darwin") throw new Error("Provide the complete beta Discord credential set on this platform")
   let value

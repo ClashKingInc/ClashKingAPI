@@ -30,7 +30,11 @@ export const startManualRefresh=(bindings:WorkerBindings,serverId:string,body:Re
 })
 export const manualRefreshReport=(serverId:string,requestId:string)=>Effect.gen(function*(){
   const sql=yield* SqlClient.SqlClient
-  const header=(yield* sql<Header>`SELECT id,server_id,actor_id,target_id,target_kind,channel_id,message_id,preview,categories,role_treatment,created_at::text,updated_at::text,published_complete FROM role_refresh_requests WHERE id=${requestId} AND server_id=${serverId}`)[0]
+  // The header version acknowledges the exact member results rendered. Hold
+  // a short shared lock while reading them: a cached standalone header can
+  // otherwise trail live jobs and prevent the final publication from settling.
+  return yield* sql.withTransaction(Effect.gen(function*(){
+  const header=(yield* sql<Header>`SELECT id,server_id,actor_id,target_id,target_kind,channel_id,message_id,preview,categories,role_treatment,created_at::text,updated_at::text,published_complete FROM role_refresh_requests WHERE id=${requestId} AND server_id=${serverId} FOR SHARE`)[0]
   if(!header)return yield* new NotFound({message:'Refresh request not found'})
   const rows=yield* sql<{user_id:string;result:Record<string,unknown>|null;done:boolean;failed:boolean;next_retry_at:string}>`SELECT job.user_id,CASE WHEN job.completed_at IS NOT NULL THEN job.result-'error' ELSE job.result END AS result,job.due_at::text AS next_retry_at,job.completed_at IS NOT NULL AS done,
     job.completed_at IS NULL AND job.attempts>=12 AND NOT EXISTS(SELECT 1 FROM role_refresh_leases l WHERE l.job_id=job.id AND l.expires_at>now()) AS failed
@@ -40,6 +44,7 @@ export const manualRefreshReport=(serverId:string,requestId:string)=>Effect.gen(
     results:rows.filter(r=>r.done||r.failed).map(r=>({user_id:r.user_id,result:r.result??{error:'Refresh could not finish. Run /refresh to try again.'}})),
     waiting:rows.filter(r=>!r.done&&!r.failed).map(r=>({user_id:r.user_id,result:r.result??{},nextRetryAt:r.next_retry_at})),
     total:rows.length,completed:complete,failed,finished:complete+failed===rows.length,target:header.target_id,kind:header.target_kind,preview:header.preview,categories:header.categories,treatment:header.role_treatment}
+  }))
 })
 export const manualProgressRequests=()=>Effect.gen(function*(){
   const sql=yield* SqlClient.SqlClient
@@ -52,7 +57,7 @@ export const manualProgressRequests=()=>Effect.gen(function*(){
     // Publication throttling must not hide due work from the runner.
     activeRequests:yield* sql<{id:string;server_id:string}>`SELECT request.id,request.server_id FROM role_refresh_requests request
       WHERE NOT request.published_complete AND request.message_id IS NOT NULL
-        AND EXISTS(SELECT 1 FROM role_refresh_jobs job WHERE job.request_id=request.id AND job.completed_at IS NULL AND job.attempts<12)
+        AND EXISTS(SELECT 1 FROM role_refresh_jobs job WHERE job.request_id=request.id AND job.completed_at IS NULL AND job.attempts<12 AND job.due_at<=now())
       ORDER BY request.updated_at,request.id LIMIT 20` }
 })
 export const acknowledgeManualProgress=(serverId:string,requestId:string,body:Record<string,unknown>)=>Effect.gen(function*(){

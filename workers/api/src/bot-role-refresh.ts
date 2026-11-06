@@ -1,3 +1,4 @@
+import { startManualRefresh, manualRefreshReport, manualProgressRequests, acknowledgeManualProgress, authorizeManualReport } from "./manual-role-refresh.js"
 import { rosterRoleState } from "./roster-role-refresh.js"
 import { gatewayHeartbeatFreshnessSeconds } from "./server-authorization.js"
 import { Effect, Schema } from "effect"
@@ -105,6 +106,7 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
       SELECT job.id,job.server_id,job.user_id,job.revision::text,job.request_id,job.preview,job.categories,job.roster_role_ids,job.role_treatment,server.auto_role_treatment,server.auto_role_blacklist_ids FROM role_refresh_jobs job
       JOIN servers server ON server.id=job.server_id
       WHERE completed_at IS NULL AND due_at<=now() AND attempts<12
+        AND (job.request_id IS NULL OR NOT EXISTS (SELECT 1 FROM role_refresh_requests request WHERE request.id=job.request_id AND request.message_id IS NULL))
         AND (${includeRoster} OR NOT ('roster'=ANY(job.categories)))
         -- Older consumers apply both directions unconditionally. They must not
         -- claim a restricted policy and silently remove/add forbidden roles.
@@ -178,13 +180,16 @@ export const setServerMainAccount = (serverId: string, userId: string, rawTag: s
 export const finishRefreshJob = (body: Record<string, unknown>) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   yield* requireInput(typeof body.id === "string" && typeof body.token === "string" && uuid.test(body.token) && typeof body.success === "boolean")
+  yield* requireInput(body.retryAfterSeconds===undefined||(body.success===false&&typeof body.retryAfterSeconds==='number'&&Number.isFinite(body.retryAfterSeconds)&&body.retryAfterSeconds>0&&body.retryAfterSeconds<=604800))
   return yield* sql.withTransaction(Effect.gen(function* () {
     const leases = yield* sql<{ revision: string }>`SELECT revision::text FROM role_refresh_leases WHERE job_id=${String(body.id)} AND token=${String(body.token)}::uuid AND expires_at>now() FOR UPDATE`
     if (!leases[0]) return { accepted: false }
     yield* sql`UPDATE role_refresh_jobs SET completed_at=CASE WHEN ${body.success === true} THEN now() ELSE NULL END,
-      due_at=CASE WHEN ${body.success === true} THEN due_at ELSE now()+make_interval(secs=>LEAST(300,attempts*30)) END,
-      result=${JSON.stringify(object(body.result))}::jsonb,updated_at=now()
+      due_at=CASE WHEN ${body.success === true} THEN due_at ELSE now()+make_interval(secs=>COALESCE(${typeof body.retryAfterSeconds==='number'?Math.ceil(body.retryAfterSeconds):null}::double precision,LEAST(300,attempts*30))) END,
+      result=COALESCE(result,'{}'::jsonb)||${JSON.stringify(object(body.result))}::jsonb,updated_at=now(),
+      attempts=CASE WHEN ${typeof body.retryAfterSeconds==='number'} THEN GREATEST(0,attempts-1) ELSE attempts END
       WHERE id=${String(body.id)} AND revision=${leases[0].revision}::bigint`
+    yield* sql`UPDATE role_refresh_requests SET updated_at=clock_timestamp() WHERE id=(SELECT request_id FROM role_refresh_jobs WHERE id=${String(body.id)})`
     yield* sql`DELETE FROM role_refresh_leases WHERE job_id=${String(body.id)} AND token=${String(body.token)}::uuid`
     return { accepted: true }
   }))
@@ -220,6 +225,10 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
           OR (server.auto_role_treatment=${String(policy)} AND server.auto_role_blacklist_ids=${blacklist as string[]}::text[]))
         AND ARRAY(SELECT tag FROM player_links WHERE user_id=job.user_id AND hidden=false ORDER BY tag)
           = ARRAY(SELECT unnest(${body.accountTags as string[]}::text[]) ORDER BY 1)`
+    if(rows.length>0){
+      const manual=(yield* sql<{server_id:string;actor_id:string;target_id:string;target_kind:string}>`SELECT r.server_id,r.actor_id,r.target_id,r.target_kind FROM role_refresh_requests r JOIN role_refresh_jobs j ON j.request_id=r.id WHERE j.id=${String(body.id)}`)[0]
+      if(manual)yield* refreshActorAllowed(bindings,manual.server_id,manual.actor_id,manual.target_kind==='role'||manual.target_id!==manual.actor_id)
+    }
     if (rows.length > 0 && typeof body.rosterFingerprint === "string") {
       const job = (yield* sql<{server_id:string;user_id:string}>`SELECT server_id,user_id FROM role_refresh_jobs WHERE id=${String(body.id)}`)[0]
       if (!job || (yield* rosterRoleState(sql,job.server_id,job.user_id)).fingerprint !== body.rosterFingerprint) return Response.json({valid:false})
@@ -227,6 +236,17 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
     return Response.json({ valid: rows.length > 0 })
   }
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/complete") return Response.json(yield* finishRefreshJob(object(yield* readBoundedJson(request, 16_384))))
+  if(request.method==='GET'&&url.pathname==='/v2/bot/role-refresh/progress')return Response.json(yield* manualProgressRequests())
+  const durable=/^\/v2\/bot\/role-refresh\/([0-9]{15,20})\/manual-(start|progress|report)$/u.exec(url.pathname)
+  if(durable){
+    const serverId=durable[1]!,action=durable[2]!
+    if(action==='start'&&request.method==='POST')return Response.json(yield* startManualRefresh(bindings,serverId,object(yield* readBoundedJson(request,8192))))
+    const requestId=url.searchParams.get('requestId')??''
+    yield* requireInput(snowflake(requestId))
+    if(action==='progress'&&request.method==='GET')return Response.json(yield* manualRefreshReport(serverId,requestId))
+    if(action==='progress'&&request.method==='POST')return Response.json(yield* acknowledgeManualProgress(serverId,requestId,object(yield* readBoundedJson(request,4096))))
+    if(action==='report'&&request.method==='GET')return Response.json(yield* authorizeManualReport(bindings,serverId,requestId,url.searchParams.get('actorId')??''))
+  }
   const manual = /^\/v2\/bot\/role-refresh\/([0-9]{15,20})\/(manual-targets|manual-result)$/u.exec(url.pathname)
   if(manual){
     const serverId=manual[1]!,action=manual[2]!

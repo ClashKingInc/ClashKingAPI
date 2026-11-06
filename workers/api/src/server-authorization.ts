@@ -90,7 +90,6 @@ export const resolveListedGuildAccess = (
   const result = new Map<string, ServerAccess>()
   for (const guild of guilds) result.set(guild.id, { principal, manager: discordGuildManager(guild), sections: {} })
   if (principal.kind !== "user") return result
-  const cache = yield* loadGatewayAccess(applicationId, principal.userId, guilds.map((guild) => guild.id))
   const candidates = guilds.filter((guild) => !result.get(guild.id)!.manager).map((guild) => guild.id)
   if (candidates.length === 0) return result
   const sql = yield* SqlClient.SqlClient
@@ -100,7 +99,12 @@ export const resolveListedGuildAccess = (
     WHERE grant_row.server_id = ANY(${candidates}::text[])
       AND EXISTS(SELECT 1 FROM auth_users WHERE user_id = ${principal.userId} AND provider = 'discord')
   `.pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Dashboard role grants are unavailable" })))
-  for (const serverId of new Set(rows.map((row) => row.server_id))) {
+  // Fresh OAuth already proves manager permissions. Only delegated grants need
+  // Gateway roles; an unrelated stale shard must not block the manager list.
+  // Actual server operations still perform their independent cache checks.
+  const delegatedIds = [...new Set(rows.map((row) => row.server_id))]
+  const cache = yield* loadGatewayAccess(applicationId, principal.userId, delegatedIds)
+  for (const serverId of delegatedIds) {
     if (!cache.get(serverId)!.members_complete) {
       return yield* new UpstreamUnavailable({ cause: "Gateway members are not ready", message: "Discord authorization cache is temporarily unavailable" })
     }

@@ -2,11 +2,12 @@
 import { createServer } from 'node:http';
 export async function startBotCustomizationProvider(){
  const writes=[];
- const control={failNextReset:false};
+ const control={failNextReset:false,guilds:[]};
  const profiles=new Map();
  const hooks=new Map(), webhookCreates=[];
  const server=createServer(async(req,res)=>{
   res.setHeader('content-type','application/json');
+  if(req.url==='/api/v10/users/@me/guilds?limit=200&with_counts=true'){res.end(JSON.stringify(control.guilds));return;}
   if(req.url==='/api/v10/users/@me'){res.end(JSON.stringify({id:'999999999999999999',username:'ClashKing'}));return;}
   const channel=/^\/api\/v10\/channels\/(99999999999999490[1234])$/.exec(req.url??'');
   if(channel){const id=channel[1];res.end(JSON.stringify({id,guild_id:id.endsWith('4')?'999999999999995903':'999999999999995901',type:id.endsWith('3')?11:0,...(id.endsWith('3')?{parent_id:'999999999999994901'}:{})}));return;}
@@ -36,5 +37,5 @@ export async function startBotCustomizationProvider(){
   res.statusCode=404;res.end(JSON.stringify({message:'Unexpected local Discord request'}));
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- return {webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
+ return {set guilds(value){control.guilds=value},webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
 }

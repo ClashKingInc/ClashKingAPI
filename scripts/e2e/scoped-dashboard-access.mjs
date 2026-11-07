@@ -92,6 +92,7 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
     assert.equal(response.status,200,await response.clone().text());return response.json()
   }
   await budgetCall('/v2/runtime/roster-ai/reserve',{requestId:aiContext.requestId,step:0,inputTokenLimit:1000,outputTokenLimit:1000})
+  await db.query('UPDATE roster_ai_step_budgets SET reserved_usd=.09053225 WHERE usage_id=$1',[aiContext.requestId]) // Historical hold must not block a new admission.
   await request('/v2/roster/ai/context',{method:'POST',body:aiBody})
   await budgetCall('/v2/runtime/roster-ai/settle',{requestId:aiContext.requestId,step:0,inputTokens:0,outputTokens:0})
   const retryContext=await request('/v2/roster/ai/context',{method:'POST',body:aiBody})

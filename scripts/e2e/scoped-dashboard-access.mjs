@@ -69,7 +69,7 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
   await request(`/v2/links/server/${server}`)
   await request('/v2/roster/members/query',{method:'POST',body:{serverId:server,rosterIds:[roster]}})
   await request('/v2/roster/members/query',{method:'POST',body:{serverId:other,rosterIds:[foreignRoster]},status:403})
-  await request('/v2/roster/views/shared/ScopedOwnView01')
+  await request('/v2/roster/views/shared/ScopedOwnView01',{status:403})
   await request(`/v2/roster/${other}/list`,{status:403})
   await request(`/v2/links/server/${other}`,{status:403})
   await request('/v2/roster/views/shared/ScopedOtherView1',{status:403})

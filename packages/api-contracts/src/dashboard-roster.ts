@@ -448,6 +448,7 @@ export const DashboardRosterViewSpec = Schema.Struct({
 })
 export const DashboardRosterViewWrite = Schema.Struct({
   name: Schema.String,
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(300))),
   sourceCode: Schema.String,
   sourceVersion: Schema.Literal(1),
 })
@@ -456,6 +457,7 @@ export const DashboardRosterView = Schema.Struct({
   shareId: Schema.String,
   serverId: Schema.String,
   name: Schema.String,
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(300))),
   sourceCode: Schema.String,
   sourceVersion: Schema.Literal(1),
   createdBy: Schema.String,
@@ -482,6 +484,7 @@ export const DashboardRosterViewPreviewRequest = Schema.Struct({
   rosterIds: Schema.Array(Schema.String),
   viewId: Schema.optionalKey(Schema.String),
   name: Schema.String,
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(300))),
   sourceCode: Schema.String,
   sourceVersion: Schema.Literal(1),
   columns: Schema.Array(DashboardRosterViewColumn),
@@ -1004,20 +1007,38 @@ export const DashboardGetRosterViewEndpoint = defineEndpoint({
   errors: [],
 })
 
-export const DashboardResolveSharedRosterViewEndpoint = defineEndpoint({
-  operationId: "dashboardResolveSharedRosterView",
-  method: "GET",
-  path: "/v2/roster/views/shared/:viewId",
-  auth: "server-read",
-  summary: "Resolve a saved roster-view share link",
-  body: NoBody,
-  bodyMode: "none",
-  pathParams: ViewPath,
-  query: NoQuery,
-  response: DashboardRosterView,
-  responseMode: "json",
-  successStatus: 200,
-  errors: [],
+export const DashboardRosterViewShare = Schema.Struct({
+  shareId: Schema.String,
+  name: Schema.String,
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(300))),
+  sharedAt: Schema.String,
+  sharedBy: Schema.Struct({ id: Schema.String, name: Schema.String, avatarUrl: Schema.NullOr(Schema.String) }),
+  sourceServer: Schema.Struct({ id: Schema.String, name: Schema.String, iconUrl: Schema.NullOr(Schema.String) }),
+})
+export const DashboardSharedViewEmbed = Schema.Struct({
+  name: Schema.String,
+  description: Schema.String,
+  savedServerCount: Schema.Number,
+})
+export const DashboardSharedViewEmbedEndpoint = defineEndpoint({
+  operationId: "dashboardSharedViewEmbed", method: "GET", path: "/v2/roster/view-shares/:viewId/embed", auth: "public",
+  summary: "Public link-preview metadata only; no source code, identities or roster data", body: NoBody, bodyMode: "none",
+  pathParams: ViewPath, query: NoQuery, response: DashboardSharedViewEmbed, responseMode: "json", successStatus: 200, errors: [],
+})
+export const DashboardPreviewSharedViewEndpoint = defineEndpoint({
+  operationId: "dashboardPreviewSharedView", method: "GET", path: "/v2/roster/view-shares/:viewId", auth: "user",
+  summary: "Preview shared view attribution without source-server access or roster data", body: NoBody, bodyMode: "none",
+  pathParams: ViewPath, query: NoQuery, response: DashboardRosterViewShare, responseMode: "json", successStatus: 200, errors: [],
+})
+export const DashboardShareRosterViewEndpoint = defineEndpoint({
+  operationId: "dashboardShareRosterView", method: "POST", path: "/v2/roster/views/:viewId/share", auth: "server-write",
+  summary: "Share a snapshot of a reusable roster view", body: NoBody, bodyMode: "none",
+  pathParams: ViewPath, query: ServerQuery, response: DashboardRosterViewShare, responseMode: "json", successStatus: 201, errors: [],
+})
+export const DashboardImportSharedViewEndpoint = defineEndpoint({
+  operationId: "dashboardImportSharedView", method: "POST", path: "/v2/roster/view-shares/:viewId/import", auth: "server-write",
+  summary: "Save a shared view template to an authorized destination server", body: NoBody, bodyMode: "none",
+  pathParams: ViewPath, query: ServerQuery, response: DashboardRosterView, responseMode: "json", successStatus: 200, errors: [],
 })
 
 export const DashboardCreateRosterViewEndpoint = defineEndpoint({

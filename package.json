@@ -1,6 +1,6 @@
 {
   "name": "@clashking/api-workspace",
-  "version": "0.1.0-rc.56",
+  "version": "0.1.0-rc.57",
   "private": true,
   "packageManager": "npm@12.0.1",
   "type": "module",

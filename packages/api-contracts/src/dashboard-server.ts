@@ -303,6 +303,8 @@ export const ServerLog = Schema.Struct({
   disabled_reason: OptionalNullableString,
   reddit_role_id: OptionalNullableString,
   reddit_accounts: Schema.optionalKey(Schema.Array(Schema.String)),
+  reddit_min_townhall: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  reddit_include_comments: Schema.optionalKey(Schema.Boolean),
 })
 export const ServerLogsResponse = Schema.Struct({
   logs: Schema.Array(ServerLog),
@@ -315,6 +317,8 @@ export const UpdateServerLogsRequest = Schema.Struct({
   log_types: Schema.Array(Schema.String),
   reddit_role_id: OptionalNullableString,
   reddit_accounts: Schema.optionalKey(Schema.Array(Schema.String)),
+  reddit_min_townhall: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+  reddit_include_comments: Schema.optionalKey(Schema.Boolean),
 })
 export const UpdateServerLogsDisabledRequest = Schema.Struct({
   clan_tag: OptionalString,

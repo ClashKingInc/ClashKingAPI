@@ -11,7 +11,7 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  const r=await fetch(base+path,{method,headers:{origin:'http://localhost:3000','x-requested-with':'XMLHttpRequest',...(body?{'content-type':'application/json'}:{}),...headers},...(body?{body:JSON.stringify(body)}:{})});const text=await r.text();assert.equal(r.status,expected,`${method} ${path}: ${text}`);return text?JSON.parse(text):null;};
  await request(origin,'/v2/admin/server-limits?search='+server,'GET',undefined,{},401);
  let row=(await request(adminOrigin,'/v2/admin/server-limits?search='+server))[0];
- assert.equal(row.clanLimit,10);assert.equal(row.autoboardLimit,5);assert.equal(row.aiMonthlyLimitUsd,.05);assert.equal(row.botCustomizationEnabled,false);
+ assert.equal(row.clanLimit,10);assert.equal(row.autoboardLimit,5);assert.equal(row.aiMonthlyLimitUsd,.10);assert.equal(row.botCustomizationEnabled,false);
  await request(origin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:90,autoboardLimit:90,aiMonthlyLimitUsd:9},{authorization:'Bearer '+token},401);
  const generation=(await db.query('SELECT generation FROM discord_cache.gateway_shards WHERE application_id=$1 AND shard_id=0',['999999999999999999'])).rows[0].generation;
  await db.query('INSERT INTO discord_cache.guilds(id,data,application_id,shard_id,generation,available,metadata_complete,members_complete) VALUES($1,$2,$3,0,$4,true,true,true)',[server,{owner_id:actor},'999999999999999999',generation]);
@@ -32,19 +32,22 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  assert.equal(profileProvider.webhookCreates.length,1,'Cross-server destination cannot create webhooks');
  console.log('PASS reminder API: reuses log hooks, shares one hook across concurrent reminders, retains threads, changes destination, rejects cross-server channel');
  const redditPath='/v2/server/'+server+'/logs';
- const redditBody={channel_id:'999999999999994901',thread_id:'999999999999994903',log_types:['reddit_feed'],reddit_role_id:'999999999999995911',reddit_accounts:['Recruiter']};
+ const redditBody={channel_id:'999999999999994901',thread_id:'999999999999994903',log_types:['reddit_user_feed'],reddit_role_id:'999999999999995911',reddit_accounts:['Recruiter','Second'],reddit_include_comments:true};
  await request(origin,redditPath,'PUT',redditBody,userHeaders);
- let reddit=(await request(origin,redditPath,'GET',undefined,userHeaders)).logs.find(row=>row.type==='reddit_feed');
- assert.equal(reddit.reddit_role_id,redditBody.reddit_role_id);assert.deepEqual(reddit.reddit_accounts,['Recruiter']);
- await request(origin,redditPath,'PUT',{channel_id:'999999999999994902',log_types:['reddit_feed']},userHeaders);
- reddit=(await request(origin,redditPath,'GET',undefined,userHeaders)).logs.find(row=>row.type==='reddit_feed');
- assert.equal(reddit.reddit_role_id,redditBody.reddit_role_id);assert.deepEqual(reddit.reddit_accounts,['Recruiter'],'Old clients must preserve omitted options');
+ let reddit=(await request(origin,redditPath,'GET',undefined,userHeaders)).logs.find(row=>row.type==='reddit_user_feed');
+ assert.deepEqual(reddit.reddit_accounts,['Recruiter','Second']);assert.equal(reddit.reddit_include_comments,true);
+ await request(origin,redditPath,'PUT',{...redditBody,reddit_include_comments:false},userHeaders);
+ reddit=(await request(origin,redditPath,'GET',undefined,userHeaders)).logs.find(row=>row.type==='reddit_user_feed');assert.equal(reddit.reddit_include_comments,false);
+ for(const names of [[],['one','two','three'],['Recruiter','recruiter']])await request(origin,redditPath,'PUT',{...redditBody,reddit_accounts:names},userHeaders,400);
  await request(origin,redditPath,'PUT',{...redditBody,reddit_role_id:'999999999999995912'},userHeaders,400);
- await request(origin,redditPath,'PUT',{...redditBody,reddit_accounts:['Recruiter','recruiter']},userHeaders,400);
- await request(origin,redditPath,'PUT',{...redditBody,reddit_role_id:null,reddit_accounts:[]},userHeaders);
- reddit=(await request(origin,redditPath,'GET',undefined,userHeaders)).logs.find(row=>row.type==='reddit_feed');
- assert.equal(reddit.reddit_role_id,null);assert.deepEqual(reddit.reddit_accounts,[]);
- console.log('PASS Reddit API: role/account settings round-trip, older clients retain options, foreign role/duplicate account rejected, explicit clearing works');
+ const recruitment={channel_id:redditBody.channel_id,log_types:['reddit_feed'],reddit_min_townhall:16};
+ await request(origin,redditPath,'PUT',recruitment,userHeaders);
+ await request(origin,redditPath,'PUT',{...recruitment,reddit_min_townhall:99},userHeaders,400);
+ await request(origin,redditPath,'PUT',{channel_id:redditBody.channel_id,log_types:['reddit_feed']},userHeaders);
+ reddit=(await request(origin,redditPath,'GET',undefined,userHeaders)).logs.find(row=>row.type==='reddit_feed');assert.equal(reddit.reddit_min_townhall,16);
+ await request(origin,redditPath,'PUT',{...recruitment,reddit_min_townhall:null},userHeaders);
+ reddit=(await request(origin,redditPath,'GET',undefined,userHeaders)).logs.find(row=>row.type==='reddit_feed');assert.equal(reddit.reddit_min_townhall,null);
+ console.log('PASS Reddit API: two independent feeds, two usernames, comment toggle, minimum persistence and clearing, invalid names/levels rejected');
  // Exercise the real HTTP/authorization/SQL path with Discord unavailable.
  // State writes must not need destination enrichment or lose the saved hook.
  const beforeToggle=(await db.query('SELECT webhook_id,thread_id FROM server_logs WHERE server_id=$1 AND type=$2',[server,'reddit_feed'])).rows[0];

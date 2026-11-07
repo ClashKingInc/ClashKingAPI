@@ -34,6 +34,39 @@ export async function verifyRosterWarFilter({db,origin,botKey}) {
    else assert.equal(result.rows[0].value,expected)
   }
   await query('war.hit_rate',{windowDays:30,warType:'friendly'},503)
+  const groups=[], foreign='#PYLQCCVR';
+  await db.query("INSERT INTO basic_clan(tag,name,public_war_log,war_wins,member_count,badge_token,troops_donated,troops_received) VALUES($1,'CWL scope',true,0,1,'local',0,0)",[tag]);
+  await db.query('INSERT INTO server_clans(server_id,tag) VALUES($1,$2)',[server,tag]);
+  try {
+   for(const [offset,stars,outside,reverse] of [[0,2,false,false],[1,null,false,false],[2,3,false,true],[0,3,true,false],[3,3,false,false]]) {
+    const ended=new Date(Date.UTC(new Date().getUTCFullYear(),new Date().getUTCMonth()-offset,2));
+    // Keep the current month's fixture in the past even near month start.
+    if(ended>new Date())ended.setTime(Date.now()-1000);
+    const started=new Date(ended.valueOf()-86400000),prepared=new Date(started.valueOf()-86400000);
+    const season=ended.toISOString().slice(0,7),group=randomUUID().slice(0,12),warTag='#'+randomUUID().replaceAll('-','');groups.push(group);
+    const ownSide=outside?foreign:tag, clanTag=reverse?enemy:ownSide, opponentTag=reverse?ownSide:(outside?tag:enemy);
+    const id=(await db.query("INSERT INTO wars(clan_tag,opponent_tag,prep_time,start_time,end_time,size,attacks_per_member,war_type,state,war_tag) VALUES($1,$2,$3,$4,$5,1,1,'cwl','warEnded',$6) RETURNING war_id",[clanTag,opponentTag,prepared,started,ended,warTag])).rows[0].war_id;ids.push(id);
+    const member={tag,name:'Player',townhallLevel:18,mapPosition:1,attacks:stars===null?[]:[{defenderTag:enemy,stars,destructionPercentage:stars*30,order:1,duration:100}]};
+    const side=(sideTag,members)=>({tag:sideTag,name:'Clan',badgeToken:'local',clanLevel:10,attacks:0,stars:0,destructionPercentage:0,members});
+    await db.query('INSERT INTO war_archive_pending(war_id,end_time,payload) VALUES($1,$2,$3)',[id,ended,JSON.stringify({state:'warEnded',battleModifier:'none',warTag,teamSize:1,attacksPerMember:1,preparationStartTime:prepared.toISOString(),startTime:started.toISOString(),endTime:ended.toISOString(),clan:side(clanTag,reverse?[]:[member]),opponent:side(opponentTag,reverse?[member]:[])})]);
+    await db.query("INSERT INTO cwl_groups(cwl_id,season,state,rounds) VALUES($1,$2,'ended',$3)",[group,season,JSON.stringify(offset%2?[{warTags:[warTag]}]:[[warTag]])]);
+    for(const t of [clanTag,opponentTag])await db.query('INSERT INTO cwl_group_clans(cwl_id,clan_tag) VALUES($1,$2)',[group,t]);
+   }
+   await db.query('UPDATE player_war_history SET war_ids=$2 WHERE player_tag=$1',[tag,ids]);
+   const result=await query('cwl.performance_history',{windowMonths:3,familyOnly:true});
+   const value=result.rows[0].value;
+   assert.equal(value.observedSeasons,3);
+   assert.equal(value.summary.completedWars,3);
+   assert.equal(value.summary.attackStars,5);
+   assert.equal(value.summary.attacks,2);
+   assert.equal(value.summary.missedAttacks,1);
+   assert.equal(value.summary.averageStarsPerWar,5/3);
+   assert.equal(value.summary.averageStars,2.5);
+   assert.equal(value.seasons.length,3);
+   await query('cwl.performance_history',{windowMonths:0,familyOnly:true},400);
+   await query('cwl.performance_history',{windowMonths:3,familyOnly:'yes'},400);
+   console.log('PASS CWL actual API/SQL/archive: 3 calendar months, historical family side, opponent exclusion, missed attack retained, older season excluded, averages and counts');
+  } finally {await db.query('DELETE FROM cwl_groups WHERE cwl_id=ANY($1::text[])',[groups]);}
   console.log('PASS roster war filter: actual API excludes unreadable friendly archives from regular/CWL metrics; explicit friendly query still reads them; rates, samples and unknown results retained')
  } finally {
   await db.query('DELETE FROM player_war_history WHERE player_tag=$1',[tag]);await db.query('DELETE FROM war_archive_pending WHERE war_id=ANY($1::int[])',[ids]);await db.query('DELETE FROM wars WHERE war_id=ANY($1::int[])',[ids]);await db.query('DELETE FROM servers WHERE id=$1',[server])

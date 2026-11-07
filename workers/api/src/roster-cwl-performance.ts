@@ -14,6 +14,7 @@ const empty = (): Totals => ({ completedWars: 0, attacks: 0, triples: 0, attackS
 const present = (v: Totals) => ({ ...v,
   missedAttacks: v.completedWars ? Math.max(0, v.expectedAttacks - v.attacks) : null,
   hitRate: v.attacks ? 100 * v.triples / v.attacks : null,
+  averageStarsPerWar: v.completedWars ? v.attackStars / v.completedWars : null,
   averageStars: v.attacks ? v.attackStars / v.attacks : null,
   averageDestruction: v.attacks ? v.attackDestruction / v.attacks : null,
   concededTripleRate: v.defenses ? 100 * v.concededTriples / v.defenses : null,
@@ -25,22 +26,37 @@ const present = (v: Totals) => ({ ...v,
 /** The caller authorizes tags. Seasons come from group round identities, never
  * war end-months (a delayed round can cross a month boundary). A participant
  * must appear in a completed war lineup, including a lineup with zero attacks. */
-export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: number, now: Date) => Effect.gen(function* () {
+export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: number, now: Date, options: { sinceSeason?: string; clanTags?: readonly string[] } = {}) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const rows = yield* sql<{ player_tag: string; season: string; war_id: string }>`
-    SELECT DISTINCT history.player_tag, left(groups.season, 7) AS season, war.war_id::text
-    FROM player_war_history history
-    CROSS JOIN LATERAL unnest(history.war_ids) AS ids(war_id)
-    JOIN wars war ON war.war_id = ids.war_id
-    JOIN cwl_groups groups ON EXISTS (
-      SELECT 1 FROM jsonb_array_elements(groups.rounds) round(value)
+    WITH selected_wars AS MATERIALIZED (
+      SELECT DISTINCT history.player_tag, war.war_id, war.war_tag, war.clan_tag, war.opponent_tag
+      FROM player_war_history history
+      CROSS JOIN LATERAL unnest(history.war_ids) AS ids(war_id)
+      JOIN wars war ON war.war_id = ids.war_id
+      WHERE history.player_tag = ANY(${[...tags]}::text[])
+        AND war.war_type = 'cwl' AND lower(war.state) IN ('warended', 'ended') AND war.end_time <= ${now}
+        AND (${options.clanTags === undefined} OR war.clan_tag = ANY(${[...(options.clanTags ?? [])]}::text[])
+          OR war.opponent_tag = ANY(${[...(options.clanTags ?? [])]}::text[]))
+    ), relevant_clans AS (
+      SELECT clan_tag FROM selected_wars UNION SELECT opponent_tag FROM selected_wars
+    ), candidate_groups AS MATERIALIZED (
+      SELECT DISTINCT groups.cwl_id, left(groups.season, 7) AS season, groups.rounds
+      FROM relevant_clans clan
+      JOIN cwl_group_clans membership ON membership.clan_tag = clan.clan_tag
+      JOIN cwl_groups groups ON groups.cwl_id = membership.cwl_id
+      WHERE (${options.sinceSeason ?? null}::text IS NULL OR left(groups.season, 7) >= ${options.sinceSeason ?? null})
+    ), round_tags AS MATERIALIZED (
+      SELECT DISTINCT groups.season, tag.value AS war_tag
+      FROM candidate_groups groups
+      CROSS JOIN LATERAL jsonb_array_elements(groups.rounds) round(value)
       CROSS JOIN LATERAL jsonb_array_elements_text(
         CASE WHEN jsonb_typeof(round.value) = 'array' THEN round.value
           ELSE COALESCE(round.value->'warTags', '[]'::jsonb) END
-      ) tag(value) WHERE tag.value = war.war_tag
+      ) tag(value)
     )
-    WHERE history.player_tag = ANY(${[...tags]}::text[])
-      AND war.war_type = 'cwl' AND lower(war.state) IN ('warended', 'ended') AND war.end_time <= ${now}
+    SELECT DISTINCT war.player_tag, groups.season, war.war_id::text
+    FROM selected_wars war JOIN round_tags groups ON groups.war_tag = war.war_tag
     ORDER BY season DESC, war_id DESC
   `.pipe(Effect.mapError(cause => new DatabaseFailure({ cause, message: "Unable to load participating CWL seasons" })))
   const byWar = new Map<string, typeof rows[number][]>()
@@ -54,12 +70,17 @@ export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: 
     const eligible = rows.filter(row => row.season === season && seasons.get(row.player_tag)!.size < seasonCount)
     if (!eligible.length) continue
     const wanted = new Set(eligible.map(row => row.player_tag))
+    // Expand rounds only for clans referenced by these players, not the global
+    // CWL corpus. Calendar filtering uses the CWL season, not war end-month.
     yield* forEachArchiveWar([...new Set(eligible.map(row => row.war_id))], (id, war) => Effect.sync(() => {
       if (war.type !== "cwl" || !["warended", "ended"].includes(war.state.toLowerCase())) return
       const facts = archiveAttackFacts(id, war)
       for (const row of byWar.get(id) ?? []) {
         if (row.season !== season || !wanted.has(row.player_tag)) continue
-        if (![...war.clan.members, ...war.opponent.members].some(member => member.tag === row.player_tag)) continue
+        // Filter the player's actual historical side, not their current clan
+        // or merely the opponent. Playing against the family does not qualify.
+        const side = [war.clan, war.opponent].find(side => side.members.some(member => member.tag === row.player_tag))
+        if (!side || options.clanTags !== undefined && !options.clanTags.includes(side.tag)) continue
         const playerSeasons = seasons.get(row.player_tag)!
         const total = playerSeasons.get(season) ?? empty()
         total.completedWars++; total.expectedAttacks++ // CWL allows one attack per lineup.

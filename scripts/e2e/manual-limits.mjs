@@ -120,26 +120,30 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  const reservation=id=>({requestId:id,step:0,inputTokenLimit:100000,outputTokenLimit:64000});
  await request(origin,'/v2/runtime/roster-ai/reserve','POST',reservation(ids[0]),{},401);
  const responses=await Promise.all(ids.slice(0,2).map(id=>fetch(origin+'/v2/runtime/roster-ai/reserve',{method:'POST',headers:{...metering,'content-type':'application/json'},body:JSON.stringify(reservation(id))})));
- assert.deepEqual(responses.map(r=>r.status).sort(),[200,429],'Concurrent reservations must not overspend');
- const winner=ids[responses.findIndex(r=>r.status===200)];
- await request(origin,'/v2/runtime/roster-ai/reserve','POST',reservation(winner),metering,409);
- await request(origin,'/v2/runtime/roster-ai/settle','POST',{requestId:winner,step:0,inputTokens:100001,outputTokens:0},metering,400);
- row=(await request(adminOrigin,'/v2/admin/server-limits?search='+server))[0];assert(row.aiReservedUsd<=.05 && row.aiReservedUsd>.0499);
- const actual={requestId:winner,step:0,inputTokens:100000,outputTokens:10000};
+ assert.deepEqual(responses.map(r=>r.status),[200,200],'Calls do not reserve allowance');
+ const winner=ids[0];
+ await request(origin,'/v2/runtime/roster-ai/reserve','POST',reservation(winner),metering);
+ const actual={requestId:winner,step:0,inputTokens:100000,outputTokens:10000,reasoningTokens:300};
  await request(origin,'/v2/runtime/roster-ai/settle','POST',actual,metering);
  await request(origin,'/v2/runtime/roster-ai/settle','POST',actual,metering);
  row=(await request(adminOrigin,'/v2/admin/server-limits?search='+server))[0];assert.equal(row.aiSpentUsd,.015);assert.equal(row.aiReservedUsd,0);
- await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:20,autoboardLimit:15,aiMonthlyLimitUsd:.10});
- const held=await request(origin,'/v2/runtime/roster-ai/reserve','POST',reservation(ids[2]),metering);assert(held.reservedUsd>0);
+ assert.equal(Number((await db.query('SELECT reasoning_tokens FROM roster_ai_usage WHERE id=$1',[winner])).rows[0].reasoning_tokens),300);
  await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:20,autoboardLimit:15,aiMonthlyLimitUsd:.01});
- await request(origin,'/v2/runtime/roster-ai/reserve','POST',{requestId:ids[1],step:1,inputTokenLimit:1000,outputTokenLimit:1000},metering,429);
- row=(await request(adminOrigin,'/v2/admin/server-limits?search='+server))[0];assert(row.aiReservedUsd>0,'An unconfirmed provider call keeps its reservation');assert.equal(row.clanLimit,20);assert.equal(row.autoboardLimit,15);
+ // A prompt already admitted may exceed the cap, even after an admin lowers it.
+ await request(origin,'/v2/runtime/roster-ai/reserve','POST',{requestId:ids[1],step:1,inputTokenLimit:1000,outputTokenLimit:1000},metering);
+ await request(origin,'/v2/runtime/roster-ai/settle','POST',{requestId:ids[1],step:1,inputTokens:0,outputTokens:0,outcome:'unknown',failureCode:'provider_stream_interrupted'},metering);
+ assert.equal((await db.query('SELECT outcome,settled_at,actual_usd FROM roster_ai_step_budgets WHERE usage_id=$1 AND step=1',[ids[1]])).rows[0].actual_usd,null);
+ row=(await request(adminOrigin,'/v2/admin/server-limits?search='+server))[0];assert.equal(row.aiReservedUsd,0);assert.equal(row.aiSpentUsd,.015);
+ // A late receipt repairs unknown status; a late error never erases that receipt.
+ await request(origin,'/v2/runtime/roster-ai/settle','POST',{requestId:ids[1],step:1,inputTokens:2000,outputTokens:2000},metering);
+ await request(origin,'/v2/runtime/roster-ai/settle','POST',{requestId:ids[1],step:1,inputTokens:0,outputTokens:0,outcome:'unknown'},metering);
+ assert.equal((await db.query('SELECT outcome FROM roster_ai_step_budgets WHERE usage_id=$1 AND step=1',[ids[1]])).rows[0].outcome,'completed');
  await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:20,autoboardLimit:15,aiMonthlyLimitUsd:.20});
  const longId=randomUUID();await db.query("INSERT INTO roster_ai_usage(id,server_id,discord_user_id,operation,provider,model) VALUES($1,$2,$3,'fixture','openai','gpt-6-luna')",[longId,server,actor]);
  await request(origin,'/v2/runtime/roster-ai/reserve','POST',{requestId:longId,step:0,inputTokenLimit:300000,outputTokenLimit:64000},metering);
  await request(origin,'/v2/runtime/roster-ai/settle','POST',{requestId:longId,step:0,inputTokens:300000,cacheWriteTokens:300000,outputTokens:10000},metering);
- assert.equal(Number((await db.query('SELECT total_cost_usd FROM roster_ai_usage WHERE id=$1',[longId])).rows[0].total_cost_usd),.0825,'Long-context cache-write pricing must fit the reservation');
+ assert.equal(Number((await db.query('SELECT total_cost_usd FROM roster_ai_usage WHERE id=$1',[longId])).rows[0].total_cost_usd),.0825,'Long-context cache-write pricing retained');
  assert((await db.query("SELECT count(*)::int AS n FROM admin_audit_events WHERE resource_id=$1 AND action='server_limits.update'",[server])).rows[0].n>=2);
  await request(origin,'/v2/billing/subscription','GET',undefined,{authorization:'Bearer '+token},410);
- console.log('PASS manual limits: real Access JWT admin boundary, audited edits, defaults 10/5/$0.05, concurrent hard reservations, duplicate settlement, uncertain calls held, raised/lowered limits, billing retired');
+ console.log('PASS manual limits: real Access JWT admin boundary, audited edits, defaults 10/5/$0.05, no reservations, duplicate settlement, unknown call recovery, reasoning usage, raised/lowered limits, billing retired');
 }

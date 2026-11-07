@@ -1004,27 +1004,10 @@ export const DashboardGetRosterViewEndpoint = defineEndpoint({
   errors: [],
 })
 
-export const DashboardResolveSharedRosterViewEndpoint = defineEndpoint({
-  operationId: "dashboardResolveSharedRosterView",
-  method: "GET",
-  path: "/v2/roster/views/shared/:viewId",
-  auth: "server-read",
-  summary: "Resolve a saved roster-view share link",
-  body: NoBody,
-  bodyMode: "none",
-  pathParams: ViewPath,
-  query: NoQuery,
-  response: DashboardRosterView,
-  responseMode: "json",
-  successStatus: 200,
-  errors: [],
-})
-
 export const DashboardRosterViewShare = Schema.Struct({
   shareId: Schema.String,
   name: Schema.String,
   sharedAt: Schema.String,
-  attribution: Schema.Literals(["shared", "created"]),
   sharedBy: Schema.Struct({ id: Schema.String, name: Schema.String, avatarUrl: Schema.NullOr(Schema.String) }),
   sourceServer: Schema.Struct({ id: Schema.String, name: Schema.String, iconUrl: Schema.NullOr(Schema.String) }),
 })

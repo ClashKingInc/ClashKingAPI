@@ -1,7 +1,6 @@
 import { endpoints } from "@clashking/api-contracts"
 import { Effect } from "effect"
-import { SqlClient } from "effect/sql"
-import { DatabaseFailure, Forbidden, InvalidRequest, NotFound } from "./errors.js"
+import { Forbidden, InvalidRequest } from "./errors.js"
 import { readBoundedJson } from "./request-body.js"
 import { ServerAuthorization } from "./server-authorization.js"
 
@@ -40,14 +39,6 @@ export const authorizeAdditionalDashboardRoute = (request: Request, scopedServer
     if (typeof body === "object" && body !== null && !Array.isArray(body)) {
       for (const key of ["serverId", "server_id"]) if (key in body) serverIds.push((body as Record<string, unknown>)[key])
     }
-  }
-  if (route.path === "/v2/roster/views/shared/:viewId") {
-    // A shared view's owner is stored data, never a caller-provided server ID.
-    const sql = yield* SqlClient.SqlClient
-    const view = (yield* sql<{ server_id: string }>`SELECT server_id FROM roster_views WHERE share_id=${params.viewId}`
-      .pipe(Effect.mapError(cause => new DatabaseFailure({ cause, message: "Roster view scope is unavailable" }))))[0]
-    if (!view) return yield* new NotFound({ message: "Roster view not found" })
-    serverIds.push(view.server_id)
   }
   if (!serverIds.length || serverIds.some(id => typeof id !== "string" || !/^\d+$/u.test(id)))
     return yield* new InvalidRequest({ message: "A decimal server_id is required" })

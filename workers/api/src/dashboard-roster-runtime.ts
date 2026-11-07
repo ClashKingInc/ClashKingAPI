@@ -61,7 +61,6 @@ const routes = [
   { method: "GET", path: "/v2/roster/view-shares/:viewId", operation: "previewSharedView", auth: "user" },
   { method: "POST", path: "/v2/roster/view-shares/:viewId/import", operation: "importSharedView", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/views/:viewId/share", operation: "shareRosterView", auth: "user-or-bot" },
-  { method: "GET", path: "/v2/roster/views/shared/:viewId", operation: "sharedView", auth: "user-or-bot" },
   { method: "GET", path: "/v2/roster/views/:viewId", operation: "getView", auth: "user-or-bot" },
   { method: "PATCH", path: "/v2/roster/views/:viewId", operation: "updateView", auth: "user-or-bot" },
   { method: "DELETE", path: "/v2/roster/views/:viewId", operation: "deleteView", auth: "user-or-bot" },
@@ -606,8 +605,6 @@ const executeRosterOperation = (
     case "previewSharedView": return yield* previewSharedView(sql, input)
     case "shareRosterView": return yield* shareRosterView(sql, input)
     case "importSharedView": return yield* importSharedView(sql, input)
-    case "sharedView":
-      return yield* sharedView(sql, input)
     case "createView":
       return yield* createView(sql, input)
     case "updateView":
@@ -1525,29 +1522,18 @@ const getView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput)
   return json(viewJson(row))
 })
 
-const sharedView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
-  const shareId = input.params.viewId ?? ""
-  if (!/^[A-Za-z0-9_-]{10,16}$/u.test(shareId)) return yield* new InvalidRequest({ message: "Invalid shareId" })
-  const row = (yield* loadViews(sql, undefined, undefined, shareId))[0]
-  if (row === undefined) return yield* new NotFound({ message: "Roster view not found" })
-  return json(viewJson(row))
-})
-
 interface SharedTemplate {
   share_id: string; source_view_id: string; source_server_id: string; name: string;
   source_code: string; source_version: number; shared_by_discord_user_id: string;
-  created_at: Date | string; attribution: "shared" | "created";
+  created_at: Date | string;
 }
 const loadSharedTemplate = (sql: SqlClient.SqlClient, shareId: string) => Effect.gen(function* () {
   if (!/^[A-Za-z0-9_-]{10,16}$/u.test(shareId)) return yield* new InvalidRequest({ message: "Invalid share link" })
   const rows = yield* database("Unable to load shared view", sql<SharedTemplate>`
     SELECT share_id,source_view_id::text,source_server_id,name,source_code,source_version,
-      shared_by_discord_user_id,created_at,'shared'::text AS attribution
+      shared_by_discord_user_id,created_at
     FROM roster_view_shares WHERE share_id=${shareId}
-    UNION ALL
-    SELECT share_id,id::text,server_id,name,source_code,source_version,created_by_discord_user_id,
-      created_at,'created'::text AS attribution
-    FROM roster_views WHERE share_id=${shareId}
+
   `)
   const row=rows[0]
   if (!row) return yield* new NotFound({ message: "This shared view is no longer available" })
@@ -1563,7 +1549,7 @@ const sharedTemplateInfo = (sql: SqlClient.SqlClient, template: SharedTemplate) 
     LEFT JOIN discord_cache.members member ON member.guild_id=server.id AND member.user_id=${template.shared_by_discord_user_id}
     WHERE server.id=${template.source_server_id}`))[0]
   if (!row) return yield* new NotFound({ message: "This shared view is no longer available" })
-  return { shareId:template.share_id,name:template.name,sharedAt:iso(template.created_at),attribution:template.attribution,
+  return { shareId:template.share_id,name:template.name,sharedAt:iso(template.created_at),
     sharedBy:{id:template.shared_by_discord_user_id,name:row.display_name??`Discord user ${template.shared_by_discord_user_id}`,
       avatarUrl:row.avatar?`https://cdn.discordapp.com/avatars/${template.shared_by_discord_user_id}/${row.avatar}.png`:null},
     sourceServer:{id:template.source_server_id,name:row.name,
@@ -1582,7 +1568,7 @@ const shareRosterView = (sql: SqlClient.SqlClient, input: DashboardRosterOperati
   const row=(yield* database("Unable to share roster view",sql<SharedTemplate>`
     INSERT INTO roster_view_shares(source_view_id,source_server_id,shared_by_discord_user_id,name,source_code,source_version)
     VALUES(${view.id}::uuid,${serverId},${input.principal.userId},${view.name},${view.source_code},${view.source_version})
-    RETURNING share_id,source_view_id::text,source_server_id,shared_by_discord_user_id,name,source_code,source_version,created_at,'shared'::text AS attribution
+    RETURNING share_id,source_view_id::text,source_server_id,shared_by_discord_user_id,name,source_code,source_version,created_at
   `))[0]!
   return json(yield* sharedTemplateInfo(sql,row),201)
 })
@@ -2494,12 +2480,6 @@ export const dispatchDashboardRoster = (
       } else {
         const authorization = yield* ServerAuthorization
         let serverId = match.params.serverId ?? url.searchParams.get("server_id") ?? stringValue(body?.serverId)
-        if (match.route.operation === "sharedView") {
-          const sql = yield* SqlClient.SqlClient
-          const view = (yield* loadViews(sql, undefined, undefined, match.params.viewId))[0]
-          if (view === undefined) return yield* new NotFound({ message: "Roster view not found" })
-          serverId = view.server_id
-        }
         if (serverId === undefined || !discordSnowflakePattern.test(serverId)) {
           return yield* new InvalidRequest({ message: "server_id must be a decimal Discord ID" })
         }

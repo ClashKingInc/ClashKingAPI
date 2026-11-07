@@ -85,7 +85,6 @@ export const dashboardEndpoints = {
   dashboardQueryFamilyWarMetric: Roster.DashboardQueryFamilyWarMetricEndpoint,
   dashboardListRosterViews: Roster.DashboardListRosterViewsEndpoint,
   dashboardGetRosterView: Roster.DashboardGetRosterViewEndpoint,
-  dashboardResolveSharedRosterView: Roster.DashboardResolveSharedRosterViewEndpoint,
   dashboardCreateRosterView: Roster.DashboardCreateRosterViewEndpoint,
   dashboardPreviewSharedView: Roster.DashboardPreviewSharedViewEndpoint,
   dashboardShareRosterView: Roster.DashboardShareRosterViewEndpoint,

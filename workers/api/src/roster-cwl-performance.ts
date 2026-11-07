@@ -28,7 +28,34 @@ const present = (v: Totals) => ({ ...v,
  * must appear in a completed war lineup, including a lineup with zero attacks. */
 export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: number, now: Date, options: { sinceSeason?: string; clanTags?: readonly string[] } = {}) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql<{ player_tag: string; season: string; war_id: string }>`
+  // A family-scoped request already identifies the relevant groups. Starting
+  // from every player's lifetime wars also expands years of opponents' groups
+  // and defeats chunk/index pruning for an otherwise small calendar request.
+  const rows = yield* (options.clanTags !== undefined ? sql<{ player_tag: string; season: string; war_id: string }>`
+    WITH candidate_groups AS MATERIALIZED (
+      SELECT DISTINCT groups.cwl_id, left(groups.season, 7) AS season, groups.rounds
+      FROM cwl_group_clans membership JOIN cwl_groups groups ON groups.cwl_id = membership.cwl_id
+      WHERE membership.clan_tag = ANY(${[...(options.clanTags ?? [])]}::text[])
+        AND (${options.sinceSeason ?? null}::text IS NULL OR left(groups.season, 7) >= ${options.sinceSeason ?? null})
+    ), round_tags AS MATERIALIZED (
+      SELECT DISTINCT groups.season, tag.value AS war_tag
+      FROM candidate_groups groups
+      CROSS JOIN LATERAL jsonb_array_elements(groups.rounds) round(value)
+      CROSS JOIN LATERAL jsonb_array_elements_text(
+        CASE WHEN jsonb_typeof(round.value) = 'array' THEN round.value
+          ELSE COALESCE(round.value->'warTags', '[]'::jsonb) END
+      ) tag(value)
+    ), roster_wars AS MATERIALIZED (
+      SELECT history.player_tag, unnest(history.war_ids) AS war_id
+      FROM player_war_history history WHERE history.player_tag = ANY(${[...tags]}::text[])
+    )
+    SELECT DISTINCT history.player_tag, groups.season, war.war_id::text
+    FROM round_tags groups JOIN wars war ON war.war_tag = groups.war_tag
+    JOIN roster_wars history ON history.war_id = war.war_id
+    WHERE war.war_type = 'cwl' AND lower(war.state) IN ('warended', 'ended') AND war.end_time <= ${now}
+      AND (war.clan_tag = ANY(${[...(options.clanTags ?? [])]}::text[]) OR war.opponent_tag = ANY(${[...(options.clanTags ?? [])]}::text[]))
+    ORDER BY season DESC, war_id DESC
+  ` : sql<{ player_tag: string; season: string; war_id: string }>`
     WITH selected_wars AS MATERIALIZED (
       SELECT DISTINCT history.player_tag, war.war_id, war.war_tag, war.clan_tag, war.opponent_tag
       FROM player_war_history history
@@ -58,7 +85,7 @@ export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: 
     SELECT DISTINCT war.player_tag, groups.season, war.war_id::text
     FROM selected_wars war JOIN round_tags groups ON groups.war_tag = war.war_tag
     ORDER BY season DESC, war_id DESC
-  `.pipe(Effect.mapError(cause => new DatabaseFailure({ cause, message: "Unable to load participating CWL seasons" })))
+  `).pipe(Effect.mapError(cause => new DatabaseFailure({ cause, message: "Unable to load participating CWL seasons" })))
   const byWar = new Map<string, typeof rows[number][]>()
   for (const row of rows) {
     const list = byWar.get(row.war_id) ?? []; list.push(row); byWar.set(row.war_id, list)

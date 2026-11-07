@@ -30,7 +30,7 @@ import { hydrateRosterMember, loadRosterClashPlayer, rosterPlayerSnapshot } from
 import { prepareStaticMetadata, rosterHeroNames, maxLevelAtTownHall } from "./static-metadata.js"
 import { assertRosterMembershipLimits, lockRosterAdmissionOwners, lockRosterMembership, requireRosterServerClans } from "./dashboard-roster-membership.js"
 
-type RosterAuth = "bot" | "public" | "user-or-bot"
+type RosterAuth = "bot" | "public" | "user" | "user-or-bot"
 
 interface RosterRoute {
   readonly auth: RosterAuth
@@ -58,6 +58,9 @@ const routes = [
   { method: "POST", path: "/v2/roster/views/preview", operation: "previewView", auth: "user-or-bot" },
   { method: "GET", path: "/v2/roster/views", operation: "listViews", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/views", operation: "createView", auth: "user-or-bot" },
+  { method: "GET", path: "/v2/roster/view-shares/:viewId", operation: "previewSharedView", auth: "user" },
+  { method: "POST", path: "/v2/roster/view-shares/:viewId/import", operation: "importSharedView", auth: "user-or-bot" },
+  { method: "POST", path: "/v2/roster/views/:viewId/share", operation: "shareRosterView", auth: "user-or-bot" },
   { method: "GET", path: "/v2/roster/views/shared/:viewId", operation: "sharedView", auth: "user-or-bot" },
   { method: "GET", path: "/v2/roster/views/:viewId", operation: "getView", auth: "user-or-bot" },
   { method: "PATCH", path: "/v2/roster/views/:viewId", operation: "updateView", auth: "user-or-bot" },
@@ -600,6 +603,9 @@ const executeRosterOperation = (
       return yield* listViews(sql, input)
     case "getView":
       return yield* getView(sql, input)
+    case "previewSharedView": return yield* previewSharedView(sql, input)
+    case "shareRosterView": return yield* shareRosterView(sql, input)
+    case "importSharedView": return yield* importSharedView(sql, input)
     case "sharedView":
       return yield* sharedView(sql, input)
     case "createView":
@@ -1527,6 +1533,91 @@ const sharedView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInp
   return json(viewJson(row))
 })
 
+interface SharedTemplate {
+  share_id: string; source_view_id: string; source_server_id: string; name: string;
+  source_code: string; source_version: number; shared_by_discord_user_id: string;
+  created_at: Date | string; attribution: "shared" | "created";
+}
+const loadSharedTemplate = (sql: SqlClient.SqlClient, shareId: string) => Effect.gen(function* () {
+  if (!/^[A-Za-z0-9_-]{10,16}$/u.test(shareId)) return yield* new InvalidRequest({ message: "Invalid share link" })
+  const rows = yield* database("Unable to load shared view", sql<SharedTemplate>`
+    SELECT share_id,source_view_id::text,source_server_id,name,source_code,source_version,
+      shared_by_discord_user_id,created_at,'shared'::text AS attribution
+    FROM roster_view_shares WHERE share_id=${shareId}
+    UNION ALL
+    SELECT share_id,id::text,server_id,name,source_code,source_version,created_by_discord_user_id,
+      created_at,'created'::text AS attribution
+    FROM roster_views WHERE share_id=${shareId}
+  `)
+  const row=rows[0]
+  if (!row) return yield* new NotFound({ message: "This shared view is no longer available" })
+  return row
+})
+const sharedTemplateInfo = (sql: SqlClient.SqlClient, template: SharedTemplate) => Effect.gen(function* () {
+  const row=(yield* database("Unable to load share attribution", sql<{
+    name:string;icon:string|null;display_name:string|null;avatar:string|null
+  }>`SELECT server.name,guild.data->>'icon' AS icon,
+      COALESCE(NULLIF(member.data->>'nick',''),NULLIF(member.data#>>'{user,global_name}',''),NULLIF(member.data#>>'{user,username}','')) AS display_name,
+      member.data#>>'{user,avatar}' AS avatar
+    FROM servers server LEFT JOIN discord_cache.guilds guild ON guild.id=server.id
+    LEFT JOIN discord_cache.members member ON member.guild_id=server.id AND member.user_id=${template.shared_by_discord_user_id}
+    WHERE server.id=${template.source_server_id}`))[0]
+  if (!row) return yield* new NotFound({ message: "This shared view is no longer available" })
+  return { shareId:template.share_id,name:template.name,sharedAt:iso(template.created_at),attribution:template.attribution,
+    sharedBy:{id:template.shared_by_discord_user_id,name:row.display_name??`Discord user ${template.shared_by_discord_user_id}`,
+      avatarUrl:row.avatar?`https://cdn.discordapp.com/avatars/${template.shared_by_discord_user_id}/${row.avatar}.png`:null},
+    sourceServer:{id:template.source_server_id,name:row.name,
+      iconUrl:row.icon?`https://cdn.discordapp.com/icons/${template.source_server_id}/${row.icon}.png`:null} }
+})
+const previewSharedView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
+  // A bearer share grants template metadata only. Never expose the source
+  // server's roster list, rendered rows, session credentials or memberships.
+  return json(yield* sharedTemplateInfo(sql,yield* loadSharedTemplate(sql,input.params.viewId??"")))
+})
+const shareRosterView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
+  const serverId=yield* requireServerId(input)
+  if(input.principal?.kind!=="user")return yield* new Forbidden({message:"Sign in with Discord to share a view"})
+  const view=(yield* loadViews(sql,serverId,input.params.viewId))[0]
+  if(!view)return yield* new NotFound({message:"Roster view not found"})
+  const row=(yield* database("Unable to share roster view",sql<SharedTemplate>`
+    INSERT INTO roster_view_shares(source_view_id,source_server_id,shared_by_discord_user_id,name,source_code,source_version)
+    VALUES(${view.id}::uuid,${serverId},${input.principal.userId},${view.name},${view.source_code},${view.source_version})
+    RETURNING share_id,source_view_id::text,source_server_id,shared_by_discord_user_id,name,source_code,source_version,created_at,'shared'::text AS attribution
+  `))[0]!
+  return json(yield* sharedTemplateInfo(sql,row),201)
+})
+const importSharedView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
+  const serverId=yield* requireServerId(input)
+  if(input.principal?.kind!=="user")return yield* new Forbidden({message:"Sign in with Discord to save a shared view"})
+  const userId=input.principal.userId
+  const creator=yield* database("Unable to resolve Discord identity",sql`SELECT user_id FROM auth_users WHERE user_id=${userId} AND provider='discord'`)
+  if(!creator.length)return yield* new Forbidden({message:"A Discord identity is required to save views"})
+  const template=yield* loadSharedTemplate(sql,input.params.viewId??"")
+  const row=yield* sql.withTransaction(Effect.gen(function*(){
+    // Serialize imports for this destination. The existing name constraint is
+    // independent of import identity, so a concurrent ON CONFLICT on only the
+    // import key can still fail on the name index. Keep copies idempotent and
+    // choose a free name without overwriting a recipient's existing view.
+    yield* database("Unable to lock import destination",sql`SELECT id FROM servers WHERE id=${serverId} FOR UPDATE`)
+    const existing=(yield* database("Unable to load imported view",sql<ViewRow>`
+      SELECT id::text,share_id,server_id,name,source_code,source_version,created_by_discord_user_id,created_at,updated_at
+      FROM roster_views WHERE server_id=${serverId} AND imported_from_share_id=${template.share_id}`))[0]
+    if(existing)return existing
+    for(let number=1;number<=100;number++){
+      const suffix=number===1?"":` (${number})`
+      const name=template.name.slice(0,80-suffix.length)+suffix
+      const created=(yield* database("Unable to import shared view",sql<ViewRow>`
+        INSERT INTO roster_views(server_id,name,source_code,source_version,created_by_discord_user_id,imported_from_share_id)
+        VALUES(${serverId},${name},${template.source_code},${template.source_version},${userId},${template.share_id})
+        ON CONFLICT DO NOTHING
+        RETURNING id::text,share_id,server_id,name,source_code,source_version,created_by_discord_user_id,created_at,updated_at`))[0]
+      if(created)return created
+    }
+    return yield* new Conflict({message:"Too many views have this name. Rename one and try again."})
+  })).pipe(Effect.mapError(cause=>cause instanceof DatabaseFailure||cause instanceof Conflict?cause:new DatabaseFailure({cause,message:"Unable to save shared view"})))
+  return json(viewJson(row))
+})
+
 const viewWrite = (body: Record<string, unknown>) => Effect.gen(function* () {
   const name = yield* requireString(body.name, "name")
   const sourceCode = yield* requireString(body.sourceCode, "sourceCode")
@@ -2395,7 +2486,9 @@ export const dispatchDashboardRoster = (
     }
     let principal: ApiPrincipal | undefined
     if (match.route.auth !== "public") {
-      if (["signupForm", "submitSignup", "submitBatchSignup", "signupAccounts", "withdrawSignup"].includes(match.route.operation)) {
+      if (match.route.auth === "user") {
+        principal = yield* (yield* AuthIdentity).requireUser(request)
+      } else if (["signupForm", "submitSignup", "submitBatchSignup", "signupAccounts", "withdrawSignup"].includes(match.route.operation)) {
         const auth = yield* AuthIdentity
         principal = yield* auth.requireUserOrBot(request)
       } else {

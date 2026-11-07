@@ -1,3 +1,4 @@
+import { verifySharedViewImport } from "./shared-view-import.mjs"
 import { verifyRosterWarFilter } from "./roster-war-filter.mjs"
 import { verifyPublicDashboardCors } from "./public-dashboard-cors.mjs"
 import { verifyOperationalReads } from "./operational-reads.mjs"
@@ -80,6 +81,7 @@ try {
   assert(ready,logs.slice(-2000))
   await verifyPublicDashboardCors({origin:`http://127.0.0.1:${port}`})
   await verifyOperationalReads({db,origin:`http://127.0.0.1:${port}`,botKey})
+  await verifySharedViewImport({db,origin:`http://127.0.0.1:${port}`,signingKey,botKey})
   await verifyRosterWarFilter({db,origin:`http://127.0.0.1:${port}`,botKey})
   await verifyEmailLookupKey({db,origin:`http://127.0.0.1:${port}`,signingKey,emailLookupKey})
   await verifyCappedClanRankings({db,origin:`http://127.0.0.1:${port}`})

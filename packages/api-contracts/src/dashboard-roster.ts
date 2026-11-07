@@ -1020,6 +1020,30 @@ export const DashboardResolveSharedRosterViewEndpoint = defineEndpoint({
   errors: [],
 })
 
+export const DashboardRosterViewShare = Schema.Struct({
+  shareId: Schema.String,
+  name: Schema.String,
+  sharedAt: Schema.String,
+  attribution: Schema.Literals(["shared", "created"]),
+  sharedBy: Schema.Struct({ id: Schema.String, name: Schema.String, avatarUrl: Schema.NullOr(Schema.String) }),
+  sourceServer: Schema.Struct({ id: Schema.String, name: Schema.String, iconUrl: Schema.NullOr(Schema.String) }),
+})
+export const DashboardPreviewSharedViewEndpoint = defineEndpoint({
+  operationId: "dashboardPreviewSharedView", method: "GET", path: "/v2/roster/view-shares/:viewId", auth: "user",
+  summary: "Preview shared view attribution without source-server access or roster data", body: NoBody, bodyMode: "none",
+  pathParams: ViewPath, query: NoQuery, response: DashboardRosterViewShare, responseMode: "json", successStatus: 200, errors: [],
+})
+export const DashboardShareRosterViewEndpoint = defineEndpoint({
+  operationId: "dashboardShareRosterView", method: "POST", path: "/v2/roster/views/:viewId/share", auth: "server-write",
+  summary: "Share a snapshot of a reusable roster view", body: NoBody, bodyMode: "none",
+  pathParams: ViewPath, query: ServerQuery, response: DashboardRosterViewShare, responseMode: "json", successStatus: 201, errors: [],
+})
+export const DashboardImportSharedViewEndpoint = defineEndpoint({
+  operationId: "dashboardImportSharedView", method: "POST", path: "/v2/roster/view-shares/:viewId/import", auth: "server-write",
+  summary: "Save a shared view template to an authorized destination server", body: NoBody, bodyMode: "none",
+  pathParams: ViewPath, query: ServerQuery, response: DashboardRosterView, responseMode: "json", successStatus: 200, errors: [],
+})
+
 export const DashboardCreateRosterViewEndpoint = defineEndpoint({
   operationId: "dashboardCreateRosterView",
   method: "POST",

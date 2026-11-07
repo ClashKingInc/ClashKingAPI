@@ -19,6 +19,9 @@ export const authorizeAdditionalDashboardRoute = (request: Request, scopedServer
     yield* (yield* ServerAuthorization).require(request, scopedServerId, { section: "rosters" })
     return true
   }
+  // A share token reveals only template attribution to an authenticated user.
+  // It does not grant access to the source server or its roster/player data.
+  if (request.method === "GET" && /^\/v2\/roster\/view-shares\/[A-Za-z0-9_-]{10,16}$/u.test(url.pathname) && !url.search) return true
   const route = routes.find(endpoint => endpoint.method === request.method
     && endpoint.path.split("/").length === parts.length
     && endpoint.path.split("/").every((part, index) => part.startsWith(":") || part === parts[index]))

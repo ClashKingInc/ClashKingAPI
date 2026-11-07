@@ -1543,17 +1543,19 @@ const loadSharedTemplate = (sql: SqlClient.SqlClient, shareId: string) => Effect
   return row
 })
 const sharedTemplateInfo = (sql: SqlClient.SqlClient, template: SharedTemplate) => Effect.gen(function* () {
+  // Discord owns display labels; the application server row may still hold its bootstrap ID.
   const row=(yield* database("Unable to load share attribution", sql<{
     name:string;icon:string|null;display_name:string|null;avatar:string|null
-  }>`SELECT server.name,guild.data->>'icon' AS icon,
-      COALESCE(NULLIF(member.data->>'nick',''),NULLIF(member.data#>>'{user,global_name}',''),NULLIF(member.data#>>'{user,username}','')) AS display_name,
+  }>`SELECT COALESCE(NULLIF(guild.data->>'name',''),NULLIF(NULLIF(server.name,server.id),''),'Discord server') AS name,guild.data->>'icon' AS icon,
+      -- Attribution identifies the Discord account, never its per-server nickname.
+      COALESCE(NULLIF(member.data#>>'{user,global_name}',''),NULLIF(member.data#>>'{user,username}','')) AS display_name,
       member.data#>>'{user,avatar}' AS avatar
     FROM servers server LEFT JOIN discord_cache.guilds guild ON guild.id=server.id
     LEFT JOIN discord_cache.members member ON member.guild_id=server.id AND member.user_id=${template.shared_by_discord_user_id}
     WHERE server.id=${template.source_server_id}`))[0]
   if (!row) return yield* new NotFound({ message: "This shared view is no longer available" })
   return { shareId:template.share_id,name:template.name,description:template.description,sharedAt:iso(template.created_at),
-    sharedBy:{id:template.shared_by_discord_user_id,name:row.display_name??`Discord user ${template.shared_by_discord_user_id}`,
+    sharedBy:{id:template.shared_by_discord_user_id,name:row.display_name??"Discord user",
       avatarUrl:row.avatar?`https://cdn.discordapp.com/avatars/${template.shared_by_discord_user_id}/${row.avatar}.png`:null},
     sourceServer:{id:template.source_server_id,name:row.name,
       iconUrl:row.icon?`https://cdn.discordapp.com/icons/${template.source_server_id}/${row.icon}.png`:null} }

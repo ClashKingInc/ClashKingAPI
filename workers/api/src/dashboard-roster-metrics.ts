@@ -128,7 +128,7 @@ export const queryDynamicRosterMetric = (
       current.stars += attack.stars
       players.set(attack.attackerTag, current)
     }
-  }))
+  }), { warTypes: cwl ? ["cwl"] : benchmark ? ["random"] : [] })
   const benchmarks = benchmark ? yield* townhallBenchmarks(sql, start, end) : undefined
   const values = new Map<string, number | null>()
   for (const { tag, townhall } of members) {
@@ -278,7 +278,7 @@ export const queryPlayerWarMetric = (
       const ids = selected.get(row.player_tag) ?? new Set<string>(); ids.add(String(row.war_id)); selected.set(row.player_tag, ids)
     }
     yield* forEachArchiveWar(rows.map(row => String(row.war_id)), consume)
-  } else yield* forEachPlayerWar([...wanted], start, now, consume)
+  } else yield* forEachPlayerWar([...wanted], start, now, consume, { warTypes: warType === "all" ? [] : [warType] })
   const benchmarks = metricId.startsWith("benchmark.") ? yield* townhallBenchmarks(sql, start, now) : undefined
   for (const member of members) {
     const total = totals.get(member.tag)

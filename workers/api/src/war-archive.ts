@@ -219,10 +219,13 @@ export const forEachNewestPlayerWar = <E, R>(
   }
 })
 
-/** Complete keyset scan with at most 128 IDs and one decoded war retained.
+/** Filter war types before loading archives: roster metrics must not download
+ * thousands of unrelated friendly wars only to discard them after decoding.
+ * Complete keyset scan with at most 128 IDs and one decoded war retained.
  * Aggregators should update their bounded result state in the callback. */
-export const forEachPlayerWar = <E, R>(playerTags: readonly string[], start: Date, end: Date, consume: (warId: string, war: ArchivedWar) => Effect.Effect<void, E, R>) => Effect.gen(function* () {
+export const forEachPlayerWar = <E, R>(playerTags: readonly string[], start: Date, end: Date, consume: (warId: string, war: ArchivedWar) => Effect.Effect<void, E, R>, options: { readonly warTypes?: readonly string[] } = {}) => Effect.gen(function* () {
   if (!playerTags.length) return
+  const warTypes = options.warTypes ?? []
   const sql = yield* SqlClient.SqlClient
   let lastId = 0
   for (;;) {
@@ -233,6 +236,7 @@ export const forEachPlayerWar = <E, R>(playerTags: readonly string[], start: Dat
       JOIN wars w ON w.war_id = history_war_id
       WHERE history.player_tag = ANY(${[...playerTags]}::text[]) AND w.war_id > ${lastId}
         AND w.end_time >= ${start} AND w.end_time <= ${end}
+        AND (${warTypes.length === 0} OR w.war_type = ANY(${[...warTypes]}::text[]))
       ORDER BY w.war_id, w.end_time LIMIT 128
     `.pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Player war history query failed" })))
     if (!rows.length) return

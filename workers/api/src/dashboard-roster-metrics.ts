@@ -24,12 +24,16 @@ export const rosterSnapshotMetricKeys: Readonly<Record<string, string>> = {
 export const normalizeRosterMetricParameters = (metricId: string, parameters: Readonly<Record<string, JsonValue>> = {}) => {
   const normalized: Record<string, JsonValue> = {}
   if (metricId === "cwl.performance_history") {
-    const count = parameters.seasonCount ?? 6
+    const months = parameters.windowMonths
+    if (months !== undefined && (typeof months !== "number" || !Number.isInteger(months) || months < 1 || months > 24))
+      throw new Error("windowMonths must be between 1 and 24")
+    const count = months ?? parameters.seasonCount ?? 6
     if (typeof count !== "number" || !Number.isInteger(count) || count < 1 || count > 24)
       throw new Error("seasonCount must be between 1 and 24")
+    if (parameters.familyOnly !== undefined && typeof parameters.familyOnly !== "boolean") throw new Error("familyOnly must be boolean")
     if (parameters.windowDays !== undefined || parameters.warCount !== undefined || parameters.warType !== undefined)
-      throw new Error("CWL performance uses participating seasons, not a war count or calendar window")
-    return { seasonCount: count }
+      throw new Error("CWL performance uses participating seasons or calendar months, not individual wars")
+    return { seasonCount: count, ...(months === undefined ? {} : { windowMonths: months }), ...(parameters.familyOnly === true ? { familyOnly: true } : {}) }
   }
   let window = ["war.missed_attacks", "war.participation", "war.hit_rate_confidence", "war.hit_rate", "war.hit_rate.30d", "war.regular_hit_rate", "war.cwl_hit_rate", "benchmark.th_hit_rate", "benchmark.th_hit_rate_delta", "benchmark.th_hit_rate_delta.30d"].includes(metricId)
     ? 30 : ["trophies.delta", "trophies.delta.7d"].includes(metricId) ? 7 : 0
@@ -208,20 +212,26 @@ const queryRosterAnalysisMetric = (
     }
     return values
   }
-  return yield* queryPlayerWarMetric(members, metricId, parameters, now, attackCounts)
+  const family = metricId === "cwl.performance_history" && parameters.familyOnly === true
+    ? yield* sql<{tag:string}>`SELECT clan.tag FROM server_clans clan JOIN rosters roster ON roster.server_id=clan.server_id WHERE roster.id=${rosterId}::uuid`.pipe(Effect.mapError(cause=>new DatabaseFailure({cause,message:"Unable to load family clan scope"})))
+    : undefined
+  return yield* queryPlayerWarMetric(members, metricId, parameters, now, attackCounts, family?.map(row=>row.tag))
 })
 
 /** Shared archive calculation; callers must authorize the player set first.
  * Family discovery does not require inserting players into a temporary roster. */
 export const queryPlayerWarMetric = (
   members: readonly { tag: string; townhall: number }[], metricId: string,
-  parameters: Readonly<Record<string, JsonValue>>, now = new Date(), attackCounts?: Map<string, number>,
+  parameters: Readonly<Record<string, JsonValue>>, now = new Date(), attackCounts?: Map<string, number>, familyClanTags?: readonly string[],
 ) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const values = new Map<string, JsonValue>(members.map(({ tag }) => [tag, null]))
   if (!members.length) return values
   if (metricId === "cwl.performance_history") {
-    const history = yield* queryRosterCwlPerformance(members.map(member => member.tag), Number(parameters.seasonCount ?? 6), now)
+    const history = yield* queryRosterCwlPerformance(members.map(member => member.tag), Number(parameters.seasonCount ?? 6), now, {
+      ...(parameters.windowMonths === undefined ? {} : { sinceSeason: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - Number(parameters.windowMonths) + 1, 1)).toISOString().slice(0, 7) }),
+      ...(familyClanTags === undefined ? {} : { clanTags: familyClanTags }),
+    })
     for (const [tag, value] of history) { values.set(tag, value); attackCounts?.set(tag, value.summary.attacks) }
     return values
   }

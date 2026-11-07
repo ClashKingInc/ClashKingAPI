@@ -654,9 +654,9 @@ const countdownMutationOperation = (input: DashboardServerOperationInput) => dat
   })).pipe(Effect.catch((failure) => created === undefined ? Effect.fail(failure) : compensateCreatedDiscordResource(created).pipe(Effect.andThen(Effect.fail(failure)))))
 }))
 
-const logTypes = new Set(["clash_maintenance", "join_log", "leave_log", "clan_achievement_log", "clan_requirements_log", "clan_description_log", "war_log", "war_panel", "cwl_lineup_change_log", "capital_donations", "capital_attacks", "raid_panel", "capital_weekly_summary", "role_change", "troop_upgrade", "super_troop_boost", "th_upgrade", "league_change", "spell_upgrade", "hero_upgrade", "hero_equipment_upgrade", "name_change", "legend_log_attacks", "legend_log_defenses", "ban_alert", "reddit_feed"])
+const logTypes = new Set(["clash_maintenance", "join_log", "leave_log", "clan_achievement_log", "clan_requirements_log", "clan_description_log", "war_log", "war_panel", "cwl_lineup_change_log", "capital_donations", "capital_attacks", "raid_panel", "capital_weekly_summary", "role_change", "troop_upgrade", "super_troop_boost", "th_upgrade", "league_change", "spell_upgrade", "hero_upgrade", "hero_equipment_upgrade", "name_change", "legend_log_attacks", "legend_log_defenses", "ban_alert", "reddit_feed", "reddit_user_feed"])
 const Webhook = Schema.Struct({ id: DecimalSnowflake, channel_id: Schema.optionalKey(Schema.NullOr(DecimalSnowflake)) })
-interface LogRow { readonly clan_tag: string | null; readonly type: string; readonly webhook_id: string; readonly thread_id: string | null; readonly disabled: boolean; readonly disabled_reason: string | null; readonly reddit_role_id: string | null; readonly reddit_accounts: ReadonlyArray<string> }
+interface LogRow { readonly clan_tag: string | null; readonly type: string; readonly webhook_id: string; readonly thread_id: string | null; readonly disabled: boolean; readonly disabled_reason: string | null; readonly reddit_role_id: string | null; readonly reddit_accounts: ReadonlyArray<string>; readonly reddit_min_townhall: number | null; readonly reddit_include_comments: boolean }
 const logsReadStateOperation = (input: DashboardServerOperationInput) => database("Server logs could not be loaded or updated", Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient, discord = yield* DiscordApi, serverId = serverIdFor(input)
   // Pausing delivery changes only SQL state. A missing Discord permission or
@@ -665,9 +665,9 @@ const logsReadStateOperation = (input: DashboardServerOperationInput) => databas
   const hooks = input.endpoint.operationId === "serverLogs"
     ? yield* decodeDiscord(Schema.Array(Webhook), yield* discord.request(`/guilds/${serverId}/webhooks`))
     : []
-  const enrich = (items: ReadonlyArray<LogRow>) => items.map((row) => ({ type: row.type, webhook_id: row.webhook_id, thread_id: row.thread_id, disabled: row.disabled, disabled_reason: row.disabled_reason, ...(row.type === "reddit_feed" ? { reddit_role_id: row.reddit_role_id, reddit_accounts: row.reddit_accounts } : {}), ...optional("clan_tag", row.clan_tag), ...optional("channel_id", hooks.find((hook) => hook.id === row.webhook_id)?.channel_id) }))
+  const enrich = (items: ReadonlyArray<LogRow>) => items.map((row) => ({ type: row.type, webhook_id: row.webhook_id, thread_id: row.thread_id, disabled: row.disabled, disabled_reason: row.disabled_reason, ...(["reddit_feed", "reddit_user_feed"].includes(row.type) ? { reddit_role_id: row.reddit_role_id, reddit_accounts: row.reddit_accounts, reddit_min_townhall: row.reddit_min_townhall, reddit_include_comments: row.reddit_include_comments } : {}), ...optional("clan_tag", row.clan_tag), ...optional("channel_id", hooks.find((hook) => hook.id === row.webhook_id)?.channel_id) }))
   if (input.endpoint.operationId === "serverLogs") {
-    const rows = yield* sql<LogRow>`SELECT clan_tag, type, webhook_id, thread_id, disabled, disabled_reason, reddit_role_id, reddit_accounts FROM server_logs WHERE server_id = ${serverId} ORDER BY clan_tag NULLS FIRST, type`
+    const rows = yield* sql<LogRow>`SELECT clan_tag, type, webhook_id, thread_id, disabled, disabled_reason, reddit_role_id, reddit_accounts, reddit_min_townhall, reddit_include_comments FROM server_logs WHERE server_id = ${serverId} ORDER BY clan_tag NULLS FIRST, type`
     return { logs: enrich(rows), count: rows.length }
   }
   const body = record(input.body)
@@ -677,11 +677,11 @@ const logsReadStateOperation = (input: DashboardServerOperationInput) => databas
   const tag = text(body.clan_tag).trim() === "" ? null : normalizeTag(body.clan_tag)
   for (const type of selected) {
     if (!logTypes.has(type)) return yield* new InvalidRequest({ message: `Unknown log type: ${type}` })
-    if (!["reddit_feed", "clash_maintenance"].includes(type) && tag === null) return yield* new InvalidRequest({ message: `clan_tag is required for log type: ${type}` })
-    if (["reddit_feed", "clash_maintenance"].includes(type) && tag !== null) return yield* new InvalidRequest({ message: `clan_tag is not allowed for log type: ${type}` })
+    if (!["reddit_feed", "reddit_user_feed", "clash_maintenance"].includes(type) && tag === null) return yield* new InvalidRequest({ message: `clan_tag is required for log type: ${type}` })
+    if (["reddit_feed", "reddit_user_feed", "clash_maintenance"].includes(type) && tag !== null) return yield* new InvalidRequest({ message: `clan_tag is not allowed for log type: ${type}` })
   }
   if (tag !== null) yield* requireRow(yield* sql<{ tag: string }>`SELECT tag FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag}`, "Clan not found on this server")
-  const rows = yield* sql<LogRow>`UPDATE server_logs SET disabled = ${body.disabled}, disabled_reason = NULL, updated_at = now() WHERE server_id = ${serverId} AND clan_tag IS NOT DISTINCT FROM ${tag} AND type = ANY(${selected}) RETURNING clan_tag, type, webhook_id, thread_id, disabled, disabled_reason, reddit_role_id, reddit_accounts`
+  const rows = yield* sql<LogRow>`UPDATE server_logs SET disabled = ${body.disabled}, disabled_reason = NULL, updated_at = now() WHERE server_id = ${serverId} AND clan_tag IS NOT DISTINCT FROM ${tag} AND type = ANY(${selected}) RETURNING clan_tag, type, webhook_id, thread_id, disabled, disabled_reason, reddit_role_id, reddit_accounts, reddit_min_townhall, reddit_include_comments`
   yield* requireRow(rows, "Server log setup not found")
   return { message: "Server log state updated successfully", server_id: serverId, ...optional("clan_tag", tag), updated_log_types: selected, logs: enrich(rows) }
 }))
@@ -697,13 +697,28 @@ const logsMutationOperation = (input: DashboardServerOperationInput) => database
   const tag = text(body.clan_tag).trim() === "" ? null : normalizeTag(body.clan_tag)
   for (const type of selected) {
     if (!logTypes.has(type)) return yield* new InvalidRequest({ message: `Unknown log type: ${type}` })
-    if (!["reddit_feed", "clash_maintenance"].includes(type) && tag === null) return yield* new InvalidRequest({ message: `clan_tag is required for log type: ${type}` })
-    if (["reddit_feed", "clash_maintenance"].includes(type) && tag !== null) return yield* new InvalidRequest({ message: `clan_tag is not allowed for log type: ${type}` })
+    if (!["reddit_feed", "reddit_user_feed", "clash_maintenance"].includes(type) && tag === null) return yield* new InvalidRequest({ message: `clan_tag is required for log type: ${type}` })
+    if (["reddit_feed", "reddit_user_feed", "clash_maintenance"].includes(type) && tag !== null) return yield* new InvalidRequest({ message: `clan_tag is not allowed for log type: ${type}` })
   }
   const hasRedditRole = Object.hasOwn(body, "reddit_role_id"), hasRedditAccounts = Object.hasOwn(body, "reddit_accounts")
-  if ((hasRedditRole || hasRedditAccounts) && (selected.length !== 1 || selected[0] !== "reddit_feed")) return yield* new InvalidRequest({ message: "Reddit options require only reddit_feed" })
+  const hasMinimum = Object.hasOwn(body, "reddit_min_townhall"), hasComments = Object.hasOwn(body, "reddit_include_comments")
+  if ((hasRedditRole || hasRedditAccounts || hasMinimum || hasComments) &&
+      (selected.length !== 1 || !["reddit_feed", "reddit_user_feed"].includes(selected[0]!)))
+    return yield* new InvalidRequest({ message: "Reddit options require one Reddit log type" })
+  if (selected[0] === "reddit_feed" && (hasRedditAccounts || hasComments))
+    return yield* new InvalidRequest({ message: "Watched users and comments belong to the Reddit User Feed" })
+  if (selected[0] === "reddit_user_feed" && hasMinimum)
+    return yield* new InvalidRequest({ message: "Minimum Town Hall belongs to the Reddit Recruitment Feed" })
+  const minimum = body.reddit_min_townhall ?? null
+  if (minimum !== null && (typeof minimum !== "number" || !Number.isInteger(minimum) || minimum < 1 || minimum > 18))
+    return yield* new InvalidRequest({ message: "Minimum Town Hall must be between 1 and 18" })
+  const includeComments = body.reddit_include_comments === true
   const redditRole = body.reddit_role_id === null || body.reddit_role_id === undefined || body.reddit_role_id === "" ? null : yield* discordDestinationId(body.reddit_role_id, "reddit_role_id")
   const redditAccounts = Array.isArray(body.reddit_accounts) ? body.reddit_accounts.map(value => text(value).trim().replace(/^u\//iu, "")) : []
+  if (hasRedditAccounts && (redditAccounts.length < 1 || redditAccounts.length > 2 || new Set(redditAccounts.map(value => value.toLowerCase())).size !== redditAccounts.length))
+    return yield* new InvalidRequest({ message: "Choose one or two different Reddit usernames" })
+  if (selected[0] === "reddit_user_feed" && operation !== "deleteServerLogs" && !hasRedditAccounts)
+    return yield* new InvalidRequest({ message: "Reddit User Feed requires one or two usernames" })
   if (redditAccounts.some(value => !/^[a-z0-9_-]{1,30}$/iu.test(value))) return yield* new InvalidRequest({ message: "Invalid Reddit account name" })
   if (new Set(redditAccounts.map(value => value.toLowerCase())).size !== redditAccounts.length) return yield* new InvalidRequest({ message: "Duplicate Reddit account name" })
   if (redditRole !== null) {
@@ -745,11 +760,13 @@ const logsMutationOperation = (input: DashboardServerOperationInput) => database
     // Older clients omit Reddit options. Destination changes must preserve them.
     const logs: Array<LogRow & { readonly channel_id: string }> = []
     for (const type of selected) {
-      const rows = yield* sql<LogRow>`INSERT INTO server_logs (server_id, clan_tag, type, webhook_id, thread_id, reddit_role_id, reddit_accounts) VALUES (${serverId}, ${tag}, ${type}, ${webhookId}, ${threadId}, ${redditRole}, ${redditAccounts})
+      const rows = yield* sql<LogRow>`INSERT INTO server_logs (server_id, clan_tag, type, webhook_id, thread_id, reddit_role_id, reddit_accounts, reddit_min_townhall, reddit_include_comments) VALUES (${serverId}, ${tag}, ${type}, ${webhookId}, ${threadId}, ${redditRole}, ${redditAccounts}, ${minimum}, ${includeComments})
         ON CONFLICT (server_id, clan_tag, type) DO UPDATE SET webhook_id = EXCLUDED.webhook_id, thread_id = EXCLUDED.thread_id, disabled = false, disabled_reason = NULL,
           reddit_role_id = CASE WHEN ${hasRedditRole} THEN EXCLUDED.reddit_role_id ELSE server_logs.reddit_role_id END,
           reddit_accounts = CASE WHEN ${hasRedditAccounts} THEN EXCLUDED.reddit_accounts ELSE server_logs.reddit_accounts END,
-          updated_at = now() RETURNING clan_tag, type, webhook_id, thread_id, disabled, disabled_reason, reddit_role_id, reddit_accounts`
+          reddit_min_townhall = CASE WHEN ${hasMinimum} THEN EXCLUDED.reddit_min_townhall ELSE server_logs.reddit_min_townhall END,
+          reddit_include_comments = CASE WHEN ${hasComments} THEN EXCLUDED.reddit_include_comments ELSE server_logs.reddit_include_comments END,
+          updated_at = now() RETURNING clan_tag, type, webhook_id, thread_id, disabled, disabled_reason, reddit_role_id, reddit_accounts, reddit_min_townhall, reddit_include_comments`
       logs.push({ ...(yield* requireRow(rows, "Server log could not be saved")), channel_id: channelId })
     }
     return { message: "Server logs updated successfully", server_id: serverId, ...optional("clan_tag", tag), updated_log_types: selected, logs: logs.map(({ clan_tag, ...row }) => ({ ...row, ...optional("clan_tag", clan_tag) })) }

@@ -6,12 +6,12 @@ export async function verifySharedViewImport({db,origin,signingKey,botKey}){
  assert.equal(process.env.CLASHKING_DISPOSABLE_TIMESCALE,'1')
  const source='999999999999990101',target='999999999999990102',other='999999999999990103'
  const sender='999999999999990111',recipient='999999999999990112',creator='999999999999990113'
- for(const id of [source,target,other])await db.query("INSERT INTO servers(id,name) VALUES($1,$2)",[id,id===source?'Shared from server':'Destination server'])
+ for(const id of [source,target,other])await db.query("INSERT INTO servers(id,name) VALUES($1,$2)",[id,id===source?source:'Destination server'])
  for(const id of [sender,recipient,creator])await db.query("INSERT INTO auth_users(user_id,provider) VALUES($1,'discord')",[id])
  await db.query('INSERT INTO discord_cache.gateway_shards(application_id,shard_id,shard_count,generation,healthy,heartbeat_at) VALUES($1,0,1,$2,true,now()) ON CONFLICT(application_id,shard_id) DO NOTHING',['999999999999999999',randomUUID()])
  const shard=(await db.query('SELECT application_id,shard_id,generation FROM discord_cache.gateway_shards LIMIT 1')).rows[0]
- for(const [id,owner] of [[source,sender],[target,recipient],[other,sender]])await db.query('INSERT INTO discord_cache.guilds(id,data,application_id,shard_id,generation,available,metadata_complete,members_complete) VALUES($1,$2,$3,$4,$5,true,true,true)',[id,{owner_id:owner,icon:'abc'},shard.application_id,shard.shard_id,shard.generation])
- await db.query('INSERT INTO discord_cache.members(guild_id,user_id,data) VALUES($1,$2,$3)',[source,sender,{user:{id:sender,username:'Sender',global_name:'Actual sharer',avatar:'abc'},roles:[]}])
+ for(const [id,owner] of [[source,sender],[target,recipient],[other,sender]])await db.query('INSERT INTO discord_cache.guilds(id,data,application_id,shard_id,generation,available,metadata_complete,members_complete) VALUES($1,$2,$3,$4,$5,true,true,true)',[id,{owner_id:owner,icon:'abc',name:id===source?'Source Discord server':'Destination Discord server'},shard.application_id,shard.shard_id,shard.generation])
+ await db.query('INSERT INTO discord_cache.members(guild_id,user_id,data) VALUES($1,$2,$3)',[source,sender,{nick:'Wrong server nickname',user:{id:sender,username:'Sender',global_name:'Actual sharer',avatar:'abc'},roles:[]}])
  const token=async id=>new SignJWT({}).setProtectedHeader({alg:'HS256'}).setSubject(id).setAudience('clashking-native').setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(signingKey))
  const senderToken=await token(sender),recipientToken=await token(recipient)
  const call=async(path,method='GET',body,auth=recipientToken,status=200)=>{
@@ -22,7 +22,7 @@ export async function verifySharedViewImport({db,origin,signingKey,botKey}){
  await db.query("UPDATE roster_views SET description='Compare family-clan CWL results from the last three months: stars, destruction, wars played and missed attacks.' WHERE id=$1",[viewId])
  await call(`/v2/roster/views/${viewId}/share?server_id=${source}`,'POST',undefined,recipientToken,403)
  const share=await call(`/v2/roster/views/${viewId}/share?server_id=${source}`,'POST',undefined,senderToken,201)
- assert.equal(share.sharedBy.id,sender);assert.equal(share.sharedBy.name,'Actual sharer');assert.equal(share.sourceServer.id,source)
+ assert.equal(share.sharedBy.id,sender);assert.equal(share.sharedBy.name,'Actual sharer');assert.equal(share.sourceServer.id,source);assert.equal(share.sourceServer.name,'Source Discord server')
  await call(`/v2/roster/view-shares/${share.shareId}`,'GET',undefined,null,401)
  // No source-server membership is needed for metadata or copying the recipe.
  await call(`/v2/roster/views/${viewId}?server_id=${source}`,'GET',undefined,recipientToken,403)

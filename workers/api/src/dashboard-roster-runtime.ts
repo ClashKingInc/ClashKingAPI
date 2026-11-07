@@ -58,6 +58,7 @@ const routes = [
   { method: "POST", path: "/v2/roster/views/preview", operation: "previewView", auth: "user-or-bot" },
   { method: "GET", path: "/v2/roster/views", operation: "listViews", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/views", operation: "createView", auth: "user-or-bot" },
+  { method: "GET", path: "/v2/roster/view-shares/:viewId/embed", operation: "sharedViewEmbed", auth: "public" },
   { method: "GET", path: "/v2/roster/view-shares/:viewId", operation: "previewSharedView", auth: "user" },
   { method: "POST", path: "/v2/roster/view-shares/:viewId/import", operation: "importSharedView", auth: "user-or-bot" },
   { method: "POST", path: "/v2/roster/views/:viewId/share", operation: "shareRosterView", auth: "user-or-bot" },
@@ -602,6 +603,7 @@ const executeRosterOperation = (
       return yield* listViews(sql, input)
     case "getView":
       return yield* getView(sql, input)
+    case "sharedViewEmbed": return yield* sharedViewEmbed(sql, input)
     case "previewSharedView": return yield* previewSharedView(sql, input)
     case "shareRosterView": return yield* shareRosterView(sql, input)
     case "importSharedView": return yield* importSharedView(sql, input)
@@ -1138,7 +1140,7 @@ const previewView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationIn
   const body = yield* Schema.decodeUnknownEffect(DashboardRosterViewPreviewRequest)(yield* decodeJson(input.request)).pipe(
     Effect.mapError(() => new InvalidRequest({ message: "Invalid roster view preview" })),
   )
-  const write = yield* viewWrite({ name: body.name, sourceCode: body.sourceCode, sourceVersion: body.sourceVersion })
+  const write = yield* viewWrite({ name: body.name, description: body.description, sourceCode: body.sourceCode, sourceVersion: body.sourceVersion })
   const spec: typeof DashboardRosterViewSpec.Type = { schemaVersion: 1, columns: body.columns, filters: body.filters, sort: body.sort,
     highlights: body.highlights, ...(body.limit === null ? {} : { limit: body.limit }) }
   yield* validateRosterViewSpec(spec, new Set(rosterMetrics.map((metric) => metric.id)))
@@ -1483,6 +1485,7 @@ interface ViewRow {
   readonly created_at: Date | string
   readonly created_by_discord_user_id: string
   readonly id: string
+  readonly description: string
   readonly name: string
   readonly server_id: string
   readonly share_id: string
@@ -1492,7 +1495,7 @@ interface ViewRow {
 }
 
 export const viewJson = (row: ViewRow) => ({
-  id: row.id, shareId: row.share_id, serverId: row.server_id, name: row.name,
+  id: row.id, shareId: row.share_id, serverId: row.server_id, name: row.name, description: row.description,
   sourceCode: row.source_code, sourceVersion: row.source_version,
   createdBy: row.created_by_discord_user_id, createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
 })
@@ -1500,7 +1503,7 @@ export const viewJson = (row: ViewRow) => ({
 export const loadViews = (sql: SqlClient.SqlClient, serverId?: string, viewId?: string, shareId?: string) => database(
   "Unable to load roster views",
   sql<ViewRow>`
-    SELECT id::text, share_id, server_id, name, source_code, source_version,
+    SELECT id::text, share_id, server_id, name, description, source_code, source_version,
       created_by_discord_user_id, created_at, updated_at
     FROM roster_views
     WHERE (${serverId ?? null}::text IS NULL OR server_id = ${serverId ?? null})
@@ -1523,14 +1526,14 @@ const getView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput)
 })
 
 interface SharedTemplate {
-  share_id: string; source_view_id: string; source_server_id: string; name: string;
+  share_id: string; source_view_id: string; source_server_id: string; name: string; description: string;
   source_code: string; source_version: number; shared_by_discord_user_id: string;
   created_at: Date | string;
 }
 const loadSharedTemplate = (sql: SqlClient.SqlClient, shareId: string) => Effect.gen(function* () {
   if (!/^[A-Za-z0-9_-]{10,16}$/u.test(shareId)) return yield* new InvalidRequest({ message: "Invalid share link" })
   const rows = yield* database("Unable to load shared view", sql<SharedTemplate>`
-    SELECT share_id,source_view_id::text,source_server_id,name,source_code,source_version,
+    SELECT share_id,source_view_id::text,source_server_id,name,description,source_code,source_version,
       shared_by_discord_user_id,created_at
     FROM roster_view_shares WHERE share_id=${shareId}
 
@@ -1549,11 +1552,23 @@ const sharedTemplateInfo = (sql: SqlClient.SqlClient, template: SharedTemplate) 
     LEFT JOIN discord_cache.members member ON member.guild_id=server.id AND member.user_id=${template.shared_by_discord_user_id}
     WHERE server.id=${template.source_server_id}`))[0]
   if (!row) return yield* new NotFound({ message: "This shared view is no longer available" })
-  return { shareId:template.share_id,name:template.name,sharedAt:iso(template.created_at),
+  return { shareId:template.share_id,name:template.name,description:template.description,sharedAt:iso(template.created_at),
     sharedBy:{id:template.shared_by_discord_user_id,name:row.display_name??`Discord user ${template.shared_by_discord_user_id}`,
       avatarUrl:row.avatar?`https://cdn.discordapp.com/avatars/${template.shared_by_discord_user_id}/${row.avatar}.png`:null},
     sourceServer:{id:template.source_server_id,name:row.name,
       iconUrl:row.icon?`https://cdn.discordapp.com/icons/${template.source_server_id}/${row.icon}.png`:null} }
+})
+const sharedViewEmbed = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
+  const template = yield* loadSharedTemplate(sql, input.params.viewId ?? "")
+  // Count current destination servers, not link clicks or repeat imports. The
+  // bearer link deliberately reveals only the text needed by unfurl crawlers.
+  const row = (yield* database("Unable to count saved views", sql<{ count: number }>`
+    SELECT count(DISTINCT view.server_id)::int AS count
+    FROM roster_views view
+    JOIN roster_view_shares share ON share.share_id = view.imported_from_share_id
+    WHERE share.source_view_id = ${template.source_view_id}::uuid
+      AND view.server_id <> ${template.source_server_id}`))[0]
+  return json({ name: template.name, description: template.description, savedServerCount: row?.count ?? 0 })
 })
 const previewSharedView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
   // A bearer share grants template metadata only. Never expose the source
@@ -1566,9 +1581,9 @@ const shareRosterView = (sql: SqlClient.SqlClient, input: DashboardRosterOperati
   const view=(yield* loadViews(sql,serverId,input.params.viewId))[0]
   if(!view)return yield* new NotFound({message:"Roster view not found"})
   const row=(yield* database("Unable to share roster view",sql<SharedTemplate>`
-    INSERT INTO roster_view_shares(source_view_id,source_server_id,shared_by_discord_user_id,name,source_code,source_version)
-    VALUES(${view.id}::uuid,${serverId},${input.principal.userId},${view.name},${view.source_code},${view.source_version})
-    RETURNING share_id,source_view_id::text,source_server_id,shared_by_discord_user_id,name,source_code,source_version,created_at
+    INSERT INTO roster_view_shares(source_view_id,source_server_id,shared_by_discord_user_id,name,description,source_code,source_version)
+    VALUES(${view.id}::uuid,${serverId},${input.principal.userId},${view.name},${view.description},${view.source_code},${view.source_version})
+    RETURNING share_id,source_view_id::text,source_server_id,shared_by_discord_user_id,name,description,source_code,source_version,created_at
   `))[0]!
   return json(yield* sharedTemplateInfo(sql,row),201)
 })
@@ -1586,17 +1601,17 @@ const importSharedView = (sql: SqlClient.SqlClient, input: DashboardRosterOperat
     // choose a free name without overwriting a recipient's existing view.
     yield* database("Unable to lock import destination",sql`SELECT id FROM servers WHERE id=${serverId} FOR UPDATE`)
     const existing=(yield* database("Unable to load imported view",sql<ViewRow>`
-      SELECT id::text,share_id,server_id,name,source_code,source_version,created_by_discord_user_id,created_at,updated_at
+      SELECT id::text,share_id,server_id,name,description,source_code,source_version,created_by_discord_user_id,created_at,updated_at
       FROM roster_views WHERE server_id=${serverId} AND imported_from_share_id=${template.share_id}`))[0]
     if(existing)return existing
     for(let number=1;number<=100;number++){
       const suffix=number===1?"":` (${number})`
       const name=template.name.slice(0,80-suffix.length)+suffix
       const created=(yield* database("Unable to import shared view",sql<ViewRow>`
-        INSERT INTO roster_views(server_id,name,source_code,source_version,created_by_discord_user_id,imported_from_share_id)
-        VALUES(${serverId},${name},${template.source_code},${template.source_version},${userId},${template.share_id})
+        INSERT INTO roster_views(server_id,name,source_code,source_version,description,created_by_discord_user_id,imported_from_share_id)
+        VALUES(${serverId},${name},${template.source_code},${template.source_version},${template.description},${userId},${template.share_id})
         ON CONFLICT DO NOTHING
-        RETURNING id::text,share_id,server_id,name,source_code,source_version,created_by_discord_user_id,created_at,updated_at`))[0]
+        RETURNING id::text,share_id,server_id,name,description,source_code,source_version,created_by_discord_user_id,created_at,updated_at`))[0]
       if(created)return created
     }
     return yield* new Conflict({message:"Too many views have this name. Rename one and try again."})
@@ -1610,7 +1625,9 @@ const viewWrite = (body: Record<string, unknown>) => Effect.gen(function* () {
   if (name.length > 80 || sourceCode.length > 65_536 || body.sourceVersion !== 1) {
     return yield* new InvalidRequest({ message: "Saved roster views require name, sourceCode, and sourceVersion 1" })
   }
-  return { name, sourceCode, sourceVersion: 1 }
+  const description=typeof body.description === "string" ? body.description.trim() : undefined
+  if(description!==undefined && [...description].length>300)return yield* new InvalidRequest({message:"View descriptions must be 300 characters or fewer"})
+  return { name, sourceCode, sourceVersion: 1, description }
 })
 
 const createView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
@@ -1623,9 +1640,9 @@ const createView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInp
   `)
   if (creator.length === 0) return yield* new Forbidden({ message: "A Discord identity is required for roster management" })
   const rows = yield* database("Unable to create roster view", sql<ViewRow>`
-    INSERT INTO roster_views (server_id, name, source_code, source_version, created_by_discord_user_id)
-    VALUES (${serverId}, ${write.name}, ${write.sourceCode}, ${write.sourceVersion}, ${input.principal.userId})
-    RETURNING id::text, share_id, server_id, name, source_code, source_version,
+    INSERT INTO roster_views (server_id, name, source_code, source_version, description, created_by_discord_user_id)
+    VALUES (${serverId}, ${write.name}, ${write.sourceCode}, ${write.sourceVersion}, ${write.description ?? ""}, ${input.principal.userId})
+    RETURNING id::text, share_id, server_id, name, description, source_code, source_version,
       created_by_discord_user_id, created_at, updated_at
   `)
   const row = rows[0]
@@ -1638,9 +1655,9 @@ const updateView = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInp
   const serverId = yield* requireServerId(input)
   const rows = yield* database("Unable to update roster view", sql<ViewRow>`
     UPDATE roster_views SET name = ${write.name}, source_code = ${write.sourceCode},
-      source_version = ${write.sourceVersion}, updated_at = now()
+      source_version = ${write.sourceVersion}, description = COALESCE(${write.description ?? null},description), updated_at = now()
     WHERE id = ${input.params.viewId ?? ""}::uuid AND server_id = ${serverId}
-    RETURNING id::text, share_id, server_id, name, source_code, source_version,
+    RETURNING id::text, share_id, server_id, name, description, source_code, source_version,
       created_by_discord_user_id, created_at, updated_at
   `)
   const row = rows[0]

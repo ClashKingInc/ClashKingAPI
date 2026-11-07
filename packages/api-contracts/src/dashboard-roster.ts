@@ -448,6 +448,7 @@ export const DashboardRosterViewSpec = Schema.Struct({
 })
 export const DashboardRosterViewWrite = Schema.Struct({
   name: Schema.String,
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(300))),
   sourceCode: Schema.String,
   sourceVersion: Schema.Literal(1),
 })
@@ -456,6 +457,7 @@ export const DashboardRosterView = Schema.Struct({
   shareId: Schema.String,
   serverId: Schema.String,
   name: Schema.String,
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(300))),
   sourceCode: Schema.String,
   sourceVersion: Schema.Literal(1),
   createdBy: Schema.String,
@@ -482,6 +484,7 @@ export const DashboardRosterViewPreviewRequest = Schema.Struct({
   rosterIds: Schema.Array(Schema.String),
   viewId: Schema.optionalKey(Schema.String),
   name: Schema.String,
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(300))),
   sourceCode: Schema.String,
   sourceVersion: Schema.Literal(1),
   columns: Schema.Array(DashboardRosterViewColumn),
@@ -1007,9 +1010,20 @@ export const DashboardGetRosterViewEndpoint = defineEndpoint({
 export const DashboardRosterViewShare = Schema.Struct({
   shareId: Schema.String,
   name: Schema.String,
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(300))),
   sharedAt: Schema.String,
   sharedBy: Schema.Struct({ id: Schema.String, name: Schema.String, avatarUrl: Schema.NullOr(Schema.String) }),
   sourceServer: Schema.Struct({ id: Schema.String, name: Schema.String, iconUrl: Schema.NullOr(Schema.String) }),
+})
+export const DashboardSharedViewEmbed = Schema.Struct({
+  name: Schema.String,
+  description: Schema.String,
+  savedServerCount: Schema.Number,
+})
+export const DashboardSharedViewEmbedEndpoint = defineEndpoint({
+  operationId: "dashboardSharedViewEmbed", method: "GET", path: "/v2/roster/view-shares/:viewId/embed", auth: "public",
+  summary: "Public link-preview metadata only; no source code, identities or roster data", body: NoBody, bodyMode: "none",
+  pathParams: ViewPath, query: NoQuery, response: DashboardSharedViewEmbed, responseMode: "json", successStatus: 200, errors: [],
 })
 export const DashboardPreviewSharedViewEndpoint = defineEndpoint({
   operationId: "dashboardPreviewSharedView", method: "GET", path: "/v2/roster/view-shares/:viewId", auth: "user",

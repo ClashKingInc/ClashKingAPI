@@ -11,6 +11,7 @@ const original = new Map(source.operations.map(([method, path, tags]) => [
 // previously undocumented handlers and intentionally new retained features.
 // This only assigns navigation; it never adds paths or changes authorization.
 const additions = new Map([
+  ["GET /v2/roster/view-shares/{}/embed", "Roster Builder"],
   ["GET /v2/roster/view-shares/{}", "Roster Builder"],
   ["POST /v2/roster/view-shares/{}/import", "Roster Builder"],
   ["POST /v2/roster/views/{}/share", "Roster Builder"],

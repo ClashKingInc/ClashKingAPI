@@ -86,6 +86,7 @@ export const dashboardEndpoints = {
   dashboardListRosterViews: Roster.DashboardListRosterViewsEndpoint,
   dashboardGetRosterView: Roster.DashboardGetRosterViewEndpoint,
   dashboardCreateRosterView: Roster.DashboardCreateRosterViewEndpoint,
+  dashboardSharedViewEmbed: Roster.DashboardSharedViewEmbedEndpoint,
   dashboardPreviewSharedView: Roster.DashboardPreviewSharedViewEndpoint,
   dashboardShareRosterView: Roster.DashboardShareRosterViewEndpoint,
   dashboardImportSharedView: Roster.DashboardImportSharedViewEndpoint,

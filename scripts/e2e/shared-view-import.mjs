@@ -18,21 +18,25 @@ export async function verifySharedViewImport({db,origin,signingKey,botKey}){
   const response=await fetch(origin+path,{method,headers:{...(auth?{authorization:'Bearer '+auth}:{}),...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});const value=await response.json();assert.equal(response.status,status,JSON.stringify(value));return value
  }
  const viewId=randomUUID(),legacy='LegacyImport01',code='async () => { throw new Error("source data must not execute during import"); }'
- await db.query('INSERT INTO roster_views(id,share_id,server_id,name,source_code,created_by_discord_user_id) VALUES($1,$2,$3,$4,$5,$6)',[viewId,legacy,source,'Shared recipe',code,creator])
+ await db.query('INSERT INTO roster_views(id,share_id,server_id,name,source_code,created_by_discord_user_id) VALUES($1,$2,$3,$4,$5,$6)',[viewId,legacy,source,'CWL · Last three months',code,creator])
+ await db.query("UPDATE roster_views SET description='Compare family-clan CWL results from the last three months: stars, destruction, wars played and missed attacks.' WHERE id=$1",[viewId])
  await call(`/v2/roster/views/${viewId}/share?server_id=${source}`,'POST',undefined,recipientToken,403)
  const share=await call(`/v2/roster/views/${viewId}/share?server_id=${source}`,'POST',undefined,senderToken,201)
  assert.equal(share.sharedBy.id,sender);assert.equal(share.sharedBy.name,'Actual sharer');assert.equal(share.sourceServer.id,source)
  await call(`/v2/roster/view-shares/${share.shareId}`,'GET',undefined,null,401)
  // No source-server membership is needed for metadata or copying the recipe.
  await call(`/v2/roster/views/${viewId}?server_id=${source}`,'GET',undefined,recipientToken,403)
+ const embed=await call(`/v2/roster/view-shares/${share.shareId}/embed`,'GET',undefined,null)
+ assert.deepEqual(Object.keys(embed).sort(),['description','name','savedServerCount']);assert.equal(embed.savedServerCount,0);assert.equal(embed.description,'Compare family-clan CWL results from the last three months: stars, destruction, wars played and missed attacks.')
  const metadata=await call(`/v2/roster/view-shares/${share.shareId}`)
- assert.equal(metadata.name,'Shared recipe');assert(!JSON.stringify(metadata).includes('source_code'));assert(!JSON.stringify(metadata).includes('must not execute'))
+ assert.equal(metadata.description,'Compare family-clan CWL results from the last three months: stars, destruction, wars played and missed attacks.');assert.equal(metadata.name,'CWL · Last three months');assert(!JSON.stringify(metadata).includes('source_code'));assert(!JSON.stringify(metadata).includes('must not execute'))
  assert.equal((await db.query('SELECT count(*)::int AS n FROM roster_views WHERE server_id=$1',[target])).rows[0].n,0,'Preview must not import')
  await call(`/v2/roster/view-shares/${share.shareId}/import?server_id=${other}`,'POST',undefined,recipientToken,403)
  await call(`/v2/roster/view-shares/${share.shareId}/import?server_id=${target}`,'POST',undefined,botKey,403)
- await db.query("UPDATE roster_views SET name='Changed later',source_code='async () => null' WHERE id=$1",[viewId])
+ await db.query("UPDATE roster_views SET name='Changed later',source_code='async () => null',description='Changed later' WHERE id=$1",[viewId])
  const imports=await Promise.all([1,2].map(()=>call(`/v2/roster/view-shares/${share.shareId}/import?server_id=${target}`,'POST')))
- assert.equal(imports[0].id,imports[1].id);assert.equal(imports[0].name,'Shared recipe');assert.equal(imports[0].sourceCode,code);assert.equal(imports[0].createdBy,recipient)
+ assert.equal((await call(`/v2/roster/view-shares/${share.shareId}/embed`,'GET',undefined,null)).savedServerCount,1)
+ assert.equal(imports[0].description,metadata.description);assert.equal(imports[0].id,imports[1].id);assert.equal(imports[0].name,'CWL · Last three months');assert.equal(imports[0].sourceCode,code);assert.equal(imports[0].createdBy,recipient)
  await db.query("UPDATE roster_views SET name='Recipient edit' WHERE id=$1",[imports[0].id])
  assert.equal((await call(`/v2/roster/view-shares/${share.shareId}/import?server_id=${target}`,'POST')).name,'Recipient edit','Retry must not overwrite local edits')
  const permissions={manager:false,sections:{rosters:'view'}}
@@ -50,6 +54,10 @@ export async function verifySharedViewImport({db,origin,signingKey,botKey}){
  const another=await call(`/v2/roster/views/${viewId}/share?server_id=${source}`,'POST',undefined,senderToken,201)
  assert.equal((await call(`/v2/roster/view-shares/${another.shareId}/import?server_id=${target}`,'POST')).name,'Changed later (2)','Name collision must retain both independent views')
  await call('/v2/roster/view-shares/UnknownImport1','GET',undefined,recipientToken,404)
+ if(process.env.CLASHKING_E2E_DASHBOARD_ROOT){
+   const {verifySharedViewEmbed}=await import(process.env.CLASHKING_E2E_DASHBOARD_ROOT+'/scripts/verify-shared-view-embed.mjs');
+   await verifySharedViewEmbed({apiOrigin:origin,shareId:share.shareId,name:'CWL · Last three months',description:metadata.description});
+ }
  assert.equal((await db.query('SELECT count(*)::int AS n FROM rosters WHERE server_id=$1',[target])).rows[0].n,0,'Import must not copy rosters or players')
  console.log('PASS shared-view import: authenticated external preview, actual sharer attribution, no source access/data, immutable snapshot, authorized destination, concurrent idempotence, edits preserved, old links rejected and no code execution')
 }

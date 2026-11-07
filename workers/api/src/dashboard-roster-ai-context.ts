@@ -45,15 +45,8 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
   const sql = yield* SqlClient.SqlClient
   const encoded = yield* sql.withTransaction(Effect.gen(function* () {
     yield* sql`SELECT pg_advisory_xact_lock(hashtext('roster_ai_free_monthly_budget'))`
-    // A confirmed provider rejection settles its step at zero cost. Such a
-    // completed admission must not block retries; absent or unsettled steps
-    // remain pending, including calls whose billable outcome is unknown.
-    const pending = yield* sql`SELECT id FROM roster_ai_usage
-      WHERE total_tokens=0 AND created_at>now()-interval '10 minutes'
-        AND (server_id=${body.serverId} OR discord_user_id=${principal.userId})
-        AND (NOT EXISTS(SELECT 1 FROM roster_ai_step_budgets b WHERE b.usage_id=roster_ai_usage.id)
-          OR EXISTS(SELECT 1 FROM roster_ai_step_budgets b WHERE b.usage_id=roster_ai_usage.id AND b.settled_at IS NULL)) LIMIT 1`
-    if (pending.length) return yield* new RateLimited({ message: "A roster AI request is already in progress", retryAfterSeconds: 30 })
+    // Only recorded spend gates a new prompt. Unfinished calls do not reserve
+    // money or lock users out; their unknown usage remains in the call audit.
     const identity = yield* sql`SELECT user_id FROM auth_users WHERE user_id = ${principal.userId} AND provider = 'discord' FOR SHARE`
     if (identity.length !== 1) return yield* new Forbidden({ message: "A Discord identity is required for roster management" })
     const rows = yield* sql<{ id: string; alias: string; clan_tag: string | null; revision: number; signup_questions: unknown; member_count: number }>`
@@ -70,7 +63,7 @@ export const dispatchDashboardRosterAIContext = (request: Request, maxPromptChar
     const view = viewId === null ? null : (yield* loadViews(sql, body.serverId, viewId))[0]
     if (view === undefined) return yield* new NotFound({ message: "Roster view not found" })
     const limits=yield* readServerLimits(body.serverId)
-    if(limits.aiSpentUsd+limits.aiReservedUsd>=limits.aiMonthlyLimitUsd)return yield* new RateLimited({message:limitMessage("Monthly AI spend"),retryAfterSeconds:60})
+    if(limits.aiSpentUsd>=limits.aiMonthlyLimitUsd)return yield* new RateLimited({message:limitMessage("Monthly AI spend"),retryAfterSeconds:60})
     const requestId = crypto.randomUUID()
     const response = yield* Schema.encodeUnknownEffect(endpoint.response)({ requestId, model: "gpt-6-luna",
       budget: { serverSpentUsd:limits.aiSpentUsd, serverReservedUsd:limits.aiReservedUsd, serverLimitUsd:limits.aiMonthlyLimitUsd, resetsAt:limits.resetsAt },

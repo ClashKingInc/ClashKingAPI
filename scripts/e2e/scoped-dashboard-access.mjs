@@ -86,17 +86,20 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
   const aiBody={serverId:server,rosterIds:[roster],messages:[{role:'user',content:'List my roster'}]}
   const aiContext=await request('/v2/roster/ai/context',{method:'POST',body:aiBody})
   assert.equal(aiContext.context.attachments[0].rosterId,roster)
-  await request('/v2/roster/ai/context',{method:'POST',body:aiBody,status:429})
+  await request('/v2/roster/ai/context',{method:'POST',body:aiBody})
   const budgetCall=async(path,body)=>{
     const response=await fetch(origin+path,{method:'POST',headers:{'content-type':'application/json','x-clashking-ai-metering':meteringKey},body:JSON.stringify(body)})
     assert.equal(response.status,200,await response.clone().text());return response.json()
   }
   await budgetCall('/v2/runtime/roster-ai/reserve',{requestId:aiContext.requestId,step:0,inputTokenLimit:1000,outputTokenLimit:1000})
-  await request('/v2/roster/ai/context',{method:'POST',body:aiBody,status:429})
+  await request('/v2/roster/ai/context',{method:'POST',body:aiBody})
   await budgetCall('/v2/runtime/roster-ai/settle',{requestId:aiContext.requestId,step:0,inputTokens:0,outputTokens:0})
   const retryContext=await request('/v2/roster/ai/context',{method:'POST',body:aiBody})
   await db.query('DELETE FROM roster_ai_usage WHERE id=$1',[retryContext.requestId])
-  console.log('PASS rejected AI admission: unsettled call blocks retry; zero-cost settled rejection permits retry')
+  await db.query('UPDATE servers SET ai_monthly_limit_usd=0 WHERE id=$1',[server])
+  await request('/v2/roster/ai/context',{method:'POST',body:aiBody,status:429})
+  await db.query('UPDATE servers SET ai_monthly_limit_usd=.10 WHERE id=$1',[server])
+  console.log('PASS AI admission: pending calls do not block, actual limit still blocks new prompts')
 
   await request('/v2/roster/ai/context',{method:'POST',body:{...aiBody,serverId:other},status:403})
   await db.query('DELETE FROM roster_ai_usage WHERE id=$1',[aiContext.requestId])

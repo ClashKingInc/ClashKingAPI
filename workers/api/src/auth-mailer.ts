@@ -8,6 +8,14 @@ import { AuthMailer, validateEmail, type AuthEmailMessage } from "./auth-email.j
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
 import { UpstreamUnavailable } from "./errors.js"
 
+// Keep provider replies, addresses and credentials out of diagnostics.
+class SmtpReplyFailure extends Error {
+  constructor(readonly replyCode: number) { super("SMTP command rejected") }
+}
+class SmtpDeliveryFailure extends Error {
+  constructor(readonly stage: string, readonly replyCode?: number) { super("SMTP delivery failed") }
+}
+
 type MailBindings = Pick<WorkerBindings, "SMTP_HOST" | "SMTP_PORT" | "SMTP_STARTTLS" | "SMTP_SSL_TLS" |
   "SMTP_FROM_ADDRESS" | "SMTP_REPLY_TO_ADDRESS" | "SMTP_USERNAME" | "SMTP_PASSWORD">
 
@@ -24,8 +32,14 @@ export const authMailerLayer = Layer.effect(AuthMailer, Effect.gen(function* () 
       replyTo: { name: replyTo.name ?? "", address: replyTo.address }, subject: content.subject, text: content.text, html: content.html,
       envelope: { from: from.address, to: [recipient.address] },
       disableFileAccess: true, disableUrlAccess: true,
-    }, signal), catch: () => unavailable() }).pipe(Effect.timeout("20 seconds"))
-  }).pipe(Effect.mapError(() => unavailable())) })
+    }, signal), catch: (error) => error instanceof SmtpDeliveryFailure ? error : new SmtpDeliveryFailure("unknown") }).pipe(Effect.timeout("20 seconds"))
+  }).pipe(Effect.mapError((error) => {
+    console.warn("auth_smtp_failure", {
+      stage: error instanceof SmtpDeliveryFailure ? error.stage : "configuration_or_content",
+      ...(error instanceof SmtpDeliveryFailure && error.replyCode !== undefined ? { reply_code: error.replyCode } : {}),
+    })
+    return unavailable()
+  })) })
 }))
 
 export function smtpOptions(env: MailBindings) {
@@ -57,6 +71,7 @@ export async function sendSmtp(options: SMTPTransport.Options, message: SendMail
   const deadline = setTimeout(abort, 20_000)
   const transport = nodemailer.createTransport({ streamTransport: true, buffer: true, newline: "windows", disableFileAccess: true, disableUrlAccess: true })
   let reader: SmtpReplies | undefined
+  let stage = "compose"
   try {
     signal.throwIfAborted()
     if ((!options.secure && !options.requireTLS) || options.ignoreTLS || options.tls?.rejectUnauthorized === false) throw new Error("SMTP requires verified TLS")
@@ -70,6 +85,7 @@ export async function sendSmtp(options: SMTPTransport.Options, message: SendMail
     signal.throwIfAborted()
     if (canceled) throw new Error("SMTP request canceled")
     const target = { host: options.host!, port: options.port! as number }
+    stage = "connect"
     let socket: Socket = options.secure ? connectTls({ ...target, ...options.tls, rejectUnauthorized: true }) : connectNet(target)
     const own = (connection: Socket) => {
       sockets.add(connection)
@@ -80,35 +96,47 @@ export async function sendSmtp(options: SMTPTransport.Options, message: SendMail
     own(socket)
     reader = new SmtpReplies(socket)
     await connected(socket, options.secure ? "secureConnect" : "connect", options.connectionTimeout || 10_000)
+    stage = "greeting"
     await reader.expect(220)
     const command = async (line: string, code: number) => { socket.write(`${line}\r\n`); return reader!.expect(code) }
+    stage = "ehlo"
     let extensions = await command("EHLO clashk.ing", 250)
     const supports = (extension: string) => extensions.some((line) => line.toUpperCase().split(" ")[0] === extension)
     if (!options.secure) {
       if (!supports("STARTTLS")) throw new Error("SMTP STARTTLS unavailable")
       let ready: Promise<void> | undefined
+      stage = "starttls"
       socket.write("STARTTLS\r\n")
       await reader.expect(220, () => {
         // Upgrade synchronously in the data callback before workerd starts its
         // next plaintext read; an awaited continuation leaves that read locked.
         reader!.detach()
+        stage = "tls"
         socket = connectTls({ socket, ...options.tls, rejectUnauthorized: true })
         own(socket)
         reader = new SmtpReplies(socket)
         ready = connected(socket, "secureConnect", options.connectionTimeout || 10_000)
       })
       await ready
+      stage = "secure_ehlo"
       extensions = await command("EHLO clashk.ing", 250)
     }
     // Use SMTP AUTH PLAIN exclusively over verified TLS.
+    stage = "authenticate"
     await command(`AUTH PLAIN ${Buffer.from(`\0${auth.user}\0${auth.pass}`).toString("base64")}`, 235)
     if (addresses.some((address) => [...String(address)].some((character) => character.charCodeAt(0) > 127)) && !supports("SMTPUTF8")) throw new Error("SMTPUTF8 unavailable")
+    stage = "sender"
     await command(`MAIL FROM:<${mime.envelope.from}>${supports("8BITMIME") ? " BODY=8BITMIME" : ""}${supports("SMTPUTF8") ? " SMTPUTF8" : ""}`, 250)
+    stage = "recipient"
     await command(`RCPT TO:<${recipients[0]}>`, 250)
+    stage = "data"
     await command("DATA", 354)
     const body = mime.message.toString("utf8").replace(/\r?\n/g, "\r\n").replace(/^\./gm, "..")
     socket.write(`${body}${body.endsWith("\r\n") ? "" : "\r\n"}.\r\n`)
+    stage = "acceptance"
     await reader.expect(250)
+  } catch (error) {
+    throw new SmtpDeliveryFailure(stage, error instanceof SmtpReplyFailure ? error.replyCode : undefined)
   } finally {
     clearTimeout(deadline)
     signal.removeEventListener("abort", abort)
@@ -176,7 +204,7 @@ class SmtpReplies {
   expect(expected: number, accepted?: () => void): Promise<string[]> {
     return new Promise((resolve, reject) => {
       const received = (reply: { code: number; lines: string[] }) => {
-        if (reply.code !== expected) { reject(new Error("SMTP command rejected")); return }
+        if (reply.code !== expected) { reject(new SmtpReplyFailure(reply.code)); return }
         try { accepted?.(); resolve(reply.lines) } catch (error) { reject(error) }
       }
       if (this.failure) { reject(this.failure); return }

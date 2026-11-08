@@ -27,6 +27,19 @@ export async function verifyEmailLookupKey({ db, origin, signingKey, emailLookup
     const duplicate = await fetch(`${origin}/v2/auth/register`, { method:'POST', headers:{'content-type':'application/json'}, body:JSON.stringify({ email,password,username:'duplicate',device_id:id,device_name:'Local' }) })
     assert.equal(duplicate.status, 400)
     assert.match((await duplicate.json()).message, /already registered/)
+    // A delivery failure must remove only this pending registration, and must
+    // not create a usable account. Local SMTP is deliberately unconfigured.
+    const failedEmail = `pending-${id}@example.invalid`
+    const failedHash = createHash('sha256').update(failedEmail + emailLookupKey).digest('hex')
+    const failure = await fetch(`${origin}/v2/auth/register`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({email:failedEmail,password,username:'PendingCheck',device_id:id,device_name:'Local'})})
+    assert.equal(failure.status,503)
+    const failureBody=await failure.json()
+    assert.equal(failureBody.code,'upstream_unavailable')
+    assert.match(failureBody.message,/Verification email could not be sent/)
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM auth_email_verifications WHERE email_hash=$1',[failedHash])).rows[0].n,0)
+    assert.equal((await db.query('SELECT count(*)::int AS n FROM auth_users WHERE email_hash=$1',[failedHash])).rows[0].n,0)
+    assert.ok(!JSON.stringify(failureBody).includes(password))
+    console.log('PASS failed registration preserves generic response and removes its pending state')
     const refreshed = await fetch(`${origin}/v2/auth/refresh`, {method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({refresh_token:session.refresh_token,device_id:id})})
     assert.equal(refreshed.status,200)
     console.log('PASS preserved email lookup key: real login, current-key JWT, profile, password rejection, duplicate prevention and refresh')

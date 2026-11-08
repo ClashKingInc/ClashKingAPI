@@ -24,9 +24,14 @@ export function legendSeasonFinish(season: string): number {
 }
 
 
-/** Date-only legacy identifiers have no proven boundary semantics. Preserve
- * them as labels instead of pretending their date is a 05:00 season finish. */
+/** Monthly IDs are the original Legend seasons. Dated IDs at the new calendar
+ * boundaries and official v2 IDs identify the newer 28-day Legend seasons. */
 export function legendHistoryWindow(season: string): { start: Date; end: Date } | null {
+  if (/^\d{4}-\d{2}-\d{2}$/u.test(season)) {
+    const end = Date.parse(`${season}T05:00:00Z`)
+    if (!Number.isFinite(end) || new Date(end).toISOString().slice(0, 10) !== season || end < anchor || (end - anchor) % period !== 0) return null
+    return { start: new Date(end - period), end: new Date(end) }
+  }
   if (!/^v2-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/u.test(season) && !/^\d{4}-(0[1-9]|1[0-2])$/u.test(season)) return null
   const finish = legendSeasonFinish(season)
   if (!Number.isFinite(finish)) return null

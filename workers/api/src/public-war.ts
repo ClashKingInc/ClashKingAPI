@@ -99,7 +99,9 @@ export const queryClanWars = (rawTag: string, query: URLSearchParams, warlog: bo
     const { members: _opponentMembers, ...opponent } = war.opponent
     const difference = clan.stars - opponent.stars || clan.destructionPercentage - opponent.destructionPercentage
     return { result: difference > 0 ? "win" : difference < 0 ? "lose" : "tie", type: war.type,
-      endTime: war.endTime, teamSize: war.teamSize, attacksPerMember: war.attacksPerMember, clan, opponent }
+      // Full CWL wars omit the official field, but war-log entries require the
+      // one-attack rule. Never apply that fallback to other war types.
+      endTime: war.endTime, teamSize: war.teamSize, attacksPerMember: war.type === "cwl" ? 1 : war.attacksPerMember, clan, opponent }
   }) }
 })
 

@@ -219,6 +219,9 @@ try {
  assert(initializedWar?.stats.cwl.missedAttacks===1,'Initialization discarded CWL missed attack because the official projection omits attacksPerMember');
  assert(initializedWar.wars.find(row=>row.war_data.type==='cwl')?.war_data.attacksPerMember===undefined,'Initialization must retain the official CWL omission');
  console.log('PASS actual API initialization: CWL missed attack counted from canonical archive while official payload omits allowance');
+ const publicWarlog=await request('/v2/clan/'+encodeURIComponent(clan)+'/warlog?type=cwl');
+ assert(publicWarlog.items.length>0&&publicWarlog.items.every(war=>war.attacksPerMember===1),'Public CWL warlog must encode the required one-attack count');
+ console.log('PASS actual public CWL warlog: completed archives encode the required one-attack allowance');
  console.log(JSON.stringify({checks:['zero-roster family context','actual family discovery helper over HTTP','unassigned new-roster preview','explicit create Apply','assigned re-proposal rejected','cross-server403','family-metric cross-server403','non-family player403','private metric400','family no-history null','unassigned 40-day hit included in60days','90-day hit excluded','empty attached roster ranking proposal','no-history null','missed hits 1 and 2','participation50percent','Wilson interval actual sample','no-attack null confidence','membership preview Apply','stale409','revision-checked add Undo','move preview Apply','remove preview Apply','concurrent unassigned Apply statuses201/409','one persisted concurrent assignment','missing profile rejected409'],externalAIRequests:0}));
 } finally {
  if(child&&child.exitCode===null){child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),new Promise(r=>setTimeout(r,5000))]);}

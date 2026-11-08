@@ -12,35 +12,31 @@ interface HistoryRow {
   season: string; player_tag: string; player_name: string; exp_level: number; trophies: number;
   attack_wins: number; defense_wins: number; rank: number; clan_tag: string | null;
   clan_name: string | null; clan_badge_token: string | null; league_tier_id: number | null;
-  league_id: number | null; league_snapshot: unknown; population: number | null;
+  population: number | null;
 }
 type HistoryItem = typeof LegendHistoryItem.Type
 const failure = (cause: unknown) => new DatabaseFailure({ cause, message: "Legend history query failed" })
-const object = (value: unknown): Record<string, unknown> | undefined => {
-  if (typeof value === "string") { try { return object(JSON.parse(value)) } catch { return undefined } }
-  return value !== null && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined
-}
-
-function historicalLeague(row: HistoryRow, namespace: "legacy" | "tier"): NonNullable<HistoryItem["league"]> | null {
-  const id = namespace === "tier" ? row.league_tier_id : row.league_id
-  if (id == null || id <= 0) return null
-  const raw = object(object(row.league_snapshot)?.[namespace === "tier" ? "leagueTier" : "league"])
-  const supplied = raw?.id === id ? raw : undefined
-  // Source labels/icons win. A tier-only catalog is never used for legacy IDs.
-  // If legacy source metadata was lost, retain its ID with an unknown label.
-  const fallback = namespace === "tier" ? lookupStaticItem("league_tiers", id) : undefined
-  const name = typeof supplied?.name === "string" ? supplied.name : fallback?.name
-  const icons = object(supplied?.iconUrls) ?? object(fallback?.iconUrls)
-  const iconUrls = Object.fromEntries(["tiny", "small", "medium", "large"].flatMap(key => typeof icons?.[key] === "string" ? [[key, icons[key]]] : [])) as Record<string, string>
-  return { id, namespace, ...(name === undefined ? {} : { name }), ...(Object.keys(iconUrls).length ? { iconUrls } : {}) }
+function historicalLeague(row: HistoryRow): NonNullable<HistoryItem["league"]> | null {
+  // This table contains Legend finishes only. Monthly source IDs identify the
+  // original single Legend league, regardless of today's tier ID catalog.
+  if (/^\d{4}-(0[1-9]|1[0-2])$/u.test(row.season)) {
+    return { id: 29000022, namespace: "legacy", name: "Legend League" }
+  }
+  // The newer dated/v2 seasons use the existing stored tier ID. Do not map an
+  // old ranking-category ID to an unrelated current tier such as Warrior I.
+  if (!legendHistoryWindow(row.season) || row.league_tier_id == null || row.league_tier_id <= 0) return null
+  const id = row.league_tier_id, reference = lookupStaticItem("league_tiers", id)
+  const name = reference?.name.startsWith("Legend League") ? reference.name : undefined
+  return { id, namespace: "tier", ...(name === undefined ? {} : { name }) }
 }
 
 function item(row: HistoryRow): HistoryItem {
-  const window = legendHistoryWindow(row.season), tier = historicalLeague(row, "tier")
+  const window = legendHistoryWindow(row.season), league = historicalLeague(row)
+  const tier = league?.namespace === "tier" ? league : undefined
   return {
     name: row.player_name, tag: row.player_tag, season: row.season,
     seasonStart: window?.start.toISOString() ?? null, seasonEnd: window?.end.toISOString() ?? null,
-    league: tier ?? historicalLeague(row, "legacy"), population: row.population,
+    league, population: row.population,
     expLevel: row.exp_level, trophies: row.trophies, attackWins: row.attack_wins,
     defenseWins: row.defense_wins, rank: row.rank,
     ...(row.clan_tag !== null || row.clan_name !== null || row.clan_badge_token !== null ? { clan: {

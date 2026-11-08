@@ -13,46 +13,43 @@ mixed compatibility route share `workers/api/src/legend-history.ts`. The app
 loads Legend history directly rather than fetching mixed history and filtering
 it afterward. No third Legend route or duplicate source table is introduced.
 
-## Original league metadata
+## Existing storage and season systems
 
-The response's nullable `league` identifies its `namespace` (`legacy` or `tier`),
-original `id`, and any recorded `name` and `iconUrls`. Recorded names/icons take
-precedence over the current tier catalog. Only a recorded tier ID can use the
-matching tier-catalog fallback. A legacy ID is never resolved through that catalog.
-The old `leagueTier` field remains compatible for an actually recorded tier.
+`legend_history` remains unchanged. Its existing `season` and `league_tier_id`
+columns are sufficient for this split. No migration, new columns, snapshots or
+historical rewrite are required.
 
-The official ranking endpoint's category ID is not evidence of a player's original
-league. Missing source IDs remain null. Tracking preserves the original `league`
-and `leagueTier` objects before typed decoding can lose omitted fields. The legacy
-importer also retains those objects when supplied, but it must not be run as an
-incidental historical repair: that importer rebuilds its destination.
+Monthly source identifiers (`YYYY-MM`) identify the original single Legend league.
+Dated identifiers on the newer 28-day calendar (`YYYY-MM-DD`) and official `v2-...`
+identifiers identify the newer Legend system. The API interprets the existing
+stored tier ID in that context. It never uses a legacy monthly ID to reconstruct
+one of today's tiers. A reused ranking-category ID is not resolved as an unrelated
+current Ranked tier.
 
-The authoritative schema is Goose migration `072_legend_history_source.sql` in
-`clashking_schemas/database/timescale`. It adds nullable `league_id integer` and
-`league_snapshot jsonb` columns to `legend_history`. The snapshot is an object
-containing the recorded `league` and/or `leagueTier` source objects. Missing new
-source fields do not erase retained metadata during upsert. Raw `season` is unchanged.
-
-Apply migration 072 before releasing the updated writer or API. A reader/writer
-rollback should retain both columns. Goose Down deliberately refuses to erase
-populated source metadata; export/preserve it before any deliberate schema rollback.
+The nullable response `league` describes that interpretation using `namespace`
+(`legacy` or `tier`), `id` and a known name. The existing `leagueTier` compatibility
+field remains only for dated/tier records. Missing or unrecognized metadata does
+not invent a specific current tier. The API cannot return original source icons
+or labels that were never stored. There is no new Tracking history writer or
+importer change in this release, and the destructive one-shot importer must not be
+run incidentally.
 
 ## Time and population
 
 `seasonStart` and `seasonEnd` are nullable UTC timestamps. Known monthly and
 `v2-...` seasons use the established Legend calendar, including the September 2025
-transition. Known unfinished seasons are excluded. Date-only legacy identifiers
-with unproven boundary semantics remain raw with null bounds; unbounded history
-retains them, while explicit `time[after]`/`time[before]` queries cannot match them.
+transition. Known unfinished seasons are excluded. Date-only identifiers on established 28-day boundaries use that calendar.
+Unrecognized identifiers remain raw with null bounds; unbounded history retains
+them, while explicit `time[after]`/`time[before]` queries cannot match them.
 For known seasons, the time filter compares the season end with the requested range.
 
 `population` means the highest retained rank for that season. It is not a census
 of every Legend player. The API uses a descending-rank lookup per requested season
 against the existing `(season, rank)` index instead of aggregating all season rows.
 
-Expo preserves the namespace, source icon URLs and nullable calendar bounds. Its
-history screen prefers a recorded icon, then a matching recorded tier name. Unknown
-metadata omits the badge; a date never implies Legend I. The screen displays only
+Expo preserves the interpreted namespace and nullable calendar bounds. Its
+history screen uses the matching known league name; the original monthly system
+uses the original Legend badge. Unknown tiers never become Legend I. The screen displays only
 API-proven date bounds, or the unchanged raw identifier when bounds are unknown.
 
 ## CWL is a separate history

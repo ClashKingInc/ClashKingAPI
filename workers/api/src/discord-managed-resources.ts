@@ -2,7 +2,7 @@ import { DecimalSnowflake } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 import { DiscordApi } from "./discord-api.js"
-import { Conflict, DatabaseFailure, NotFound, UpstreamUnavailable } from "./errors.js"
+import { Conflict, DatabaseFailure, Forbidden, NotFound, UpstreamUnavailable } from "./errors.js"
 
 const Channel = Schema.Struct({ id: DecimalSnowflake, guild_id: DecimalSnowflake, type: Schema.Number })
 const Webhook = Schema.Struct({ id: DecimalSnowflake, guild_id: DecimalSnowflake, channel_id: DecimalSnowflake, type: Schema.Number })
@@ -23,6 +23,17 @@ export const lockServerDiscordResources = (serverId: string) => Effect.gen(funct
   const rows = yield* sql<{ id: string }>`SELECT id FROM servers WHERE id = ${serverId} FOR UPDATE`
   if (rows.length !== 1) return yield* new NotFound({ message: "Server not found" })
 }).pipe(Effect.mapError((cause) => cause instanceof NotFound ? cause : new DatabaseFailure({ cause, message: "Discord resource server lock failed" })))
+
+// Re-enable against live Discord permissions. GET alone does not establish
+// Manage Channels; PATCH the existing name before retaining the destination.
+export const reusableCountdownChannel = (serverId: string, channelId: string) => Effect.gen(function* () {
+  const discord = yield* DiscordApi
+  const raw = yield* discord.request(`/channels/${channelId}`)
+  const channel = yield* decode(Schema.Struct({ id: DecimalSnowflake, guild_id: DecimalSnowflake, type: Schema.Number, name: Schema.String }), raw)
+  if (channel.guild_id !== serverId || channel.type !== 2) return undefined
+  yield* discord.request(`/channels/${channelId}`, { method: "PATCH", body: { name: channel.name } })
+  return channel.id
+}).pipe(Effect.catch((failure) => failure instanceof NotFound || failure instanceof Forbidden ? Effect.succeed(undefined) : Effect.fail(failure)))
 
 export const createCountdownChannel = (serverId: string, name: string) => Effect.gen(function* () {
   const discord = yield* DiscordApi

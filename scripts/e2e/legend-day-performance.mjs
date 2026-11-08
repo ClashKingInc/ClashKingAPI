@@ -8,6 +8,7 @@ import { verifyPersonalBaseLibrary } from "./personal-base-library.mjs"
 import { verifyAppSessionRefresh } from "./app-session-refresh.mjs"
 import { verifyEmailLookupKey } from './email-lookup-key.mjs'
 import { verifyCappedClanRankings } from "./capped-clan-rankings.mjs"
+import { verifyClanCountDistributions } from "./clan-count-distributions.mjs"
 import { verifyManualRefreshTargets } from "./manual-refresh-targets.mjs"
 import { verifyGuildListCache } from "./guild-list-cache.mjs"
 import { verifyAccountAvatars } from "./account-avatar.mjs"
@@ -93,6 +94,7 @@ try {
   await verifyRosterWarFilter({db,origin:`http://127.0.0.1:${port}`,botKey})
   await verifyEmailLookupKey({db,origin:`http://127.0.0.1:${port}`,signingKey,emailLookupKey})
   await verifyCappedClanRankings({db,origin:`http://127.0.0.1:${port}`})
+  await verifyClanCountDistributions({db,origin:`http://127.0.0.1:${port}`})
   await verifyManualRefreshTargets({db,origin:`http://127.0.0.1:${port}`,botKey})
   const endpoint=(extra='')=>`http://127.0.0.1:${port}/v2/stats/legend/performance?time[after]=${first}&time[before]=${last}${extra}`
   const response=await fetch(endpoint());const body=await response.json()

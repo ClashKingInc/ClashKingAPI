@@ -295,7 +295,7 @@ export type GroupedCountDimension =
 const groupedCountQueries: Readonly<Record<GroupedCountDimension, string>> = {
   townhall_level: "SELECT level AS townhall_level, total_count AS count FROM townhall_counts ORDER BY level",
   league_tier_id: "SELECT league_tier_id, player_count AS count FROM api_league_tier_counts ORDER BY league_tier_id",
-  location_id: "SELECT location_id, count(*)::bigint AS count FROM basic_clan GROUP BY location_id ORDER BY location_id NULLS LAST",
+  location_id: "SELECT bucket AS location_id, clan_count AS count FROM api_clan_distribution_counts WHERE dimension = 'location' ORDER BY bucket NULLS LAST",
   cwl_league_id: "SELECT cwl_league_id, clan_count AS count FROM war_league_counts ORDER BY cwl_league_id",
   capital_league_id: "SELECT capital_league_id, count(*)::bigint AS count FROM basic_clan GROUP BY capital_league_id ORDER BY capital_league_id NULLS LAST",
 }
@@ -316,11 +316,9 @@ export const queryGroupedCounts = (dimension: GroupedCountDimension) => database
 interface ClanMemberBinRow { min_members: number; max_members: number; count: number | string }
 export const queryClanMemberBins = database("Stats.counts.clan_member_bins", Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<ClanMemberBinRow>(`SELECT
-    CASE WHEN member_count BETWEEN 1 AND 50 THEN 1 + ((member_count - 1) / 5) * 5 ELSE member_count END AS min_members,
-    CASE WHEN member_count BETWEEN 1 AND 50 THEN 5 + ((member_count - 1) / 5) * 5 ELSE member_count END AS max_members,
-    count(*)::bigint AS count
-    FROM basic_clan GROUP BY 1,2 ORDER BY 1`)
+  const rows = yield* sql.unsafe<ClanMemberBinRow>(`SELECT bucket AS min_members,
+    upper_bound AS max_members, clan_count AS count
+    FROM api_clan_distribution_counts WHERE dimension = 'members' ORDER BY bucket`)
   const items = rows.map(row => ({ minMembers: Number(row.min_members), maxMembers: Number(row.max_members), count: n(row.count) }))
   return { totalClans: items.reduce((sum, item) => sum + item.count, 0), items }
 }))

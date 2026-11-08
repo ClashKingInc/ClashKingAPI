@@ -232,20 +232,35 @@ export function renderAuthEmail(message: AuthEmailMessage) {
   const footer = text("email.common.footer")
   const plain = `${title}\n\n${greeting}\n\n${text(`${prefix}plain_action`)}\n\n${text("email.common.code_label")}: ${message.code}\n\n${expiry}\n\n${security}\n\n${footer}\n`
   const escape = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&#34;").replaceAll("'", "&#39;")
+  // Use a compact red-only mark and text instead of a transparent white-arrow
+  // logo. Email clients can recolor backgrounds without recoloring image pixels.
   const html = `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title></head>
-<body style="margin:0;padding:0;background:#f4f4f4;color:#171719;font-family:Roboto,Arial,sans-serif;">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>${escape(title)}</title>
+<style>
+:root { color-scheme: light dark; supported-color-schemes: light dark; }
+@media (prefers-color-scheme: dark) {
+ .email-page { background-color:#161719 !important; }
+ .email-card { background-color:#222326 !important; border-color:#404247 !important; }
+ .email-heading { color:#ffffff !important; }
+ .email-copy { color:#e3e4e8 !important; }
+ .email-muted { color:#c4c6cc !important; }
+ .email-code { background-color:#351d20 !important; color:#ffb4b4 !important; border-color:#e87272 !important; }
+ .email-note { background-color:#202e3a !important; }
+ .email-footer { background-color:#1b1c1f !important; border-color:#404247 !important; }
+}
+</style></head>
+<body class="email-page" style="margin:0;padding:0;background:#f4f4f4;color:#171719;font-family:Roboto,Arial,sans-serif;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escape(preheader)}</div>
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f4f4;"><tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:600px;background:#ffffff;border:1px solid #dedee2;border-radius:12px;overflow:hidden;">
-<tr><td style="background:#0b0b0c;padding:22px 28px;border-bottom:4px solid #d90709;"><img src="https://assets.clashk.ing/logos/crown-arrow-dark-bg/ClashKing-1.png" width="174" alt="ClashKing" style="display:block;width:174px;max-width:100%;height:auto;border:0;"></td></tr>
-<tr><td style="padding:32px 28px 12px;"><h1 style="margin:0;font-size:28px;line-height:1.2;font-weight:800;letter-spacing:0;color:#171719;">${escape(title)}</h1></td></tr>
-<tr><td style="padding:8px 28px 0;font-size:16px;line-height:1.6;color:#333338;"><p style="margin:0 0 12px;">${escape(greeting)}</p><p style="margin:0;">${escape(body)}</p></td></tr>
-<tr><td align="center" style="padding:28px;"><div style="display:inline-block;padding:18px 24px;border:2px solid #bf0000;border-radius:12px;background:#fff6f6;color:#a90000;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:34px;line-height:1;font-weight:800;letter-spacing:8px;">${escape(message.code)}</div></td></tr>
-<tr><td style="padding:0 28px 16px;font-size:14px;line-height:1.5;color:#55555c;"><p style="margin:0;font-weight:700;">${escape(expiry)}</p></td></tr>
-<tr><td style="padding:0 28px 32px;font-size:14px;line-height:1.55;color:#55555c;"><div style="padding:14px 16px;background:#f2f7fb;border-left:4px solid #026cc2;border-radius:8px;">${escape(security)}</div></td></tr>
-<tr><td style="padding:20px 28px;background:#f7f7f8;border-top:1px solid #e5e5e8;font-size:12px;line-height:1.5;color:#6a6a72;">${escape(footer)}</td></tr>
+<table role="presentation" class="email-page" bgcolor="#f4f4f4" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f4f4f4;"><tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" class="email-card" bgcolor="#ffffff" width="600" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;background:#ffffff;border:1px solid #dedee2;border-radius:12px;overflow:hidden;">
+<tr><td style="padding:22px 28px;border-bottom:4px solid #d90709;"><table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr><td width="48" style="width:48px;vertical-align:middle;"><img src="https://assets.clashk.ing/logos/crown-red/CK-crown-red.png" width="48" height="31" alt="" style="display:block;width:48px;min-width:48px;max-width:48px;height:31px;border:0;"></td><td class="email-heading" style="padding-left:12px;color:#171719;font-size:24px;line-height:31px;font-weight:800;white-space:nowrap;">ClashKing</td></tr></table></td></tr>
+<tr><td style="padding:32px 28px 12px;"><h1 class="email-heading" style="margin:0;font-size:28px;line-height:1.2;font-weight:800;letter-spacing:0;color:#171719;">${escape(title)}</h1></td></tr>
+<tr><td class="email-copy" style="padding:8px 28px 0;font-size:16px;line-height:1.6;color:#333338;"><p style="margin:0 0 12px;">${escape(greeting)}</p><p style="margin:0;">${escape(body)}</p></td></tr>
+<tr><td align="center" style="padding:28px;"><div class="email-code" style="display:inline-block;padding:18px 24px;border:2px solid #bf0000;border-radius:12px;background:#fff6f6;color:#a90000;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:34px;line-height:1;font-weight:800;letter-spacing:8px;">${escape(message.code)}</div></td></tr>
+<tr><td class="email-muted" style="padding:0 28px 16px;font-size:14px;line-height:1.5;color:#55555c;"><p style="margin:0;font-weight:700;">${escape(expiry)}</p></td></tr>
+<tr><td class="email-muted" style="padding:0 28px 32px;font-size:14px;line-height:1.55;color:#55555c;"><div class="email-note" style="padding:14px 16px;background:#f2f7fb;border-left:4px solid #026cc2;border-radius:8px;">${escape(security)}</div></td></tr>
+<tr><td class="email-footer email-muted" style="padding:20px 28px;background:#f7f7f8;border-top:1px solid #e5e5e8;font-size:12px;line-height:1.5;color:#6a6a72;">${escape(footer)}</td></tr>
 </table>
 </td></tr></table>
 </body></html>`

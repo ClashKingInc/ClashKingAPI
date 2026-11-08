@@ -91,7 +91,9 @@ export const queryInitializationWarStats = (players: readonly string[], clans: r
       aggregate.name ||= member.name; aggregate.townhallLevel = Math.max(aggregate.townhallLevel, member.townhallLevel)
       aggregate.attacks.push(...member.attacks); aggregate.defenses.push(...member.defenses)
       const source = original.get(member.tag)
-      const playerWar = { war_data: clean, members: [member], missedAttacks: Math.max(0, (clean.attacksPerMember ?? 0) - (source?.attacks?.length ?? 0)), missedDefenses: source?.bestOpponentAttack ? 0 : 1 }
+      // The official projection omits the CWL allowance. Compute from the
+      // canonical archive so a player who missed that round still counts.
+      const playerWar = { war_data: clean, members: [member], missedAttacks: Math.max(0, entry.war.attacksPerMember - (source?.attacks?.length ?? 0)), missedDefenses: source?.bestOpponentAttack ? 0 : 1 }
       aggregate.wars.push(playerWar); store.set(member.tag, aggregate)
       bytes += new TextEncoder().encode(JSON.stringify(playerWar)).byteLength
     }

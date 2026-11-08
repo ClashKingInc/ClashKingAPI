@@ -99,7 +99,7 @@ export const queryClanWars = (rawTag: string, query: URLSearchParams, warlog: bo
     const { members: _opponentMembers, ...opponent } = war.opponent
     const difference = clan.stars - opponent.stars || clan.destructionPercentage - opponent.destructionPercentage
     return { result: difference > 0 ? "win" : difference < 0 ? "lose" : "tie", type: war.type,
-      endTime: war.endTime, teamSize: war.teamSize, attacksPerMember: war.attacksPerMember ?? 1, clan, opponent }
+      endTime: war.endTime, teamSize: war.teamSize, attacksPerMember: war.attacksPerMember, clan, opponent }
   }) }
 })
 

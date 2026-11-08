@@ -4,11 +4,14 @@ export async function startBotCustomizationProvider(){
  const writes=[];
  const control={failNextReset:false,failWebhookReads:false,webhookReads:0,guilds:[]};
  const profiles=new Map();
+ const users=new Map(),userReads=[];
  const hooks=new Map(), webhookCreates=[];
  const server=createServer(async(req,res)=>{
   res.setHeader('content-type','application/json');
   if(req.url==='/api/v10/users/@me/guilds?limit=200&with_counts=true'){res.end(JSON.stringify(control.guilds));return;}
   if(req.url==='/api/v10/users/@me'){res.end(JSON.stringify({id:'999999999999999999',username:'ClashKing'}));return;}
+  const user=/^\/api\/v10\/users\/(\d+)$/.exec(req.url??'');
+  if(user){userReads.push(user[1]);const value=users.get(user[1]);if(!value)res.statusCode=404;res.end(JSON.stringify(value??{message:'Unknown User'}));return;}
   const channel=/^\/api\/v10\/channels\/(99999999999999490[1234])$/.exec(req.url??'');
   if(channel){const id=channel[1];res.end(JSON.stringify({id,guild_id:id.endsWith('4')?'999999999999995903':'999999999999995901',type:id.endsWith('3')?11:0,...(id.endsWith('3')?{parent_id:'999999999999994901'}:{})}));return;}
   const webhookList=/^\/api\/v10\/channels\/(99999999999999490[124])\/webhooks$/.exec(req.url??'');
@@ -40,5 +43,5 @@ export async function startBotCustomizationProvider(){
   res.statusCode=404;res.end(JSON.stringify({message:'Unexpected local Discord request'}));
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- return {set guilds(value){control.guilds=value},get webhookReads(){return control.webhookReads},set failWebhookReads(value){control.failWebhookReads=value},webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
+ return {users,userReads,set guilds(value){control.guilds=value},get webhookReads(){return control.webhookReads},set failWebhookReads(value){control.failWebhookReads=value},webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
 }

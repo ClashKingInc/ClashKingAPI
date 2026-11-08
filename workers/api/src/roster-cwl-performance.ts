@@ -3,6 +3,9 @@ import { SqlClient } from "effect/sql"
 import { DatabaseFailure } from "./errors.js"
 import { forEachArchiveWar } from "./war-archive.js"
 import { archiveAttackFacts } from "./war-archive-model.js"
+import { lookupStaticItem } from "./static-metadata.js"
+
+interface CwlWarRow { player_tag: string; season: string; war_id: string; league_id: number | null }
 
 interface Totals {
   completedWars: number; attacks: number; triples: number; attackStars: number;
@@ -26,19 +29,20 @@ const present = (v: Totals) => ({ ...v,
 /** The caller authorizes tags. Seasons come from group round identities, never
  * war end-months (a delayed round can cross a month boundary). A participant
  * must appear in a completed war lineup, including a lineup with zero attacks. */
-export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: number, now: Date, options: { sinceSeason?: string; clanTags?: readonly string[] } = {}) => Effect.gen(function* () {
+export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: number, now: Date, options: { sinceSeason?: string; untilSeason?: string; clanTags?: readonly string[] } = {}) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   // A family-scoped request already identifies the relevant groups. Starting
   // from every player's lifetime wars also expands years of opponents' groups
   // and defeats chunk/index pruning for an otherwise small calendar request.
-  const rows = yield* (options.clanTags !== undefined ? sql<{ player_tag: string; season: string; war_id: string }>`
+  const rows = yield* (options.clanTags !== undefined ? sql<CwlWarRow>`
     WITH candidate_groups AS MATERIALIZED (
-      SELECT DISTINCT groups.cwl_id, left(groups.season, 7) AS season, groups.rounds
+      SELECT DISTINCT groups.cwl_id, left(groups.season, 7) AS season, groups.rounds, groups.cwl_league_id
       FROM cwl_group_clans membership JOIN cwl_groups groups ON groups.cwl_id = membership.cwl_id
       WHERE membership.clan_tag = ANY(${[...(options.clanTags ?? [])]}::text[])
         AND (${options.sinceSeason ?? null}::text IS NULL OR left(groups.season, 7) >= ${options.sinceSeason ?? null})
+        AND (${options.untilSeason ?? null}::text IS NULL OR left(groups.season, 7) <= ${options.untilSeason ?? null})
     ), round_tags AS MATERIALIZED (
-      SELECT DISTINCT groups.season, tag.value AS war_tag
+      SELECT DISTINCT groups.season, groups.cwl_league_id AS league_id, tag.value AS war_tag
       FROM candidate_groups groups
       CROSS JOIN LATERAL jsonb_array_elements(groups.rounds) round(value)
       CROSS JOIN LATERAL jsonb_array_elements_text(
@@ -49,13 +53,13 @@ export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: 
       SELECT history.player_tag, unnest(history.war_ids) AS war_id
       FROM player_war_history history WHERE history.player_tag = ANY(${[...tags]}::text[])
     )
-    SELECT DISTINCT history.player_tag, groups.season, war.war_id::text
+    SELECT DISTINCT history.player_tag, groups.season, groups.league_id, war.war_id::text
     FROM round_tags groups JOIN wars war ON war.war_tag = groups.war_tag
     JOIN roster_wars history ON history.war_id = war.war_id
     WHERE war.war_type = 'cwl' AND lower(war.state) IN ('warended', 'ended') AND war.end_time <= ${now}
       AND (war.clan_tag = ANY(${[...(options.clanTags ?? [])]}::text[]) OR war.opponent_tag = ANY(${[...(options.clanTags ?? [])]}::text[]))
     ORDER BY season DESC, war_id DESC
-  ` : sql<{ player_tag: string; season: string; war_id: string }>`
+  ` : sql<CwlWarRow>`
     WITH selected_wars AS MATERIALIZED (
       SELECT DISTINCT history.player_tag, war.war_id, war.war_tag, war.clan_tag, war.opponent_tag
       FROM player_war_history history
@@ -63,18 +67,20 @@ export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: 
       JOIN wars war ON war.war_id = ids.war_id
       WHERE history.player_tag = ANY(${[...tags]}::text[])
         AND war.war_type = 'cwl' AND lower(war.state) IN ('warended', 'ended') AND war.end_time <= ${now}
-        AND (${options.clanTags === undefined} OR war.clan_tag = ANY(${[...(options.clanTags ?? [])]}::text[])
-          OR war.opponent_tag = ANY(${[...(options.clanTags ?? [])]}::text[]))
+        -- A season's rounds cannot finish before its month starts. Keep only
+        -- this lower bound: late rounds may finish in the following month.
+        AND (${options.sinceSeason ?? null}::text IS NULL OR war.end_time >= ${options.sinceSeason ? options.sinceSeason + "-01T00:00:00Z" : null}::timestamptz)
     ), relevant_clans AS (
       SELECT clan_tag FROM selected_wars UNION SELECT opponent_tag FROM selected_wars
     ), candidate_groups AS MATERIALIZED (
-      SELECT DISTINCT groups.cwl_id, left(groups.season, 7) AS season, groups.rounds
+      SELECT DISTINCT groups.cwl_id, left(groups.season, 7) AS season, groups.rounds, groups.cwl_league_id
       FROM relevant_clans clan
       JOIN cwl_group_clans membership ON membership.clan_tag = clan.clan_tag
       JOIN cwl_groups groups ON groups.cwl_id = membership.cwl_id
       WHERE (${options.sinceSeason ?? null}::text IS NULL OR left(groups.season, 7) >= ${options.sinceSeason ?? null})
+        AND (${options.untilSeason ?? null}::text IS NULL OR left(groups.season, 7) <= ${options.untilSeason ?? null})
     ), round_tags AS MATERIALIZED (
-      SELECT DISTINCT groups.season, tag.value AS war_tag
+      SELECT DISTINCT groups.season, groups.cwl_league_id AS league_id, tag.value AS war_tag
       FROM candidate_groups groups
       CROSS JOIN LATERAL jsonb_array_elements(groups.rounds) round(value)
       CROSS JOIN LATERAL jsonb_array_elements_text(
@@ -82,7 +88,7 @@ export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: 
           ELSE COALESCE(round.value->'warTags', '[]'::jsonb) END
       ) tag(value)
     )
-    SELECT DISTINCT war.player_tag, groups.season, war.war_id::text
+    SELECT DISTINCT war.player_tag, groups.season, groups.league_id, war.war_id::text
     FROM selected_wars war JOIN round_tags groups ON groups.war_tag = war.war_tag
     ORDER BY season DESC, war_id DESC
   `).pipe(Effect.mapError(cause => new DatabaseFailure({ cause, message: "Unable to load participating CWL seasons" })))
@@ -90,6 +96,7 @@ export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: 
   for (const row of rows) {
     const list = byWar.get(row.war_id) ?? []; list.push(row); byWar.set(row.war_id, list)
   }
+  const clanHistory = new Map(tags.map(tag => [tag, new Map<string, {season:string; clanTag:string; clanName:string; leagueId:number|null; totals:Totals}>()]))
   const seasons = new Map(tags.map(tag => [tag, new Map<string, Totals>()]))
   // Process newest seasons first. Verify lineups before counting a season, so a
   // stale index or a registered-but-benched player cannot displace a real one.
@@ -110,6 +117,7 @@ export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: 
         if (!side || options.clanTags !== undefined && !options.clanTags.includes(side.tag)) continue
         const playerSeasons = seasons.get(row.player_tag)!
         const total = playerSeasons.get(season) ?? empty()
+        const before = { ...total }
         total.completedWars++; total.expectedAttacks++ // CWL allows one attack per lineup.
         for (const fact of facts) {
           if (fact.attackerTag === row.player_tag) {
@@ -121,6 +129,12 @@ export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: 
             total.defenseStars += fact.stars; total.defenseDestruction += fact.destructionPercentage
           }
         }
+        // Preserve the actual historical player side and league, not today's clan.
+        const clanKey = `${season}:${side.tag}`
+        const clans = clanHistory.get(row.player_tag)!
+        const entry = clans.get(clanKey) ?? {season, clanTag:side.tag, clanName:side.name || side.tag, leagueId:row.league_id, totals:empty()}
+        for (const key of Object.keys(before) as (keyof Totals)[]) entry.totals[key] += total[key] - before[key]
+        clans.set(clanKey, entry)
         playerSeasons.set(season, total)
       }
     }))
@@ -131,6 +145,9 @@ export const queryRosterCwlPerformance = (tags: readonly string[], seasonCount: 
     for (const [, total] of entries) for (const key of Object.keys(summary) as (keyof Totals)[]) summary[key] += total[key]
     return [tag, { requestedSeasons: seasonCount, observedSeasons: entries.length,
       coverage: "observed_completed_lineups", lateAttacks: null, lateAttackTimingAvailable: false,
+      clans: [...clanHistory.get(tag)!.values()].map(({totals, ...clan}) => ({...clan,
+        leagueName: clan.leagueId == null ? null : lookupStaticItem("war_leagues", clan.leagueId)?.name ?? null,
+        ...present(totals)})),
       summary: present(summary), seasons: entries.map(([season, total]) => ({ season, ...present(total) })) }] as const
   }))
 })

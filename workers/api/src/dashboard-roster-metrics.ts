@@ -24,16 +24,19 @@ export const rosterSnapshotMetricKeys: Readonly<Record<string, string>> = {
 export const normalizeRosterMetricParameters = (metricId: string, parameters: Readonly<Record<string, JsonValue>> = {}) => {
   const normalized: Record<string, JsonValue> = {}
   if (metricId === "cwl.performance_history") {
+    const season = parameters.season
+    if (season !== undefined && (typeof season !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(season))) throw new Error("season must be YYYY-MM")
+    if (season !== undefined && (parameters.windowMonths !== undefined || parameters.seasonCount !== undefined)) throw new Error("Choose an exact season, calendar window, or participation count")
     const months = parameters.windowMonths
     if (months !== undefined && (typeof months !== "number" || !Number.isInteger(months) || months < 1 || months > 24))
       throw new Error("windowMonths must be between 1 and 24")
-    const count = months ?? parameters.seasonCount ?? 6
+    const count = season === undefined ? months ?? parameters.seasonCount ?? 6 : 1
     if (typeof count !== "number" || !Number.isInteger(count) || count < 1 || count > 24)
       throw new Error("seasonCount must be between 1 and 24")
     if (parameters.familyOnly !== undefined && typeof parameters.familyOnly !== "boolean") throw new Error("familyOnly must be boolean")
     if (parameters.windowDays !== undefined || parameters.warCount !== undefined || parameters.warType !== undefined)
       throw new Error("CWL performance uses participating seasons or calendar months, not individual wars")
-    return { seasonCount: count, ...(months === undefined ? {} : { windowMonths: months }), ...(parameters.familyOnly === true ? { familyOnly: true } : {}) }
+    return { ...(season === undefined ? { seasonCount: count } : { season }), ...(months === undefined ? {} : { windowMonths: months }), ...(parameters.familyOnly === true ? { familyOnly: true } : {}) }
   }
   let window = ["war.missed_attacks", "war.participation", "war.hit_rate_confidence", "war.hit_rate", "war.hit_rate.30d", "war.regular_hit_rate", "war.cwl_hit_rate", "benchmark.th_hit_rate", "benchmark.th_hit_rate_delta", "benchmark.th_hit_rate_delta.30d"].includes(metricId)
     ? 30 : ["trophies.delta", "trophies.delta.7d"].includes(metricId) ? 7 : 0
@@ -228,7 +231,9 @@ export const queryPlayerWarMetric = (
   const values = new Map<string, JsonValue>(members.map(({ tag }) => [tag, null]))
   if (!members.length) return values
   if (metricId === "cwl.performance_history") {
-    const history = yield* queryRosterCwlPerformance(members.map(member => member.tag), Number(parameters.seasonCount ?? 6), now, {
+    yield* prepareStaticMetadata(yield* WorkerEnvironment, ["war_leagues"])
+    const history = yield* queryRosterCwlPerformance(members.map(member => member.tag), Number(parameters.season === undefined ? parameters.seasonCount ?? 6 : 1), now, {
+      ...(typeof parameters.season === "string" ? { sinceSeason: parameters.season, untilSeason: parameters.season } : {}),
       ...(parameters.windowMonths === undefined ? {} : { sinceSeason: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - Number(parameters.windowMonths) + 1, 1)).toISOString().slice(0, 7) }),
       ...(familyClanTags === undefined ? {} : { clanTags: familyClanTags }),
     })
@@ -359,7 +364,15 @@ const goText = (value: JsonValue | undefined): string => value === null || value
   : Array.isArray(value) ? `[${value.map(goText).join(" ")}]`
   : typeof value === "object" ? `map[${Object.keys(value).sort().map((key) => `${key}:${goText((value as Readonly<Record<string, JsonValue>>)[key])}`).join(" ")}]` : String(value)
 
+// Computed cells may keep a human label separate from their ordering value.
+// This also prevents numeric league strength from leaking into exports/UI.
+const rosterSortValue = (value: JsonValue | undefined): JsonValue | undefined =>
+  value && typeof value === "object" && !Array.isArray(value) && "label" in value && "sortValue" in value && typeof value.label === "string" &&
+    (typeof value.sortValue === "number" || typeof value.sortValue === "string") ? value.sortValue : value
+
 export const compareRosterValues = (left: JsonValue | undefined, right: JsonValue | undefined): number => {
+  left = rosterSortValue(left)
+  right = rosterSortValue(right)
   if (left == null && right == null) return 0
   if (left == null) return 1
   if (right == null) return -1
@@ -387,7 +400,12 @@ export const presentRosterView = (rows: readonly Row[], spec: Spec): Row[] => {
   const sorted = rows.filter((row) => (spec.filters ?? []).every((filter) => matchesFilter(row.values[filter.columnId], filter.operator, filter.value)))
     .sort((left, right) => {
       for (const item of spec.sort ?? []) {
-        const comparison = compareRosterValues(left.values[item.columnId], right.values[item.columnId])
+        const a = left.values[item.columnId], b = right.values[item.columnId]
+        // Missing observations stay last in both directions; reversing a
+        // numeric comparison must not promote unknown players to first place.
+        if (a == null && b != null) return 1
+        if (b == null && a != null) return -1
+        const comparison = compareRosterValues(a, b)
         if (comparison !== 0) return item.direction === "desc" ? -comparison : comparison
       }
       return left.playerTag < right.playerTag ? -1 : left.playerTag > right.playerTag ? 1 : 0

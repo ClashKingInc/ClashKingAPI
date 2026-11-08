@@ -1,3 +1,5 @@
+import { BotPlayerLegendHistoryEndpoint } from "./bot-public.js"
+export { BotPlayerLegendHistoryEndpoint as PlayerLegendHistoryEndpoint } from "./bot-public.js"
 import { AppConfigEndpoint } from "./app-config.js"
 export { BotClanRankingsEndpoint as ClanCurrentRankingsEndpoint, ClanRankingsResponse } from "./bot-public.js"
 import {
@@ -164,6 +166,7 @@ export { GuildsEndpoint } from "./dashboard-server.js"
 import { DashboardGrantEndpoint, DashboardExchangeEndpoint, DashboardScopedRefreshEndpoint, DashboardScopedLogoutEndpoint } from "./dashboard-access.js"
 import { HomeLayoutGetEndpoint, HomeLayoutPutEndpoint, PlayerFarmingEndpoint, ClanDonationSummaryEndpoint, PlayerActivityEndpoint } from "./home-layout.js"
 export const expoEndpoints = {
+  playerLegendHistory: BotPlayerLegendHistoryEndpoint,
   dashboardGrant: DashboardGrantEndpoint,
   dashboardExchange: DashboardExchangeEndpoint,
   dashboardScopedRefresh: DashboardScopedRefreshEndpoint,

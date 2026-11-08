@@ -99,8 +99,8 @@ export const serviceBindingTransport = (binding: ApiBinding): ApiTransport => ({
 })
 
 export interface UnauthorizedRefreshOptions {
-  readonly authorizeReplay?: (request: Request) => Promise<Request> | Request
-  readonly refresh: () => Promise<void>
+  readonly authorizeReplay?: (request: Request, originalRequest: Request) => Promise<Request> | Request
+  readonly refresh: (request: Request) => Promise<void>
   readonly shouldRefresh?: (request: Request) => boolean
   readonly transport: ApiTransport
 }
@@ -126,7 +126,9 @@ export const withUnauthorizedRefresh = (options: UnauthorizedRefreshOptions): Ap
           catch: (cause) => new TransportError({ cause, message: "ClashKing unauthorized response cleanup failed" }),
         })
         if (inFlight === undefined) {
-          const refresh = Promise.resolve().then(() => options.refresh()).finally(() => {
+          // The caller may inspect the rejected Authorization header to avoid
+          // rotating again when a late 401 belongs to an older access token.
+          const refresh = Promise.resolve().then(() => options.refresh(request)).finally(() => {
             if (inFlight === refresh) inFlight = undefined
           })
           inFlight = refresh
@@ -155,7 +157,7 @@ export const withUnauthorizedRefresh = (options: UnauthorizedRefreshOptions): Ap
         const authorizedReplay = options.authorizeReplay === undefined
           ? replay
           : yield* Effect.tryPromise({
-              try: () => Promise.resolve(options.authorizeReplay?.(replay) ?? replay),
+              try: () => Promise.resolve(options.authorizeReplay?.(replay, request) ?? replay),
               catch: (cause) => new TransportError({
                 cause,
                 message: "ClashKing session replay authorization failed",

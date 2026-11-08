@@ -402,8 +402,18 @@ const CWLLeagueRankingsResponse = Schema.Struct({
   items: Schema.Array(CWLStanding),
 })
 
-const LegendHistoryItem = Schema.Struct({
+export const HistoricalLeagueReference = Schema.Struct({
+  id: Schema.Int,
+  namespace: Schema.Literals(["legacy", "tier"]),
+  name: OptionalString,
+  iconUrls: Schema.optionalKey(PublicIconUrls),
+})
+export const LegendHistoryItem = Schema.Struct({
   season: Schema.String,
+  seasonStart: Schema.NullOr(Schema.String),
+  seasonEnd: Schema.NullOr(Schema.String),
+  league: Schema.NullOr(HistoricalLeagueReference),
+  population: Schema.NullOr(Schema.Int),
   tag: Schema.String,
   name: Schema.String,
   expLevel: Schema.Number,
@@ -422,7 +432,7 @@ const LegendHistoryItem = Schema.Struct({
     iconUrls: Schema.optionalKey(PublicIconUrls),
   })),
 })
-const LegendHistoryResponse = Schema.Struct({ items: Schema.Array(LegendHistoryItem) })
+export const LegendHistoryResponse = Schema.Struct({ items: Schema.Array(LegendHistoryItem) })
 const ClanLegendSummaryResponse = Schema.Struct({
   seasons: Schema.Array(Schema.Struct({
     season: Schema.String,
@@ -531,7 +541,7 @@ export const BotPlayerTimersEndpoint = publicGet("botPlayerTimers", "/v2/player/
 export const BotPlayerWarStatsEndpoint = publicGet("botPlayerWarStats", "/v2/player/:tag/war/stats", ClashTagPath, WarHistoryQuery, PlayerWarStatsResponse, "Get player war statistics")
 export const BotPlayerWarAttacksEndpoint = publicGet("botPlayerWarAttacks", "/v2/player/:tag/war/attacks", ClashTagPath, WarHistoryQuery, PlayerWarAttacksResponse, "Get player war attacks")
 export const BotPlayerCwlHistoryEndpoint = publicGet("botPlayerCwlHistory", "/v2/player/:tag/cwl/history", ClashTagPath, Schema.Struct({ limit: OptionalNumber }), CWLPlayerHistoryResponse, "Get player CWL history")
-export const BotPlayerLegendHistoryEndpoint = publicGet("botPlayerLegendHistory", "/v2/player/:tag/legend-history", ClashTagPath, Schema.Struct({}), LegendHistoryResponse, "Get player Legend history")
+export const BotPlayerLegendHistoryEndpoint = publicGet("botPlayerLegendHistory", "/v2/player/:tag/legend-history", ClashTagPath, Schema.Struct(TimeWindowQuery), LegendHistoryResponse, "Get archived Legend finishes with original source league metadata. Known calendar windows exclude unfinished seasons; unnormalized legacy identifiers retain null boundaries and are omitted from explicit time ranges. Population is the highest retained season rank, not an estimate of all Legend players.")
 
 export const BotClanCachedEndpoint = publicGet("botClanCached", "/v2/clan/:tag/cached", ClashTagPath, Schema.Struct({}), ClanCachedResponse, "Get cached clan profile")
 export const BotClanHistoryEndpoint = publicGet("botClanHistory", "/v2/clan/:tag/history/changes", ClashTagPath, Schema.Struct({ type: Schema.optionalKey(Schema.Literals(["description", "clanLevel"])), ...TimeWindowQuery, limit: OptionalNumber }), ClanChangesResponse, "Get clan changes")

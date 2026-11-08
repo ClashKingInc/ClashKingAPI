@@ -13,9 +13,9 @@ import { leaderboardHistoryItem } from "./public-history.js"
 import { leaderboardLimit } from "./public-leaderboards.js"
 import { correctedJoinLeaveEvents, type JoinLeaveRow } from "./public-join-leave.js"
 import { forEachNewestPlayerWar } from "./war-archive.js"
-import { lookupStaticItem } from "./static-metadata.js"
 import { badgeUrls, archiveAttackFacts, clashTime, type ArchiveAttackFact } from "./war-archive-model.js"
 import locations from "./data/search-locations.json"
+import { queryCanonicalLegendHistory, queryCanonicalLegendSeason } from "./legend-history.js"
 
 const failure = (cause: unknown) => new DatabaseFailure({ cause, message: "Player public data query failed" })
 const uniqueTags = (rawTags: readonly string[]) => Effect.all([...new Set(rawTags)].map(publicTag)).pipe(Effect.map((tags) => [...new Set(tags)]))
@@ -68,44 +68,16 @@ export const queryMobilePlayerRankingsBatch = (rawTags: readonly string[]) => Ef
   return result
 })
 
-interface LegendRow {
-  season: string; player_tag: string; player_name: string; exp_level: number; trophies: number; attack_wins: number; defense_wins: number; rank: number;
-  clan_tag: string | null; clan_name: string | null; clan_badge_token: string | null; league_tier_id: number | null;
-}
-const legendItem = (row: LegendRow): typeof BotPlayerLegendHistoryEndpoint.response.Type.items[number] => {
-  const tier = row.league_tier_id === null ? undefined : lookupStaticItem("league_tiers", row.league_tier_id)
-  return { name: row.player_name, tag: row.player_tag, season: row.season, expLevel: row.exp_level, trophies: row.trophies,
-    attackWins: row.attack_wins, defenseWins: row.defense_wins, rank: row.rank,
-    ...(row.clan_tag !== null || row.clan_name !== null || row.clan_badge_token !== null ? { clan: {
-      ...(row.clan_name ? { name: row.clan_name } : {}), ...(row.clan_tag ? { tag: row.clan_tag } : {}),
-      ...(row.clan_badge_token ? { badgeUrls: badgeUrls(row.clan_badge_token) } : {}),
-    } } : {}),
-    ...(row.league_tier_id === null ? {} : { leagueTier: { id: row.league_tier_id, ...(tier ? { name: tier.name, ...(tier.iconUrls ? { iconUrls: tier.iconUrls } : {}) } : {}) } }),
-  }
-}
-export const queryPlayerLegendHistoryBatch = (rawTags: readonly string[], limit = 10) => Effect.gen(function* () {
-  const tags = yield* uniqueTags(rawTags), sql = yield* SqlClient.SqlClient
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) return yield* new InvalidRequest({ message: "Invalid Legend history limit" })
-  const result = new Map<string, Array<ReturnType<typeof legendItem>>>(tags.map((tag) => [tag, []]))
-  if (!tags.length) return result
-  const rows = yield* sql<LegendRow>`SELECT history.* FROM unnest(${tags}::text[]) requested(tag)
-    CROSS JOIN LATERAL (SELECT * FROM legend_history WHERE player_tag = requested.tag ORDER BY season DESC LIMIT ${limit}) history
-    ORDER BY history.player_tag, history.season DESC`.pipe(Effect.mapError(failure))
-  for (const row of rows) result.get(row.player_tag)!.push(legendItem(row))
-  return result
-})
-export const queryPlayerLegendHistory = (rawTag: string) => Effect.gen(function* () {
-  const tag = yield* publicTag(rawTag), sql = yield* SqlClient.SqlClient
-  const rows = yield* sql<LegendRow>`SELECT * FROM legend_history WHERE player_tag = ${tag} ORDER BY season DESC`.pipe(Effect.mapError(failure))
-  return { items: rows.map(legendItem) }
+export const queryPlayerLegendHistoryBatch = (rawTags: readonly string[], limit = 10) => queryCanonicalLegendHistory(rawTags, new URLSearchParams(), new Date(), limit)
+export const queryPlayerLegendHistory = (rawTag: string, query = new URLSearchParams(), now = new Date()) => Effect.gen(function* () {
+  const tag = yield* publicTag(rawTag), histories = yield* queryCanonicalLegendHistory([tag], query, now)
+  return { items: histories.get(tag)! }
 })
 export const queryLegendSeasonHistory = (season: string, query: URLSearchParams) => Effect.gen(function* () {
   if (!season.trim() || new TextEncoder().encode(season).length > 128) return yield* new InvalidRequest({ message: "Invalid season" })
   const limit = query.has("limit") ? Number(query.get("limit")) : 25
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) return yield* new InvalidRequest({ message: "Limit must be between 1 and 200" })
-  const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql<LegendRow>`SELECT * FROM legend_history WHERE season = ${season} ORDER BY rank LIMIT ${limit}`.pipe(Effect.mapError(failure))
-  return { items: rows.map(legendItem) }
+  return yield* queryCanonicalLegendSeason(season, limit)
 })
 
 const integerPath = (raw: string, label: string) => /^-?\d+$/u.test(raw) && Number.isSafeInteger(Number(raw))
@@ -254,7 +226,7 @@ const extraEndpoints: readonly AnyEndpoint[] = [BotPlayerRankingsEndpoint, BotPl
 const execute = (operation: string, path: Record<string, string>, query: URLSearchParams): Effect.Effect<unknown, ApiFailure, SqlClient.SqlClient | WorkerEnvironment> => {
   switch (operation) {
     case "botPlayerRankings": return queryPlayerRankings(path.tag!)
-    case "botPlayerLegendHistory": return queryPlayerLegendHistory(path.tag!)
+    case "botPlayerLegendHistory": return queryPlayerLegendHistory(path.tag!, query)
     case "botPlayerWarAttacks": return queryPlayerWarAttacks(path.tag!, query)
     case "botLegendSeason": return queryLegendSeasonHistory(path.season!, query)
     case "botClanCapitalLeaderboard": return queryCapitalGoldLeaderboard(path.locationId!, query)

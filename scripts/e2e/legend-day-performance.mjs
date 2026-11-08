@@ -1,7 +1,11 @@
+import { verifyLeagueHistory } from "./league-history.mjs"
 import { verifySharedViewImport } from "./shared-view-import.mjs"
 import { verifyRosterWarFilter } from "./roster-war-filter.mjs"
 import { verifyPublicDashboardCors } from "./public-dashboard-cors.mjs"
 import { verifyOperationalReads } from "./operational-reads.mjs"
+import { verifyModerationActors } from "./moderation-actors.mjs"
+import { verifyPersonalBaseLibrary } from "./personal-base-library.mjs"
+import { verifyAppSessionRefresh } from "./app-session-refresh.mjs"
 import { verifyEmailLookupKey } from './email-lookup-key.mjs'
 import { verifyCappedClanRankings } from "./capped-clan-rankings.mjs"
 import { verifyManualRefreshTargets } from "./manual-refresh-targets.mjs"
@@ -79,8 +83,12 @@ try {
     await new Promise(r=>setTimeout(r,500))
   }
   assert(ready,logs.slice(-2000))
+  await verifyLeagueHistory({db,origin:`http://127.0.0.1:${port}`})
   await verifyPublicDashboardCors({origin:`http://127.0.0.1:${port}`})
   await verifyOperationalReads({db,origin:`http://127.0.0.1:${port}`,botKey})
+  await verifyModerationActors({db,origin:`http://127.0.0.1:${port}`,botKey,profileProvider})
+  await verifyPersonalBaseLibrary({db,origin:`http://127.0.0.1:${port}`,signingKey})
+  if (process.env.CLASHKING_E2E_EXPO_REPO) await verifyAppSessionRefresh({db,origin:`http://127.0.0.1:${port}`,emailLookupKey})
   await verifySharedViewImport({db,origin:`http://127.0.0.1:${port}`,signingKey,botKey})
   await verifyRosterWarFilter({db,origin:`http://127.0.0.1:${port}`,botKey})
   await verifyEmailLookupKey({db,origin:`http://127.0.0.1:${port}`,signingKey,emailLookupKey})

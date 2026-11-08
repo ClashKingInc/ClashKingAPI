@@ -122,14 +122,15 @@ export const RankedGroupResponse = Schema.Struct({
   members: Schema.Array(RankedGroupMember),
 })
 
-export const RankedLeagueHistoryItem = Schema.Struct({
-  mode: Schema.Literal("ranked"),
+export const RankedHistoryItem = Schema.Struct({
   seasonId: Schema.String,
   leagueGroupId: Schema.String,
   league: LeagueReference,
   maxBattles: Schema.Int,
   ...RankedGroupMember.fields,
 })
+export const RankedHistoryResponse = Schema.Struct({ items: Schema.Array(RankedHistoryItem) })
+export const RankedLeagueHistoryItem = Schema.Struct({ mode: Schema.Literal("ranked"), ...RankedHistoryItem.fields })
 export const LegendLeagueHistoryItem = Schema.Struct({
   mode: Schema.Literal("legend"),
   season: Schema.String,
@@ -300,8 +301,10 @@ export const LegendPlayerComparisonsEndpoint = publicGet("getLegendPlayerCompari
   Schema.Struct({ playerTag: Schema.String }), NoQuery, LegendPlayerComparisonsResponse, "Compare real attack results on matching finalized Legend days")
 export const RankedGroupEndpoint = publicGet("getRankedLeagueGroup", "/v2/ranked/:seasonId/groups/:leagueGroupId",
   Schema.Struct({ seasonId: Schema.String, leagueGroupId: Schema.String }), NoQuery, RankedGroupResponse, "Get one Ranked league group")
+export const PlayerRankedHistoryEndpoint = publicGet("getPlayerRankedHistory", "/v2/player/:playerTag/ranked/history",
+  Schema.Struct({ playerTag: Schema.String }), TimeRangeQuery, RankedHistoryResponse, "Get retained Ranked tournament history, without mixing Legend leaderboard history.")
 export const PlayerLeagueHistoryEndpoint = publicGet("getPlayerLeagueHistory", "/v2/player/:playerTag/league/history",
-  Schema.Struct({ playerTag: Schema.String }), TimeRangeQuery, PlayerLeagueHistoryResponse, "Get a player's Ranked and completed Legend history")
+  Schema.Struct({ playerTag: Schema.String }), TimeRangeQuery, PlayerLeagueHistoryResponse, "Get retained Ranked finishes and completed Legend leaderboard finishes. mode distinguishes the two record shapes; league identifies the recorded tier and can be null for older Legend seasons. Legend history only includes players in the published season leaderboard; missing later seasons do not imply tracking stopped.")
 export const LeagueHitRateHistoryEndpoint = publicGet("getLeagueHitRateHistory", "/v2/stats/league/hit-rates",
   NoPathParams, LeagueHitRateQuery, LeagueHitRateHistoryResponse, "Get Ranked-season and Legend-day hit rates")
 export const LeagueTierStatisticsEndpoint = publicGet("getLeagueTierStatistics", "/v2/stats/league/tournaments/:seasonId/tiers/:leagueTierId",
@@ -322,6 +325,7 @@ export const leagueAnalyticsEndpoints = {
   legendPlayerComparisons: LegendPlayerComparisonsEndpoint,
   rankedGroup: RankedGroupEndpoint,
   playerLeagueHistory: PlayerLeagueHistoryEndpoint,
+  playerRankedHistory: PlayerRankedHistoryEndpoint,
   leagueHitRateHistory: LeagueHitRateHistoryEndpoint,
   leagueTierStatistics: LeagueTierStatisticsEndpoint,
   legendDays: LegendDaysEndpoint,

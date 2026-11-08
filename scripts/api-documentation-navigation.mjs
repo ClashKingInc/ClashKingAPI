@@ -61,6 +61,7 @@ const additions = new Map([
   ["GET /v2/player/{}/legend/season", "Player"],
   ["GET /v2/player/{}/legend/comparisons", "Player"],
   ["GET /v2/player/{}/league/history", "Player"],
+  ["GET /v2/player/{}/ranked/history", "Player"],
   ["GET /v2/player/{}/last-activity", "Player"],
   ["GET /v2/player/{}/ranked/{}/battlelog", "Player"],
   ["GET /v2/ranked/{}/groups/{}", "Player"],

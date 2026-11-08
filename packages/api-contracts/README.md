@@ -26,3 +26,12 @@ type Response = EndpointResponse<typeof endpoints.armySetups>
 
 Release candidates use exact `0.1.0-rc.N` versions and npm's `rc` dist-tag.
 Consumers pin an exact RC; stable releases follow semver and use `latest`.
+
+Legend history uses the existing `BotPlayerLegendHistoryEndpoint`; the Expo
+`PlayerLegendHistoryEndpoint` is an alias to the same route. Its nullable
+`league` reference preserves the recorded `legacy`/`tier` namespace, source name
+and icons, with nullable `seasonStart`/`seasonEnd` and highest-retained-rank
+`population`. Ranked tournaments use `PlayerRankedHistoryEndpoint`. The mixed
+`PlayerLeagueHistoryEndpoint` remains compatible. See
+[history contracts and storage](../../docs/league-history.md) before changing
+these historical meanings or removing the compatibility endpoint.

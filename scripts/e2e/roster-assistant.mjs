@@ -16,9 +16,10 @@ const require=createRequire(join(repo,'package.json'));
 const pg=require('pg'),{build}=require('esbuild');
 const {SignJWT}=await import(require.resolve('jose'));
 const {AI_NOTICE_VERSION}=await import('@clashking/api-contracts');
-const database=process.env.CLASHKING_E2E_DATABASE_URL??'postgres://clashking_local:clashking_local@127.0.0.1:54330/clashking_dev';
+const disposable=process.env.CLASHKING_DISPOSABLE_TIMESCALE==='1';
+const database=(disposable?process.env.TEST_DATABASE_URL:process.env.CLASHKING_E2E_DATABASE_URL)??'postgres://clashking_local:clashking_local@127.0.0.1:54330/clashking_dev';
 const databaseUrl=new URL(database);
-if(databaseUrl.protocol!=='postgres:'||databaseUrl.hostname!=='127.0.0.1'||databaseUrl.pathname!=='/clashking_dev'||databaseUrl.username!=='clashking_local')throw Error('Use the owned loopback clashking_dev database');
+if(databaseUrl.protocol!=='postgres:'||databaseUrl.hostname!=='127.0.0.1'||databaseUrl.pathname!==(disposable?'/clashking_test':'/clashking_dev')||databaseUrl.username!==(disposable?'clashking_test':'clashking_local'))throw Error('Use the owned loopback clashking_dev database');
 const port=Number(process.env.CLASHKING_E2E_API_PORT??8798);
 if(!Number.isInteger(port)||port<1024||port>65535)throw Error('Invalid local port');
 const occupied=await new Promise(resolve=>{const socket=createConnection({host:'127.0.0.1',port});socket.once('connect',()=>{socket.destroy();resolve(true)});socket.once('error',()=>resolve(false));});
@@ -31,7 +32,7 @@ const directory=mkdtempSync(join(tmpdir(),'ck-roster-feedback-'));
 const member=tag=>({tag,name:`Local ${tags.indexOf(tag)+1}`,townHallLevel:16,trophies:5000,role:'member',donations:0,donationsReceived:0,clanRank:1,previousClanRank:1,expLevel:200});
 const provider=createServer((req,res)=>{res.setHeader('content-type','application/json'); const path=decodeURIComponent(new URL(req.url,'http://local').pathname);
  if(path===`/v1/clans/${clan}`)return res.end(JSON.stringify({tag:clan,name:'Local Family',type:'inviteOnly',clanPoints:0,warWins:0,warWinStreak:0,clanCapital:{capitalHallLevel:1,clanGoldSinkTotal:0,districts:[]},clanLevel:10,memberList:tags.map(member),members:3,badgeUrls:{small:'https://example.invalid/badge.png'}}));
- if(path.startsWith('/v1/players/')){const tag=path.split('/').at(-1);return res.end(JSON.stringify({...member(tag),clan:{tag:clan,name:'Local Family',badgeUrls:{small:'https://example.invalid/badge.png'}},heroes:[],troops:[],spells:[],heroEquipment:[],achievements:[],labels:[]}));}
+ if(path.startsWith('/v1/players/')){const tag=path.split('/').at(-1);return res.end(JSON.stringify({...member(tag),attackWins:0,bestTrophies:5000,defenseWins:0,warStars:0,clan:{tag:clan,name:'Local Family',badgeUrls:{small:'https://example.invalid/badge.png'}},heroes:[],troops:[],spells:[],heroEquipment:[],achievements:[],labels:[]}));}
  res.statusCode=404;res.end(JSON.stringify({reason:'notFound'}));
 });await new Promise(r=>provider.listen(0,'127.0.0.1',r));
 let child,logs='',seeded=false,warId;const extraWarIds=[],cwlIds=[];const origin=`http://127.0.0.1:${port}`;
@@ -51,7 +52,7 @@ try {
  const generation=randomUUID();await db.query('INSERT INTO discord_cache.gateway_shards(application_id,shard_id,shard_count,generation,healthy,heartbeat_at) VALUES($1,0,1,$2,true,now())',[app,generation]);
  for(const id of [server,other])await db.query('INSERT INTO discord_cache.guilds(id,data,application_id,shard_id,generation,available,metadata_complete,members_complete) VALUES($1,$2,$3,0,$4,true,true,true)',[id,JSON.stringify({owner_id:id===server?actor:'999999999999995799'}),app,generation]);
  await db.query("INSERT INTO discord_cache.members(guild_id,user_id,data) VALUES($1,$2,'{}')",[server,actor]);
- const env={...process.env,CLASHKING_PERSISTENT_LOCAL_API:'1',CLASHKING_LOCAL_DATABASE_URL:database,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_DISCORD_CLIENT_ID:app,CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'local-only',CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',CLASHKING_LOCAL_CLASH_PROXY_ORIGIN:`http://127.0.0.1:${provider.address().port}`,CLASHKING_LOCAL_STORAGE_ROOT:directory,CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_E2E_STATIC_ASSETS_ROOT??resolve(repo,'../clashking_assets/assets/static_data'),...Object.fromEntries(Object.entries(keys).map(([key,value])=>[`CLASHKING_LOCAL_${key}`,value]))};
+ const env={...process.env,CLASHKING_PERSISTENT_LOCAL_API:disposable?'0':'1',CLASHKING_LOCAL_DATABASE_URL:database,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_DISCORD_CLIENT_ID:app,CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'local-only',CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',CLASHKING_LOCAL_CLASH_PROXY_ORIGIN:`http://127.0.0.1:${provider.address().port}`,CLASHKING_LOCAL_STORAGE_ROOT:directory,CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_E2E_STATIC_ASSETS_ROOT??resolve(repo,'../clashking_assets/assets/static_data'),...Object.fromEntries(Object.entries(keys).map(([key,value])=>[`${disposable?'CLASHKING_E2E':'CLASHKING_LOCAL'}_${key}`,value]))};
  child=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{cwd:repo,env,stdio:['ignore','pipe','pipe']});child.stdout.on('data',data=>logs+=data);child.stderr.on('data',data=>logs+=data);
  for(let i=0;i<200;i++){try{if((await fetch(origin+'/v2/health')).ok)break}catch{}await new Promise(r=>setTimeout(r,100));if(i===199)throw Error(logs.slice(-2000))}
  // Exercise the actual notice gate before the existing assistant flow. No
@@ -149,7 +150,7 @@ try {
  const cwlRoster=await request('/v2/roster?server_id='+server,{alias:'CWL performance',roster_type:'family',signup_scope:'family-only',members:tags.slice(0,2).map(tag=>({tag}))},201);
  const cwlWarIds=[];
  for(let i=0;i<7;i++){
-  const group=`E2ECWL${String(i).padStart(6,'0')}`,season=`2025-${String(i+1).padStart(2,'0')}`;
+  const group=`E2ECWL${String(i).padStart(6,'0')}`,season=`2025-${String(i+1).padStart(2,'0')}${i===6?'-03':''}`;
   const groupWars=[];cwlIds.push(group);
   // The newest season has two wars; its final round crosses into next month.
   for(let j=0;j<(i===6?2:1);j++){
@@ -160,7 +161,7 @@ try {
    const attack=i===5?[]:[{defenderTag:enemy,stars:i===0?0:3,destructionPercentage:i===0?10:100,order:1,duration:120}];
    await db.query('INSERT INTO war_archive_pending(war_id,end_time,payload) VALUES($1,$2,$3)',[id,ended,JSON.stringify({...payload,warTag,teamSize:1,attacksPerMember:1,preparationStartTime:prepared.toISOString(),startTime:started.toISOString(),endTime:ended.toISOString(),clan:side(clan,[{tag:tags[0],name:'One',townhallLevel:16,mapPosition:1,attacks:attack}]),opponent:side(enemy,[{tag:enemy,name:'Enemy',townhallLevel:16,mapPosition:1,attacks:[{defenderTag:tags[0],stars:2,destructionPercentage:80,order:2,duration:120}]}])})]);
   }
-  await db.query("INSERT INTO cwl_groups(cwl_id,season,state,rounds) VALUES($1,$2,'ended',$3)",[group,season,JSON.stringify(i%2?[{warTags:groupWars}]:[groupWars])]);
+  await db.query("INSERT INTO cwl_groups(cwl_id,season,state,rounds,cwl_league_id) VALUES($1,$2,'ended',$3,48000016)",[group,season,JSON.stringify(i%2?[{warTags:groupWars}]:[groupWars])]);
   await db.query("INSERT INTO cwl_group_clans(cwl_id,clan_tag) VALUES($1,$2)",[group,clan]);
   // Player two is registered but benched in every season.
   for(const tag of tags.slice(0,2))await db.query('INSERT INTO cwl_group_members(cwl_id,clan_tag,tag,town_hall) VALUES($1,$2,$3,16)',[group,clan,tag]);
@@ -175,6 +176,13 @@ try {
  const benched=cwl.rows.find(row=>row.playerTag===tags[1]).value;
  assert(benched.observedSeasons===0&&benched.summary.hitRate===null&&benched.summary.missedAttacks===null,'Bench registration invented participation');
  await request('/v2/roster/metrics/query?server_id='+server,{rosterIds:[cwlRoster.roster_id],metricId:'cwl.performance_history',parameters:{seasonCount:6,warCount:6},force:false},400);
+ const exactSeason=await request('/v2/roster/metrics/query?server_id='+server,{rosterIds:[cwlRoster.roster_id],metricId:'cwl.performance_history',parameters:{season:'2025-07'},force:false});
+ const exact=exactSeason.rows.find(row=>row.playerTag===tags[0]).value;
+ assert(exact.observedSeasons===1&&exact.seasons[0].season==='2025-07'&&exact.summary.completedWars===2,'Exact July must include its two rounds even when their end time crosses into August');
+ assert(exact.clans.length===1&&exact.clans[0].clanTag===clan&&exact.clans[0].completedWars===2,'Historical clan identity must accompany completed lineup totals');
+ const missingSeason=await request('/v2/roster/metrics/query?server_id='+server,{rosterIds:[cwlRoster.roster_id],metricId:'cwl.performance_history',parameters:{season:'2024-12'},force:false});
+ assert(missingSeason.rows.every(row=>row.value.observedSeasons===0),'An unavailable exact month must not backfill another month');
+ for(const parameters of [{season:'2025-13'},{season:'2025-07',windowMonths:1},{season:'2025-07',seasonCount:6}])await request('/v2/roster/metrics/query?server_id='+server,{rosterIds:[cwlRoster.roster_id],metricId:'cwl.performance_history',parameters,force:false},400);
  await build({entryPoints:[dashboard+'/workers/roster-assistant/cwl-performance-view.ts'],bundle:true,platform:'node',format:'esm',outfile:directory+'/cwl-view.mjs'});
  const {cwlPerformanceViewSource}=await import(directory+'/cwl-view.mjs');
  const source=cwlPerformanceViewSource(6);
@@ -187,7 +195,33 @@ try {
  const materialized=await request('/v2/roster/views/preview?server_id='+server,{serverId:server,rosterIds:[cwlRoster.roster_id],sourceCode:source,sourceVersion:1,...view});
  assert(materialized.result.rows.length===2&&materialized.result.rows.find(row=>row.playerTag===tags[0]).values.baseline_stars===3,'CWL reusable view did not materialize actual baseline');
  assert(materialized.result.rows.find(row=>row.playerTag===tags[1]).values.baseline_stars===null,'CWL view fabricated a bench forecast');
+ const exactSource=cwlPerformanceViewSource(1,{season:'2025-07',familyOnly:true,groupByClan:true});
+ const exactView=await new Function('codemode','return ('+exactSource+')')({
+  getRosterMembers:input=>request('/v2/roster/members/query',{serverId:server,rosterIds:[cwlRoster.roster_id],...input}),
+  getRosterMetric:input=>request('/v2/roster/metrics/query?server_id='+server,{rosterIds:[cwlRoster.roster_id],...input,force:false}),
+ })();
+ const exactPreview=await request('/v2/roster/views/preview?server_id='+server,{serverId:server,rosterIds:[cwlRoster.roster_id],sourceCode:exactSource,sourceVersion:1,...exactView});
+ const exactRow=exactPreview.result.rows.find(row=>row.playerTag===tags[0]);
+ assert(exactRow.values.wars===2&&exactRow.values.clan==='Local war'&&exactRow.values.league.label==='Champion League III','Exact-month reusable view lost historical clan/league or chose another month');
+ assert(exactPreview.result.rows[0].playerTag===tags[0]&&exactRow.values.league.sortValue===16,'League sort must use observed CWL strength with human label');
+ assert(exactView.sort.map(rule=>rule.columnId).join(',')==='league,clan,stars_per_war,attacks,stars,destruction','Clan/league view lost requested stable sort');
+ console.log(JSON.stringify({exactCwlChecks:['absolute season retained in replay','cross-month ending remains in group season','missing month has no backfill','conflicting date forms rejected','historical clan and league columns','labeled strength sort','average stars and destruction tie-breaks']}));
  console.log(JSON.stringify({cwlChecks:['six participated seasons, seven wars','real season despite cross-month ending','zero-attack lineup retained','bench registration excluded','offense and defense totals','late timing remains unavailable','conflicting war-count rejected']}));
+ // Initialization emits official-shaped CWL payloads without attacksPerMember;
+ // the canonical archive must still contribute the missing one-attack slot.
+ const initWarTag='#E2EINITCWL',initEnd=new Date(Date.now()-7200000),initStart=new Date(initEnd.valueOf()-86400000),initPrep=new Date(initStart.valueOf()-86400000);
+ const initWar=(await db.query("INSERT INTO wars(clan_tag,opponent_tag,prep_time,start_time,end_time,size,attacks_per_member,war_type,state,war_tag) VALUES($1,$2,$3,$4,$5,1,1,'cwl','warEnded',$6) RETURNING war_id",[clan,enemy,initPrep,initStart,initEnd,initWarTag])).rows[0].war_id;
+ extraWarIds.push(initWar);
+ await db.query('INSERT INTO war_archive_pending(war_id,end_time,payload) VALUES($1,$2,$3)',[initWar,initEnd,JSON.stringify({...payload,warTag:initWarTag,teamSize:1,attacksPerMember:1,preparationStartTime:initPrep.toISOString(),startTime:initStart.toISOString(),endTime:initEnd.toISOString(),clan:side(clan,[{tag:tags[2],name:'Unassigned',townhallLevel:16,mapPosition:1,attacks:[]}]),opponent:side(enemy,[])})]);
+ await db.query('UPDATE player_war_history SET war_ids=war_ids || $2::integer[] WHERE player_tag=$1',[tags[2],[initWar]]);
+ const initialized=await request('/v2/initialization',{player_tags:[tags[2]]});
+ const initializedWar=initialized.war_stats.find(row=>row.tag===tags[2]);
+ assert(initializedWar?.stats.cwl.missedAttacks===1,'Initialization discarded CWL missed attack because the official projection omits attacksPerMember');
+ assert(initializedWar.wars.find(row=>row.war_data.type==='cwl')?.war_data.attacksPerMember===undefined,'Initialization must retain the official CWL omission');
+ console.log('PASS actual API initialization: CWL missed attack counted from canonical archive while official payload omits allowance');
+ const publicWarlog=await request('/v2/clan/'+encodeURIComponent(clan)+'/warlog?type=cwl');
+ assert(publicWarlog.items.length>0&&publicWarlog.items.every(war=>war.attacksPerMember===1),'Public CWL warlog must encode the required one-attack count');
+ console.log('PASS actual public CWL warlog: completed archives encode the required one-attack allowance');
  console.log(JSON.stringify({checks:['zero-roster family context','actual family discovery helper over HTTP','unassigned new-roster preview','explicit create Apply','assigned re-proposal rejected','cross-server403','family-metric cross-server403','non-family player403','private metric400','family no-history null','unassigned 40-day hit included in60days','90-day hit excluded','empty attached roster ranking proposal','no-history null','missed hits 1 and 2','participation50percent','Wilson interval actual sample','no-attack null confidence','membership preview Apply','stale409','revision-checked add Undo','move preview Apply','remove preview Apply','concurrent unassigned Apply statuses201/409','one persisted concurrent assignment','missing profile rejected409'],externalAIRequests:0}));
 } finally {
  if(child&&child.exitCode===null){child.kill('SIGTERM');await Promise.race([new Promise(r=>child.once('exit',r)),new Promise(r=>setTimeout(r,5000))]);}

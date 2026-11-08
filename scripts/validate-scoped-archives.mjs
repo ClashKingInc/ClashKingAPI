@@ -23,7 +23,7 @@ for (const row of wars) {
   for (const [clan, opponent] of [[war.clan, war.opponent], [war.opponent, war.clan]]) {
     const attacks = clan.members.flatMap(m => m.attacks ?? [])
     pack.attack_count += attacks.length; day.totalAttacks += attacks.length
-    day.totalMissedAttacks += Math.max(0, (war.teamSize || Math.max(war.clan.members.length, war.opponent.members.length)) * (war.attacksPerMember || 1) - attacks.length)
+    day.totalMissedAttacks += Math.max(0, (war.teamSize || Math.max(war.clan.members.length, war.opponent.members.length)) * (war.attacksPerMember || 0) - attacks.length)
     if (type !== 'random') continue
     const defenders = new Map(opponent.members.map(m => [m.tag, m.townhallLevel ?? 0]))
     for (const member of clan.members) for (const attack of member.attacks ?? []) {

@@ -8,6 +8,7 @@ import {
   LegendDayPerformanceResponse,
   PlayerBattlelogHistoryResponse,
   PlayerLeagueHistoryResponse,
+  RankedHistoryResponse,
   RankedBattlelogResponse,
   RankedGroupResponse,
   LeagueTierStatisticsResponse,
@@ -23,11 +24,12 @@ import {
   parsePlayerHistoryWindow,
 } from "./league-analytics-query.js"
 import { queryLegendDayPerformance } from "./legend-day-performance.js"
+import { queryCanonicalLegendHistory, legendHistoryOrder } from "./legend-history.js"
 import { rankedPeriodPredicate } from "./ranked-period.js"
 import { parseAggregateWindow } from "./league-analytics-query.js"
 import { hasStaticItemId, lookupStaticItem, lookupArmyStaticItem, prepareStaticMetadata } from "./static-metadata.js"
 import { WorkerEnvironment } from "./environment.js"
-import { legendSeasonFinish, legendSeasonWindow } from "./legend-season.js"
+import { legendSeasonWindow } from "./legend-season.js"
 
 const database = <A>(message: string, effect: Effect.Effect<A, unknown, SqlClient.SqlClient>) => effect.pipe(
   Effect.mapError((cause) => cause instanceof InvalidRequest || cause instanceof NotFound
@@ -390,38 +392,31 @@ export const queryRankedGroup = (rawSeason: string, rawGroup: string) => databas
     maxBattles: Math.max(...rows.map((row) => number(row.maximum_battle_count))), members: rows.map(member) }
 }))
 
-interface LegendHistoryRow { season: string; league_tier_id: number | null; trophies: number; attack_wins: number; defense_wins: number; rank: number; population: string | null }
-export const queryPlayerLeagueHistory = (rawTag: string, query: URLSearchParams, now = new Date()) => database("Player league history query failed", Effect.gen(function* () {
+export const queryPlayerRankedHistory = (rawTag: string, query: URLSearchParams, now = new Date()) => database("Player Ranked history query failed", Effect.gen(function* () {
   const tag = yield* normalizeClashTag(rawTag), window = yield* parsePlayerHistoryWindow(query, now), sql = yield* SqlClient.SqlClient
   const bounded = query.has("time[after]") || query.has("time[before]")
-  const ranked = yield* sql.unsafe<RankedMemberRow>(`${rankedMemberSql} WHERE player_tag=$1
+  const rows = yield* sql.unsafe<RankedMemberRow>(`${rankedMemberSql} WHERE player_tag=$1
     ${bounded ? "AND to_timestamp(season_id) BETWEEN $2 AND $3" : ""} ORDER BY season_id DESC`,
     bounded ? [tag, window.start, window.end] : [tag])
-  const legends = yield* sql.unsafe<LegendHistoryRow>(`WITH requested AS (
-      SELECT season,league_tier_id,trophies,attack_wins,defense_wins,rank FROM legend_history WHERE player_tag=$1
-    ), populations AS (
-      SELECT history.season,max(history.rank)::text population FROM legend_history history
-      JOIN (SELECT DISTINCT season FROM requested) requested_seasons USING(season)
-      GROUP BY history.season HAVING max(history.rank) > 0
-    ) SELECT requested.*,populations.population FROM requested LEFT JOIN populations USING(season)
-      ORDER BY requested.season DESC`, [tag])
-  // History without a range means all retained finishes, not only the default 30-day battle window.
-  const finishes = legends.filter(row => {
-    const end = legendSeasonFinish(row.season)
-    return Number.isFinite(end) && end <= now.valueOf() &&
-      ((!query.has("time[after]") && !query.has("time[before]")) || (end >= window.start.valueOf() && end <= window.end.valueOf()))
-  })
+  return { items: rows.map(row => ({ seasonId: String(row.season_id), leagueGroupId: row.group_tag,
+    league: league(row.league_tier_id), maxBattles: number(row.maximum_battle_count), ...member(row) })) }
+}))
+
+export const queryPlayerLeagueHistory = (rawTag: string, query: URLSearchParams, now = new Date()) => database("Player league history query failed", Effect.gen(function* () {
+  const tag = yield* normalizeClashTag(rawTag)
+  const ranked = yield* queryPlayerRankedHistory(tag, query, now)
+  const legends = (yield* queryCanonicalLegendHistory([tag], query, now)).get(tag)!
+  const legendOrder = new Map(legends.map(row => [row.season, legendHistoryOrder(row)]))
+  // This route stays as a compatibility projection; split routes have no mode.
   const items = [
-    ...ranked.map((row) => ({ mode: "ranked" as const, seasonId: String(row.season_id), leagueGroupId: row.group_tag,
-      league: league(row.league_tier_id), maxBattles: number(row.maximum_battle_count), ...member(row) })),
-    ...finishes.map((row) => ({ mode: "legend" as const, season: row.season,
-      league: row.league_tier_id === null ? null : league(row.league_tier_id), trophies: number(row.trophies),
-      attackWins: number(row.attack_wins), defenseWins: number(row.defense_wins), rank: number(row.rank),
-      ...(row.population == null ? {} : { population: number(row.population) }) })),
+    ...ranked.items.map(row => ({ mode: "ranked" as const, ...row })),
+    ...legends.map(row => ({ mode: "legend" as const, season: row.season,
+      league: row.league ? { id: row.league.id, name: row.league.name ?? "Unknown" } : null,
+      trophies: row.trophies, attackWins: row.attackWins, defenseWins: row.defenseWins,
+      rank: row.rank, ...(row.population == null ? {} : { population: row.population }) })),
   ].sort((left, right) => {
-    const a = left.mode === "ranked" ? Number(left.seasonId) * 1000 : legendSeasonFinish(left.season)
-    const b = right.mode === "ranked" ? Number(right.seasonId) * 1000 : legendSeasonFinish(right.season)
-    return b - a
+    const order = (row: typeof left) => row.mode === "ranked" ? Number(row.seasonId) * 1000 : legendOrder.get(row.season) ?? 0
+    return order(right) - order(left)
   })
   return { items }
 }))
@@ -551,6 +546,10 @@ export const dispatchLeagueAnalytics = (request: Request) => Effect.gen(function
     if (url.search !== "") return yield* new InvalidRequest({ message: "Ranked group does not accept query parameters" })
     const [season = "", group = ""] = yield* decodedParts(parts, [3, 5])
     return yield* response(RankedGroupResponse, yield* queryRankedGroup(season, group))
+  }
+  if (parts.length === 6 && parts[1] === "v2" && parts[2] === "player" && parts[4] === "ranked" && parts[5] === "history") {
+    const [tag = ""] = yield* decodedParts(parts, [3])
+    return yield* response(RankedHistoryResponse, yield* queryPlayerRankedHistory(tag, url.searchParams))
   }
   if (parts.length === 6 && parts[1] === "v2" && parts[2] === "player" && parts[4] === "league" && parts[5] === "history") {
     const [tag = ""] = yield* decodedParts(parts, [3])

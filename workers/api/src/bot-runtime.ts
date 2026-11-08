@@ -13,6 +13,8 @@ import {
   type ApiFailure,
 } from "./errors.js"
 import { WorkerEnvironment, type WorkerBindings } from "./environment.js"
+import { DiscordApi } from "./discord-api.js"
+import { moderationActors } from "./moderation-actors.js"
 
 export const botRuntimeRoutes = [
   { method: "GET", path: "/v2/server/:serverId/bans" },
@@ -30,6 +32,8 @@ interface BanItem {
   readonly VillageName: string
   readonly VillageTag: string
   readonly added_by: string
+  readonly added_by_username?: string
+  readonly added_by_avatar_url?: string
   readonly clan_name?: string
   readonly clan_tag?: string
   readonly edited_by: ReadonlyArray<{
@@ -45,6 +49,8 @@ interface BanItem {
 
 interface StrikeItem {
   readonly added_by: string
+  readonly added_by_username?: string
+  readonly added_by_avatar_url?: string
   readonly clan_name?: string
   readonly clan_tag?: string
   readonly date_created: string
@@ -128,6 +134,7 @@ export class BotModerationStore extends Context.Service<
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient
       const bindings = yield* WorkerEnvironment
+      const discord = yield* DiscordApi
 
       const listBans = Effect.fn("BotModerationStore.listBans")(function* (serverId: string) {
         const rows = yield* database("Unable to load server bans", sql<BanRow>`
@@ -140,7 +147,8 @@ export class BotModerationStore extends Context.Service<
           WHERE b.server_id = ${serverId}
           ORDER BY b.created_at DESC
         `)
-        const items = rows.map((row) => banItem(row, serverId))
+        const actors = yield* moderationActors(bindings.DISCORD_CLIENT_ID, rows.map(row => row.added_by)).pipe(Effect.provideService(DiscordApi, discord))
+        const items = rows.map((row) => ({ ...banItem(row, serverId), ...actors.get(row.added_by) }))
         return { items, count: items.length }
       })
 
@@ -219,7 +227,8 @@ export class BotModerationStore extends Context.Service<
           "Unable to load server strikes",
           sql.unsafe<StrikeRow>(`${strikeSelect} ${filter}`, parameters),
         )
-        const items = rows.map((row) => strikeItem(row, serverId))
+        const actors = yield* moderationActors(bindings.DISCORD_CLIENT_ID, rows.map(row => row.added_by)).pipe(Effect.provideService(DiscordApi, discord))
+        const items = rows.map((row) => ({ ...strikeItem(row, serverId), ...actors.get(row.added_by) }))
         return { items, count: items.length }
       })
 

@@ -24,6 +24,22 @@ Some routes are public. Routes that read or change account and server data requi
 
 The interactive reference shows the available routes, what to send, what comes back, and whether you need to sign in.
 
+### League history and CWL periods
+
+`GET /v2/player/:tag/legend-history` returns Legend seasons. Ranked tournament
+history uses `GET /v2/player/:playerTag/ranked/history`. The existing mixed
+`/league/history` route remains a compatibility surface. Recorded historical
+league IDs, names and icon URLs retain their source namespace; missing metadata
+stays unknown. See [league history contracts and storage](docs/league-history.md)
+for calendar boundaries, population meaning, migration order and app consumers.
+
+Roster metric `cwl.performance_history` accepts an exact `season` such as
+`"2026-10"`, a rolling `windowMonths` window, or a `seasonCount` participation
+count. A named month is never replaced with the latest rolling month. The metric
+includes historical clan/CWL league, total stars, destruction, missed attacks and
+averages from observed completed lineups. `familyOnly` checks the player's actual
+historical side against the server's configured clans.
+
 ### Manual reminder requests
 
 `POST /v2/server/:serverId/reminders/:reminderId/send` requires a signed-in user with reminder-management access. It accepts no actor override. The authenticated bot route `/v2/bot/server/:serverId/reminders/manual` accepts `{ "clanTag": "#PYLQRRJC", "type": "War" }`. The signed Discord command checks Manage Server permission before calling that route; the API separately requires bot authentication. No caller-supplied actor ID is needed.
@@ -174,13 +190,13 @@ ordinary server settings cannot raise them. Reductions retain existing clans and
 All quota writes and AI admissions lock the server row. Limit messages direct users to
 https://discord.gg/clashking; purchases no longer raise limits.
 
-AI context is an admission only. Before each actual Responses call, the assistant
-reserves conservative input/output cost through the private AI-metering contract.
-Only the trusted assistant holds the metering secret. Model retries and provider-side
-compaction are disabled; unknown provider outcomes keep their reservation. Settled
-steps charge reported usage once. The input bound includes serialized request bytes
-and prior input/output usage for opaque reasoning items. The configured model's
-highest input/cache-write/output rates must remain covered when prices/models change.
+AI admission checks recorded monthly spend. Pending calls and unknown provider
+outcomes do not reserve money or block another prompt. Only the trusted assistant
+holds the private AI-metering secret. Reported usage, including reasoning tokens,
+is recorded idempotently for each provider call; duplicate settlement cannot charge
+twice. Unknown usage remains in the call audit instead of becoming an invented cost.
+Model retries and provider-side compaction remain disabled. A call already admitted
+can finish slightly above the monthly limit; later prompts check the updated spend.
 These private service contracts are exported but excluded from public endpoint discovery.
 
 The old billing implementation and historical records are retained, but `/v2/billing/*`

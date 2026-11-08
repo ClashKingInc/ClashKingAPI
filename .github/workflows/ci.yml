@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: ClashKingInc/DevKit
-          ref: 153f4408facad708ec9658f7a0048978ac056944
+          ref: f789b2fe5fc9a1d31c6151266967c3e397850a5a
           path: .ci-schema
           persist-credentials: false
 
@@ -69,6 +69,11 @@ jobs:
         env:
           CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
         run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/legend-day-performance.mjs
+
+      - name: Verify countdown lifecycle against disposable Timescale
+        env:
+          CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
+        run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/countdown-lifecycle.mjs
 
       - name: Verify search against real local Elasticsearch
         env:

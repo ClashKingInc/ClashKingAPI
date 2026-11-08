@@ -13,7 +13,7 @@ import { discordBotProfile } from "./discord-bot-profile.js"
 import { DiscordCredentials } from "./discord-credentials.js"
 import { discordWebhookAvatar, validateDiscordProfileImage } from "./discord-profile-image.js"
 import { discordDestinationId, validateDiscordDestination } from "./discord-destination.js"
-import { compensateCreatedDiscordResource, createCountdownChannel, createLogWebhook, lockServerDiscordResources } from "./discord-managed-resources.js"
+import { compensateCreatedDiscordResource, createCountdownChannel, reusableCountdownChannel, createLogWebhook, lockServerDiscordResources } from "./discord-managed-resources.js"
 import { dashboardTicketOperationIds, executeDashboardTickets } from "./dashboard-server-tickets.js"
 import { dashboardAutoboardOperationIds, executeDashboardAutoboards } from "./dashboard-server-autoboards.js"
 import { dashboardReminderOperationIds, executeDashboardReminders } from "./dashboard-server-reminders.js"
@@ -427,7 +427,7 @@ const loadSettings = (serverId: string) => Effect.gen(function* () {
   const rows = yield* sql<JsonRecord>`SELECT id AS server_id, id AS server, name, embed_color, nickname_rule, non_family_nickname_rule, change_nickname, flair_non_family, role_leave_delay_minutes, auto_eval_nickname, auto_role_triggers AS auto_eval_triggers, auto_role_treatment AS auto_eval_role_treatment, auto_role_blacklist_ids AS auto_eval_blacklist_roles, autoeval_log_channel_id AS autoeval_log, autoeval_enabled AS autoeval, full_whitelist_role_id AS full_whitelist_role, autoboard_limit, tied_stats_only AS tied, family_label,
     jsonb_build_object('clan', link_parse_clan, 'army', link_parse_army, 'player', link_parse_player, 'base', link_parse_base, 'show', link_parse_show) AS link_parse FROM servers WHERE id = ${serverId}`
   const row = yield* requireRow(rows, "Server not found")
-  const countdowns = yield* sql<{ type: string; channel_id: string }>`SELECT type, channel_id FROM server_countdowns WHERE server_id = ${serverId} AND clan_tag IS NULL ORDER BY type`
+  const countdowns = yield* sql<{ type: string; channel_id: string }>`SELECT type, channel_id FROM server_countdowns WHERE server_id = ${serverId} AND clan_tag IS NULL AND NOT disabled ORDER BY type`
   const roles = yield* sql.unsafe<RoleRow>(`SELECT ${roleColumns} FROM server_roles WHERE server_id = $1 ORDER BY type, option, clan_tag NULLS FIRST, role_id`, [serverId])
   const fields: JsonRecord = Object.fromEntries(Object.entries(row).filter(([, value]) => value !== null))
   return { ...fields, auto_eval_triggers: row.auto_eval_triggers, autoeval: row.autoeval, auto_eval_nickname: row.auto_eval_nickname, ...optional("autoeval_log", row.autoeval_log), countdowns: Object.fromEntries(countdowns.map((item) => [item.type, item.channel_id])), server_roles: roles.map(roleValue) }
@@ -616,10 +616,10 @@ const countdownReadOperation = (input: DashboardServerOperationInput) => databas
   const clanScoped = input.endpoint.operationId === "clanCountdowns", tag = clanScoped ? normalizeTag(input.path.clanTag) : null
   const scoped = tag === null ? yield* sql<{ id: string }>`SELECT id FROM servers WHERE id = ${serverId}` : yield* sql<{ id: string }>`SELECT tag AS id FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag}`
   yield* requireRow(scoped, tag === null ? "Server not found" : "Clan not found on this server")
-  const rows = yield* sql<{ type: string; channel_id: string }>`SELECT type, channel_id FROM server_countdowns WHERE server_id = ${serverId} AND clan_tag IS NOT DISTINCT FROM ${tag}`
+  const rows = yield* sql<{ type: string; channel_id: string; disabled: boolean }>`SELECT type, channel_id, disabled FROM server_countdowns WHERE server_id = ${serverId} AND clan_tag IS NOT DISTINCT FROM ${tag}`
   return { server_id: serverId, ...optional("clan_tag", tag), countdowns: countdownDefinitions.filter(([, , scope]) => scope === (clanScoped ? "clan" : "server")).map(([type, name]) => {
     const channel = rows.find((row) => row.type === type)
-    return { type, name, enabled: channel !== undefined, ...optional("channel_id", channel?.channel_id) }
+    return { type, name, enabled: channel !== undefined && !channel.disabled, ...optional("channel_id", channel?.channel_id) }
   }) }
 }))
 
@@ -638,19 +638,21 @@ const countdownMutationOperation = (input: DashboardServerOperationInput) => dat
       const rows = yield* sql<{ name: string }>`SELECT clan.name FROM server_clans sc JOIN basic_clan clan ON clan.tag = sc.tag WHERE sc.server_id = ${serverId} AND sc.tag = ${tag}`
       clanName = (yield* requireRow(rows, "Clan not found on this server")).name
     }
-    const rows = yield* sql<{ channel_id: string }>`SELECT channel_id FROM server_countdowns WHERE server_id = ${serverId} AND clan_tag IS NOT DISTINCT FROM ${tag} AND type = ${type} FOR UPDATE`
+    const rows = yield* sql<{ channel_id: string; disabled: boolean }>`SELECT channel_id, disabled FROM server_countdowns WHERE server_id = ${serverId} AND clan_tag IS NOT DISTINCT FROM ${tag} AND type = ${type} FOR UPDATE`
     const prior = rows[0]
     if (input.endpoint.operationId === "disableCountdown") {
       if (prior === undefined) return yield* new NotFound({ message: "Countdown not found" })
-      yield* sql`DELETE FROM server_countdowns WHERE server_id = ${serverId} AND clan_tag IS NOT DISTINCT FROM ${tag} AND type = ${type}`
+      yield* sql`UPDATE server_countdowns SET disabled = true, updated_at = clock_timestamp() WHERE server_id = ${serverId} AND clan_tag IS NOT DISTINCT FROM ${tag} AND type = ${type}`
       return { message: `${type} disabled`, countdown_type: type }
     }
     const names: Readonly<Record<string, string>> = { clan_games_timer: "CG Loading...", cwl_timer: "CWL Loading...", raid_weekend_timer: "Raids Loading...", season_end_timer: "EOS Loading...", season_day_timer: "Day 0" }
     const name = scope === "clan" ? `${clanName}: Loading...` : names[type] ?? ""
-    if (prior !== undefined) return { message: `${type} already enabled`, countdown_type: type, channel_id: prior.channel_id, channel_name: name }
-    created = yield* createCountdownChannel(serverId, name)
-    yield* sql`INSERT INTO server_countdowns (server_id, clan_tag, type, channel_id) VALUES (${serverId}, ${tag}, ${type}, ${created.id})`
-    return { message: `${type} enabled`, countdown_type: type, channel_id: created.id, channel_name: name }
+    if (prior !== undefined && !prior.disabled) return { message: `${type} already enabled`, countdown_type: type, channel_id: prior.channel_id, channel_name: name }
+    const reusable = prior === undefined ? undefined : yield* reusableCountdownChannel(serverId, prior.channel_id)
+    const channelId = reusable ?? (created = yield* createCountdownChannel(serverId, name)).id
+    yield* sql`INSERT INTO server_countdowns (server_id, clan_tag, type, channel_id) VALUES (${serverId}, ${tag}, ${type}, ${channelId})
+      ON CONFLICT (server_id, clan_tag, type) DO UPDATE SET channel_id = EXCLUDED.channel_id, disabled = false, updated_at = clock_timestamp()`
+    return { message: `${type} enabled`, countdown_type: type, channel_id: channelId, channel_name: name }
   })).pipe(Effect.catch((failure) => created === undefined ? Effect.fail(failure) : compensateCreatedDiscordResource(created).pipe(Effect.andThen(Effect.fail(failure)))))
 }))
 
@@ -761,7 +763,7 @@ const logsMutationOperation = (input: DashboardServerOperationInput) => database
     const logs: Array<LogRow & { readonly channel_id: string }> = []
     for (const type of selected) {
       const rows = yield* sql<LogRow>`INSERT INTO server_logs (server_id, clan_tag, type, webhook_id, thread_id, reddit_role_id, reddit_accounts, reddit_min_townhall, reddit_include_comments) VALUES (${serverId}, ${tag}, ${type}, ${webhookId}, ${threadId}, ${redditRole}, ${redditAccounts}, ${minimum}, ${includeComments})
-        ON CONFLICT (server_id, clan_tag, type) DO UPDATE SET webhook_id = EXCLUDED.webhook_id, thread_id = EXCLUDED.thread_id, disabled = false, disabled_reason = NULL,
+        ON CONFLICT (server_id, clan_tag, type) DO UPDATE SET webhook_id = EXCLUDED.webhook_id, thread_id = EXCLUDED.thread_id, disabled = false,
           reddit_role_id = CASE WHEN ${hasRedditRole} THEN EXCLUDED.reddit_role_id ELSE server_logs.reddit_role_id END,
           reddit_accounts = CASE WHEN ${hasRedditAccounts} THEN EXCLUDED.reddit_accounts ELSE server_logs.reddit_accounts END,
           reddit_min_townhall = CASE WHEN ${hasMinimum} THEN EXCLUDED.reddit_min_townhall ELSE server_logs.reddit_min_townhall END,

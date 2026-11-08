@@ -128,7 +128,7 @@
     "DISCORD_MAIN_APPLICATION_ID": "824653933347209227",
     "DISCORD_TICKET_NOTIFICATIONS_ENABLED": "false",
     "DISCORD_REDIRECT_URI": "https://dash.clashk.ing/auth/callback",
-    "SMTP_HOST": "smtp.gmail.com",
+    "SMTP_HOST": "smtp.purelymail.com",
     "SMTP_PORT": "587",
     "SMTP_STARTTLS": "true",
     "SMTP_SSL_TLS": "false",

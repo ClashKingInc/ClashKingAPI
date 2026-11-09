@@ -4,15 +4,27 @@ import {spawn} from 'node:child_process';
 import {randomBytes} from 'node:crypto';
 import {resolve} from 'node:path';
 import pg from 'pg';
+import {createServer} from 'node:http';
 assert.equal(process.env.CLASHKING_DISPOSABLE_TIMESCALE,'1');
 const dsn=new URL(process.env.TEST_DATABASE_URL);assert.equal(dsn.hostname,'127.0.0.1');
 const db=new pg.Client({connectionString:dsn.href});await db.connect();
 const token=randomBytes(32).toString('base64url'),port=8817,origin=`http://127.0.0.1:${port}`;
+const proxyCalls=[];
+const proxy=createServer((req,res)=>{proxyCalls.push(req.url);res.setHeader('content-type','application/json');res.end(JSON.stringify({items:[{name:'Untracked Clan',tag:'#PYL',clanLevel:18}]}));});
+await new Promise(resolve=>proxy.listen(0,'127.0.0.1',resolve));
 let logs='';
-const child=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{stdio:['ignore','pipe','pipe'],env:{...process.env,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_ADMIN_IDENTITY:'0',CLASHKING_LOCAL_FCM_CREDENTIALS_FILE:'',CLASHKING_LOCAL_DISCORD_CLIENT_ID:'999999999999999999',CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'fixture',CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',CLASHKING_LOCAL_PRODUCTION_READS:'0',CLASHKING_E2E_API_BOT_TOKEN:token,CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_E2E_STATIC_ASSETS_ROOT??resolve('../clashking_assets/assets/static_data')}});
+const child=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{stdio:['ignore','pipe','pipe'],env:{...process.env,CLASHKING_LOCAL_CLASH_PROXY_ORIGIN:`http://127.0.0.1:${proxy.address().port}`,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_ADMIN_IDENTITY:'0',CLASHKING_LOCAL_FCM_CREDENTIALS_FILE:'',CLASHKING_LOCAL_DISCORD_CLIENT_ID:'999999999999999999',CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'fixture',CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',CLASHKING_LOCAL_PRODUCTION_READS:'0',CLASHKING_E2E_API_BOT_TOKEN:token,CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_E2E_STATIC_ASSETS_ROOT??resolve('../clashking_assets/assets/static_data')}});
 child.stdout.on('data',d=>logs+=d);child.stderr.on('data',d=>logs+=d);
 try{
  let ready=false;for(let i=0;i<120;i++){if(child.exitCode!==null)throw Error(logs.slice(-1200));try{ready=(await fetch(origin+'/v2/health')).ok&&logs.includes('isolated_api_ready');}catch{}if(ready)break;await new Promise(r=>setTimeout(r,250));}assert(ready,logs.slice(-1200));
+ const search=origin+'/v2/bot/clash/clans?name=Untracked&limit=10&memberList=false';
+ assert.equal((await fetch(search)).status,401);
+ const searched=await fetch(search,{headers:{authorization:`Bearer ${token}`}});assert.equal(searched.status,200);
+ assert.equal((await searched.json()).items[0].name,'Untracked Clan');
+ assert(proxyCalls.some(path=>path==='/v1/clans?name=Untracked&limit=10&memberList=false'));
+ assert.equal((await fetch(origin+'/v2/bot/clash/clans?name=ab',{headers:{authorization:`Bearer ${token}`}})).status,400);
+ assert.equal((await fetch(search+'&url=https://example.com',{headers:{authorization:`Bearer ${token}`}})).status,400);
+ console.log('PASS actual bot clan search: authenticated official proxy forwarding and query validation.');
  const url=origin+'/v2/bot/players/%23PYL/season-stats';
  assert.equal((await fetch(url)).status,401);
  const read=async()=>{const r=await fetch(url,{headers:{authorization:`Bearer ${token}`}});assert.equal(r.status,200);return r.json();};
@@ -42,4 +54,4 @@ try{
  assert.deepEqual(await suggestions('Outside'),[]);
  console.log('PASS actual family autocomplete API: linked clan scope, no Discord-link requirement, deduplication and name/tag matching.');
  console.log('PASS actual player-season API: sums stored donation/received events, excludes earlier seasons, preserves empty counts and bot authorization.');
-}finally{child.kill('SIGTERM');await db.end();}
+}finally{child.kill('SIGTERM');proxy.closeAllConnections();await new Promise(resolve=>proxy.close(resolve));await db.end();}

@@ -1,4 +1,4 @@
-import { ProxyPlayerEndpoint, ProxyClanEndpoint, ProxyCurrentWarEndpoint, ProxyCurrentLeagueGroupEndpoint,
+import { ProxyPlayerEndpoint, ProxyClanEndpoint, ProxyClanSearchEndpoint, ProxyCurrentWarEndpoint, ProxyCurrentLeagueGroupEndpoint,
   ProxyCapitalRaidSeasonsEndpoint, ProxyClanWarlogEndpoint, ProxyCwlWarEndpoint, ProxyPlayerRankingsEndpoint, ProxyBuilderPlayerRankingsEndpoint, ProxyLeagueGroupEndpoint, ProxyLocationsEndpoint, ProxyClanRankingsEndpoint, ProxyBuilderClanRankingsEndpoint, ProxyCapitalRankingsEndpoint } from "./proxy.js"
 import type { AnyEndpoint } from "./endpoint.js"
 
@@ -7,7 +7,8 @@ const forBot = <T extends AnyEndpoint>(endpoint: T) => ({ ...endpoint, auth: "bo
   operationId: endpoint.operationId.replace("ExpoProxy", "BotClash"),
   path: endpoint.path.replace("/proxy/v1/", "/v2/bot/clash/") as `/v2/bot/clash/${string}`,
 })
-export const botClashEndpoints: Readonly<Record<"botClashWarlog" | "botClashPlayer" | "botClashClan" | "botClashCurrentWar" | "botClashCurrentLeagueGroup" | "botClashCapitalRaids" | "botClashCwlWar" | "botClashPlayerRankings" | "botClashBuilderRankings" | "botClashLeagueGroup" | "botClashLocations" | "botClashClanRankings" | "botClashBuilderClanRankings" | "botClashCapitalRankings", AnyEndpoint>> = {
+export const botClashEndpoints: Readonly<Record<"botClashClanSearch" | "botClashWarlog" | "botClashPlayer" | "botClashClan" | "botClashCurrentWar" | "botClashCurrentLeagueGroup" | "botClashCapitalRaids" | "botClashCwlWar" | "botClashPlayerRankings" | "botClashBuilderRankings" | "botClashLeagueGroup" | "botClashLocations" | "botClashClanRankings" | "botClashBuilderClanRankings" | "botClashCapitalRankings", AnyEndpoint>> = {
+  botClashClanSearch: forBot(ProxyClanSearchEndpoint),
   botClashLocations: forBot(ProxyLocationsEndpoint),
   botClashClanRankings: forBot(ProxyClanRankingsEndpoint),
   botClashBuilderClanRankings: forBot(ProxyBuilderClanRankingsEndpoint),

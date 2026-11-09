@@ -70,6 +70,11 @@ jobs:
           CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
         run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/legend-day-performance.mjs
 
+      - name: Verify read-only army previews
+        env:
+          CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
+        run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/army-link-preview.mjs
+
       - name: Verify countdown lifecycle against disposable Timescale
         env:
           CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data

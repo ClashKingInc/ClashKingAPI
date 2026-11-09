@@ -24,13 +24,23 @@ export const dispatchBotClash = (request: Request, bindings: WorkerBindings) => 
       : template[index] === ":locationId" ? /^(?:global|[0-9]{1,12})$/u.test(value) : /^#[0289PYLQGRJCUV]{1,15}$/u.test(value)
     if (!valid) return yield* new InvalidRequest({ message: "Invalid Clash path parameter" })
   }
-  const supportsLimit = /(?:capitalraidseasons|warlog|rankings\/(?:players|clans)(?:-builder-base)?|rankings\/capitals)$/u.test(url.pathname)
+  const clanSearch = url.pathname === "/v2/bot/clash/clans"
+  if (clanSearch && (url.searchParams.getAll("name").length !== 1 || (url.searchParams.get("name")?.trim().length ?? 0) < 3 || (url.searchParams.get("name")?.length ?? 0) > 100)) {
+    return yield* new InvalidRequest({ message: "Clan search requires a name of 3 to 100 characters" })
+  }
+  const supportsLimit = clanSearch || /(?:capitalraidseasons|warlog|rankings\/(?:players|clans)(?:-builder-base)?|rankings\/capitals)$/u.test(url.pathname)
   const leagueGroup = url.pathname.startsWith("/v2/bot/clash/leaguegroup/")
   if (leagueGroup && (url.searchParams.getAll("playerTag").length !== 1 || !/^#[0289PYLQGRJCUV]{1,15}$/u.test(url.searchParams.get("playerTag") ?? ""))) {
     return yield* new InvalidRequest({message:"A valid playerTag is required for the league group"})
   }
   for (const [key,value] of url.searchParams) {
     if (leagueGroup && key === "playerTag") continue
+    if (clanSearch && url.searchParams.getAll(key).length === 1) {
+      if (key === "name") continue
+      if (key === "memberList" && /^(true|false)$/u.test(value)) continue
+      if (key === "warFrequency" && /^(always|moreThanOncePerWeek|oncePerWeek|lessThanOncePerWeek|never|unknown)$/u.test(value)) continue
+      if (["locationId", "minMembers", "maxMembers", "minClanLevel"].includes(key) && /^[0-9]{1,9}$/u.test(value)) continue
+    }
     if (key !== "limit" || !supportsLimit || !/^[1-9][0-9]{0,2}$/u.test(value) || Number(value)>200 || url.searchParams.getAll(key).length !== 1) {
       return yield* new InvalidRequest({ message: "Invalid Clash query parameter" })
     }

@@ -28,12 +28,14 @@ export const dispatchBotPlayerSeason = (request: Request) => Effect.gen(function
       WHERE player_tag=${tag} AND battle_mode=1 AND direction=1
         AND battle_time>=${season.start} AND battle_time<${season.end}
     ) recorded_attacks`.pipe(Effect.mapError(fail)))[0]!
-  const stats = (yield* sql<{ count: number; games: string; capital: string }>`SELECT count(*)::integer count,
+  const stats = (yield* sql<{ count: number; games: string; capital: string; donated: string; received: string }>`SELECT count(*)::integer count,
+    COALESCE(sum(delta) FILTER(WHERE stat_type='donated'),0)::text donated,
+    COALESCE(sum(delta) FILTER(WHERE stat_type='received'),0)::text received,
     COALESCE(sum(delta) FILTER(WHERE stat_type='clan_games'),0)::text games,
     COALESCE(sum(delta) FILTER(WHERE stat_type='capital_gold_donated'),0)::text capital
     FROM player_stat_changes WHERE player_tag=${tag} AND event_time>=${season.start} AND event_time<${season.end}`.pipe(Effect.mapError(fail)))[0]!
   const value={start:season.start.toISOString(),end:season.end.toISOString(),recordedBattles:loot.count,
-    gold:Number(loot.gold),elixir:Number(loot.elixir),darkElixir:Number(loot.dark),clanGames:Number(stats.games),capitalDonated:Number(stats.capital),statObservations:stats.count}
+    donated:Number(stats.donated),received:Number(stats.received),gold:Number(loot.gold),elixir:Number(loot.elixir),darkElixir:Number(loot.dark),clanGames:Number(stats.games),capitalDonated:Number(stats.capital),statObservations:stats.count}
   const encoded = yield* Schema.encodeUnknownEffect(BotPlayerSeasonEndpoint.response)(value).pipe(Effect.mapError(fail))
   return Response.json(encoded)
 })

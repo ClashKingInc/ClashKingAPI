@@ -75,6 +75,10 @@ jobs:
           CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
         run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/army-link-preview.mjs
 
+      - name: Verify Bot personal suggestions and shared search history
+        env:
+          CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
+        run: bash .ci-schema/scripts/with-test-timescale.sh --profile retained-api -- node scripts/e2e/bot-search-suggestions.mjs
       - name: Verify setup access and bounded War statistics
         env:
           CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data

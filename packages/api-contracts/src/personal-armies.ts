@@ -56,6 +56,14 @@ export const BotArmyInteractionEndpoint = defineEndpoint({
   response: BotArmyReply, responseMode: "json", successStatus: 200,
 })
 
+export const BotArmyPreviewEndpoint = defineEndpoint({
+  operationId: "botArmyPreview", method: "POST", path: "/v2/bot/armies/preview", auth: "bot",
+  summary: "Preview a public army link without saving it or requiring a user session",
+  body: strictObject(Schema.Struct({ army: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(6000)) })),
+  bodyMode: "json", pathParams: NoPathParams, query: NoQuery,
+  response: BotArmyReply, responseMode: "json", successStatus: 200,
+})
+
 const PersonalArmyErrors = [
   { status: 400, body: ErrorResponse },
   { status: 401, body: ErrorResponse },
@@ -90,6 +98,7 @@ export const UpdatePersonalArmyEndpoint = defineEndpoint({
 
 export const personalArmyEndpoints = {
   botArmyInteraction: BotArmyInteractionEndpoint,
+  botArmyPreview: BotArmyPreviewEndpoint,
   personalArmies: PersonalArmiesEndpoint,
   savePersonalArmy: SavePersonalArmyEndpoint,
   deletePersonalArmy: DeletePersonalArmyEndpoint,

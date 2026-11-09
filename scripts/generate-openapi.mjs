@@ -219,6 +219,7 @@ const document = {
 - Please credit if using these stats in your project, Creator Code: ClashKing
 - Not perfect, stats are collected by polling the Official API
 - [ClashKing Discord](https://discord.gg/mCQkUBpUta) | [API Developers](https://discord.gg/clashapi)
+- Building something cool? We’re [open source](https://git.clashk.ing), and we welcome contributions 🤗
 
 This content is not affiliated with, endorsed, sponsored, or specifically approved by Supercell and Supercell is not responsible for it. For more information see [Supercell's Fan Content Policy](https://supercell.com/fan-content-policy)`,
   },

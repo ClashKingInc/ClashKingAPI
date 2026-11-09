@@ -5,6 +5,7 @@ import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 import { DashboardGrantRequest, DashboardExchangeEndpoint } from "@clashking/api-contracts"
 import { AuthIdentity, bearerToken } from "./auth.js"
+import { notifyTracking } from "./tracking-wake.js"
 import { ServerAuthorization } from "./server-authorization.js"
 import { WorkerEnvironment } from "./environment.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, Unauthenticated } from "./errors.js"
@@ -66,6 +67,14 @@ export const dispatchDashboardAccess=(request:Request)=>Effect.gen(function*(){
    userId=user.userId;deviceId=user.deviceId??""
   }
   const access=yield* authorization.require(proof,grant[1]!,{})
+  // /setup and its best-effort activity write may race on a brand-new guild.
+  // Create only missing settings after authorization; never reactivate a left
+  // server or overwrite established settings through a login grant.
+  const created=yield* sql<{id:string}>`INSERT INTO servers(id,name,last_command_at)
+    SELECT id,COALESCE(NULLIF(data->>'name',''),'Discord server'),now() FROM discord_cache.guilds
+    WHERE id=${grant[1]} AND application_id=${env.DISCORD_CLIENT_ID} AND available AND metadata_complete
+    ON CONFLICT(id) DO NOTHING RETURNING id`
+  if(created.length) yield* notifyTracking(sql,{kind:"guild_reactivated",serverId:grant[1]!})
   const code=random(),digest=yield* Effect.promise(()=>hash(code)),expires=new Date(Date.now()+120000)
   yield* sql`INSERT INTO dashboard_access_grants(token_hash,user_id,server_id,source,device_id,permissions,pkce_challenge,expires_at)
     VALUES(${digest},${userId},${grant[1]},${input.source},${deviceId},${JSON.stringify({manager:access.manager,sections:access.sections})}::jsonb,${input.source==="app"?input.pkceChallenge!:null},${expires})`

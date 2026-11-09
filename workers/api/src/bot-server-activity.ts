@@ -21,22 +21,25 @@ export const dispatchBotServerActivity = (request: Request, bindings: WorkerBind
   const recorded = yield* sql.withTransaction(Effect.gen(function* () {
     // Only Discord-signed guild identity counts. User-installed commands in a
     // guild this bot has left cannot revive its tracking configuration.
-    const rows = yield* sql<{ last_command_at: Date | string | null }>`
-      SELECT server.last_command_at FROM servers server
-      JOIN discord_cache.guilds guild ON guild.id=server.id
+    const rows = yield* sql<{ last_command_at: Date | string | null; name: string }>`
+      SELECT server.last_command_at,COALESCE(NULLIF(guild.data->>'name',''),'Discord server') AS name
+      FROM discord_cache.guilds guild LEFT JOIN servers server ON server.id=guild.id
       JOIN discord_cache.gateway_shards shard
         ON (shard.application_id,shard.shard_id)=(guild.application_id,guild.shard_id)
-      WHERE server.id=${interaction.guildId} AND guild.application_id=${bindings.DISCORD_APPLICATION_ID}
+      WHERE guild.id=${interaction.guildId} AND server.left_at IS NULL AND guild.application_id=${bindings.DISCORD_APPLICATION_ID}
         AND guild.generation=shard.generation AND guild.available AND guild.metadata_complete
-      FOR UPDATE OF server`
+      FOR UPDATE OF guild`
     const previous = rows[0]
     if (!previous) return false
     // Use the verified request time, not processing time: retrying the same
     // proof cannot extend the activity window, and late proofs cannot rewind it.
     const observedAt = new Date(interaction.signedAt).toISOString()
-    const changed = yield* sql<{ id: string }>`UPDATE servers
-      SET last_command_at=${observedAt}::timestamptz,updated_at=now()
-      WHERE id=${interaction.guildId} AND (last_command_at IS NULL OR last_command_at<${observedAt}::timestamptz)
+    // The first signed command must create the settings row too; otherwise a
+    // newly joined guild never becomes active enough to load its members.
+    const changed = yield* sql<{ id: string }>`INSERT INTO servers(id,name,last_command_at)
+      VALUES(${interaction.guildId},${previous.name},${observedAt}::timestamptz)
+      ON CONFLICT(id) DO UPDATE SET last_command_at=EXCLUDED.last_command_at,updated_at=now()
+      WHERE servers.left_at IS NULL AND (servers.last_command_at IS NULL OR servers.last_command_at<EXCLUDED.last_command_at)
       RETURNING id`
     if (changed.length && (previous.last_command_at === null || new Date(previous.last_command_at).getTime() < interaction.signedAt-90*86_400_000)) {
       yield* notifyTracking(sql, { kind: "guild_reactivated", serverId: interaction.guildId })

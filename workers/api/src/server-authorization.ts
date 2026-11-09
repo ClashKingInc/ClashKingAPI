@@ -6,7 +6,7 @@ import { AuthIdentity, type ApiPrincipal } from "./auth.js"
 import { DiscordApi } from "./discord-api.js"
 import { DiscordCredentials } from "./discord-credentials.js"
 import { WorkerEnvironment } from "./environment.js"
-import { DatabaseFailure, Forbidden, InvalidRequest, UpstreamUnavailable, type ApiFailure } from "./errors.js"
+import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 
 const Guilds = Schema.Array(Schema.Struct({
   id: DecimalSnowflake,
@@ -190,10 +190,22 @@ export class ServerAuthorization extends Context.Service<
           const guild = guilds.find((candidate) => candidate.id === serverId)
           return { principal, manager: guild !== undefined && discordGuildManager(guild), sections: {} }
         }
+        let claims = { manager: gateway.owner || roleIsManager(gateway.role_permissions), roles: gateway.member_roles }
         if (!gateway.owner && !gateway.members_complete) {
-          return yield* new UpstreamUnavailable({ cause: "Gateway members are not ready", message: "Discord authorization cache is temporarily unavailable" })
+          // A large guild may have no complete member snapshot. Verify this
+          // actor directly instead of denying every non-owner or trusting a
+          // potentially stale cached membership. Discord still owns the proof.
+          const [member, roles] = yield* Effect.all([
+            discord.request(`/guilds/${serverId}/members/${principal.userId}`).pipe(
+              Effect.flatMap(value => Schema.decodeUnknownEffect(Schema.Struct({ roles: Schema.Array(DecimalSnowflake) }))(value))),
+            discord.request(`/guilds/${serverId}/roles`).pipe(
+              Effect.flatMap(value => Schema.decodeUnknownEffect(Schema.Array(Schema.Struct({id: DecimalSnowflake, permissions: Schema.String})))(value))),
+          ], {concurrency: 2}).pipe(Effect.mapError(cause => cause instanceof NotFound
+            ? new Forbidden({message: "You are not a member of this server"})
+            : cause instanceof Forbidden ? cause : new UpstreamUnavailable({cause,message:"Discord authorization could not be verified"})))
+          const memberRoles = new Set([serverId, ...member.roles])
+          claims = {manager:roleIsManager(roles.filter(role => memberRoles.has(role.id)).map(role => role.permissions)), roles: member.roles}
         }
-        const claims = { manager: gateway.owner || roleIsManager(gateway.role_permissions), roles: gateway.member_roles }
         if (claims.manager || claims.roles.length === 0) return { principal, manager: claims.manager, sections: {} }
         const sql = yield* SqlClient.SqlClient
         const grants = yield* sql.unsafe<{ section: string; access_level: "manage" | "view" }>(`

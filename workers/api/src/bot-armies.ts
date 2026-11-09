@@ -29,7 +29,7 @@ const modalValues = (components: readonly unknown[]): string[] => components.fla
 
 export const dispatchBotArmies = (request: Request, bindings: WorkerBindings) => Effect.gen(function* () {
   const path = new URL(request.url).pathname
-  if (request.method !== "POST" || ![BotArmyInteractionEndpoint.path, BotArmyPreviewEndpoint.path].includes(path)) return undefined
+  if (request.method !== "POST" || (path !== BotArmyInteractionEndpoint.path && path !== BotArmyPreviewEndpoint.path)) return undefined
   yield* (yield* AuthIdentity).requireBot(request)
   if (path === BotArmyPreviewEndpoint.path) {
     const body = yield* Schema.decodeUnknownEffect(BotArmyPreviewEndpoint.body)(yield* readBoundedJson(request, 8192)).pipe(

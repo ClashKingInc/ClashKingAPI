@@ -23,5 +23,23 @@ try{
  }
  const result=await read();assert.equal(result.donated,170);assert.equal(result.received,90);assert.equal(result.statObservations,3);
  assert.equal(result.gold,0);assert.equal(result.recordedBattles,0);
+ const guild='999999999999992911';
+ await db.query('INSERT INTO servers(id,name) VALUES($1,$2)',[guild,'Autocomplete fixture']);
+ for(const [tag,name,members] of [
+  ['#PYA','Alpha',[{tag:'#PYP',name:'First Player',town_hall:18},{tag:'#PYQ',name:'Second Player',town_hall:17}]],
+  ['#PYB','Beta',[{tag:'#PYP',name:'First Player',town_hall:18},{tag:'#PYR',name:'Third Player',town_hall:16}]],
+  ['#PYC','Outside',[{tag:'#PYU',name:'Outside Player',town_hall:19}]],
+ ]) {
+  await db.query('INSERT INTO basic_clan(tag,name,public_war_log,war_wins,member_count,badge_token,troops_donated,troops_received,members) VALUES($1,$2,true,0,$3,\'\',0,0,$4::jsonb)',[tag,name,members.length,JSON.stringify(members)]);
+  if(tag!=='#PYC')await db.query('INSERT INTO server_clans(server_id,tag) VALUES($1,$2)',[guild,tag]);
+ }
+ const autocomplete=origin+'/v2/bot/servers/'+guild+'/player-autocomplete';
+ assert.equal((await fetch(autocomplete)).status,401);
+ const suggestions=async query=>{const r=await fetch(autocomplete+'?query='+encodeURIComponent(query),{headers:{authorization:`Bearer ${token}`}});assert.equal(r.status,200);return (await r.json()).items;};
+ assert.deepEqual((await suggestions('')).map(p=>p.tag),['#PYP','#PYQ','#PYR']);
+ assert.deepEqual((await suggestions('second')).map(p=>p.tag),['#PYQ']);
+ assert.deepEqual((await suggestions('#PYR')).map(p=>p.clanName),['Beta']);
+ assert.deepEqual(await suggestions('Outside'),[]);
+ console.log('PASS actual family autocomplete API: linked clan scope, no Discord-link requirement, deduplication and name/tag matching.');
  console.log('PASS actual player-season API: sums stored donation/received events, excludes earlier seasons, preserves empty counts and bot authorization.');
 }finally{child.kill('SIGTERM');await db.end();}

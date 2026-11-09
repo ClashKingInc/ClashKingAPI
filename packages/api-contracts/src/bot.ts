@@ -1,3 +1,5 @@
+import { BotPlayerAutocompleteEndpoint } from "./bot-player-autocomplete.js"
+export * from "./bot-player-autocomplete.js"
 import { BotServerActivityEndpoint } from "./bot-server-activity.js"
 export { BotServerActivityEndpoint } from "./bot-server-activity.js"
 import { BotUserPreferencesEndpoint, BotUpdateUserPreferencesEndpoint } from "./bot-user-preferences.js"
@@ -110,6 +112,7 @@ export const botEndpoints = {
   ...botAdjacentEndpoints,
   legendStats: BotLegendStatsEndpoint,
   playerSeasonStats: BotPlayerSeasonEndpoint,
+  playerAutocomplete: BotPlayerAutocompleteEndpoint,
   playerIdentity: BotPlayerIdentityEndpoint,
   playerClanHistory: BotPlayerClanTimelineEndpoint,
   taskProgress: BotTaskProgressEndpoint,

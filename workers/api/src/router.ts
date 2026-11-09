@@ -1,3 +1,4 @@
+import { dispatchBotPlayerAutocomplete } from "./bot-player-autocomplete.js"
 import { dispatchBotServerActivity } from "./bot-server-activity.js"
 import { ServerAuthorization } from "./server-authorization.js"
 import { dispatchAIStepBudgets } from "./ai-step-budgets.js"
@@ -366,6 +367,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (botSeasonSummaryResponse !== undefined) return botSeasonSummaryResponse
     const botPlayerProgressResponse = yield* dispatchBotPlayerProgress(request)
     if (botPlayerProgressResponse !== undefined) return botPlayerProgressResponse
+    const autocompleteResponse = yield* dispatchBotPlayerAutocomplete(request)
+    if (autocompleteResponse !== undefined) return autocompleteResponse
     const botPlayerSeasonResponse = yield* dispatchBotPlayerSeason(request)
     if (botPlayerSeasonResponse !== undefined) return botPlayerSeasonResponse
     const botPlayerIdentityResponse = yield* dispatchBotPlayerIdentity(request,bindings)

@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { SqlClient } from "effect/sql"
 
 import { DatabaseFailure, InvalidRequest } from "./errors.js"
+import { WorkerEnvironment } from "./environment.js"
 import { parseHistoryTime } from "./public-time.js"
 
 type Interval = "day" | "month" | "week"
@@ -148,7 +149,16 @@ export const queryWarSummary = (query: URLSearchParams, now = new Date()) => fai
 export const dispatchStatsHistory = (request: Request) => Effect.gen(function* () {
   if (request.method !== "GET") return undefined
   const url = new URL(request.url)
-  if (url.pathname === "/v2/stats/wars/hitrates") return Response.json(yield* queryWarHitrates(url.searchParams))
-  if (url.pathname === "/v2/stats/wars/summary") return Response.json(yield* queryWarSummary(url.searchParams))
-  return undefined
+  if (url.pathname !== "/v2/stats/wars/hitrates" && url.pathname !== "/v2/stats/wars/summary") return undefined
+  const environment = yield* WorkerEnvironment
+  url.searchParams.sort()
+  const key = `war-chart:v1:${url.pathname}:${url.searchParams}`
+  const cached = yield* Effect.tryPromise(() => environment.API_CACHE.get(key, "json")).pipe(Effect.catch(() => Effect.succeed(null)))
+  if (cached !== null) return Response.json(cached)
+  const result = yield* (url.pathname.endsWith("/hitrates") ? queryWarHitrates(url.searchParams) : queryWarSummary(url.searchParams))
+  // Public aggregates tolerate five minutes of freshness. Cache only successful,
+  // bounded responses; cache failure must not turn valid statistics into errors.
+  const encoded = JSON.stringify(result)
+  if (encoded.length <= 1_000_000) yield* Effect.tryPromise(() => environment.API_CACHE.put(key, encoded, {expirationTtl:300})).pipe(Effect.catch(() => Effect.void))
+  return Response.json(result)
 })

@@ -1,4 +1,4 @@
-import { BotArmyInteractionEndpoint, BotArmyReply } from "@clashking/api-contracts"
+import { BotArmyInteractionEndpoint, BotArmyPreviewEndpoint, BotArmyReply } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { AuthIdentity } from "./auth.js"
 import { normalizeArmyLink } from "./army-link.js"
@@ -28,8 +28,20 @@ const modalValues = (components: readonly unknown[]): string[] => components.fla
 })
 
 export const dispatchBotArmies = (request: Request, bindings: WorkerBindings) => Effect.gen(function* () {
-  if (request.method !== "POST" || new URL(request.url).pathname !== BotArmyInteractionEndpoint.path) return undefined
+  const path = new URL(request.url).pathname
+  if (request.method !== "POST" || ![BotArmyInteractionEndpoint.path, BotArmyPreviewEndpoint.path].includes(path)) return undefined
   yield* (yield* AuthIdentity).requireBot(request)
+  if (path === BotArmyPreviewEndpoint.path) {
+    const body = yield* Schema.decodeUnknownEffect(BotArmyPreviewEndpoint.body)(yield* readBoundedJson(request, 8192)).pipe(
+      Effect.mapError(() => new InvalidRequest({ message: "Invalid army preview" })),
+    )
+    // Parsing a pasted public link must not save an army or impersonate its author.
+    const prepared = yield* prepareBotArmy(body.army, bindings)
+    const result = yield* Schema.encodeEffect(BotArmyReply)({items: [], saved: false, shareCode: prepared.shareCode,
+      armyLink: `https://link.clashofclans.com/en?action=CopyArmy&army=${encodeURIComponent(prepared.shareCode)}`,
+      presentation: prepared.presentation}).pipe(Effect.orDie)
+    return Response.json(result, { headers: { "cache-control": "no-store" } })
+  }
   const proof = yield* Schema.decodeUnknownEffect(BotArmyInteractionEndpoint.body)(yield* readBoundedJson(request, 2_100_000)).pipe(
     Effect.mapError(() => new InvalidRequest({ message: "Invalid army interaction proof" })),
   )

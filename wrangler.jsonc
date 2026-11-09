@@ -142,7 +142,7 @@
     "NATIVE_TOKEN_AUDIENCE": "clashking-native",
     "WEB_TOKEN_AUDIENCE": "clashking-web",
     "IOS_MINIMUM_VERSION": "0.0.0",
-    "IOS_STORE_URL": "https://apps.apple.com/app/id0000000000",
+    "IOS_STORE_URL": "https://apps.apple.com/us/app/clashking/id6502886269",
     "ANDROID_MINIMUM_VERSION": "0.0.0",
     "ANDROID_STORE_URL": "https://play.google.com/store/apps/details?id=ing.clashk",
     "FORCED_UPDATE_MESSAGE": "A newer version of ClashKing is required.",

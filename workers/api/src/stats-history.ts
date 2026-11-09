@@ -43,7 +43,6 @@ export const parseStatsHistoryWindow = (
   return { start, end }
 })
 
-interface ArchiveDayRow { readonly archive_day: string; readonly stats: unknown }
 interface StarOutcome { readonly attacks?: number; readonly destructionPercent?: number; readonly durationSeconds?: number }
 interface HitRates { readonly attacks?: number; readonly zeroStars?: StarOutcome; readonly oneStars?: StarOutcome; readonly twoStars?: StarOutcome; readonly threeStars?: StarOutcome }
 interface WarSizeStats { readonly wars?: number; readonly townhalls?: Record<string, number>; readonly ties?: number }
@@ -70,9 +69,15 @@ const parseIntervalWindow = (query: URLSearchParams, allowed: ReadonlySet<string
 })
 const loadArchiveDays = (start: Date, end: Date) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  return yield* sql.unsafe<ArchiveDayRow>(`SELECT day.key AS archive_day,day.value AS stats
-    FROM war_archive_packs pack CROSS JOIN LATERAL jsonb_each(COALESCE(pack.stats->'byDay','{}'::jsonb)) day
-    WHERE pack.status='uploaded' AND day.key >= $1 AND day.key <= $2 ORDER BY day.key`, [day(start), day(end)])
+  // Filter pack metadata before reading summaries. Expanding every pack in SQL
+  // needlessly detoasts years of JSON for each chart. Older migration packs can
+  // span weeks, so retain their stored day keys when constructing chart buckets.
+  const packs = yield* sql.unsafe<{stats: unknown}>(`SELECT stats FROM war_archive_packs
+    WHERE status='uploaded' AND last_end_time >= $1 AND first_end_time < $2`, [start, addDays(end, 1)])
+  const first = day(start), last = day(end)
+  return packs.flatMap(pack => Object.entries(record(record(pack.stats).byDay))
+    .filter(([date]) => date >= first && date <= last)
+    .map(([archive_day, stats]) => ({archive_day, stats})))
 })
 
 export const queryWarHitrates = (query: URLSearchParams, now = new Date()) => failure("War hit-rate query failed", Effect.gen(function* () {

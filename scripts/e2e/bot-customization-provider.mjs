@@ -9,6 +9,9 @@ export async function startBotCustomizationProvider(){
  const server=createServer(async(req,res)=>{
   res.setHeader('content-type','application/json');
   if(req.url==='/api/v10/users/@me/guilds?limit=200&with_counts=true'){res.end(JSON.stringify(control.guilds));return;}
+  if(decodeURIComponent(req.url??'')==='/v1/clans/#PYLQRRJC'){
+   res.end(JSON.stringify({tag:'#PYLQRRJC',name:'Unlimited clans fixture',description:'Local fixture',isWarLogPublic:true,type:'inviteOnly',clanPoints:0,warWins:0,warWinStreak:0,clanLevel:10,members:1,memberList:[{tag:'#PYLQRRJP',name:'Fixture',townHallLevel:16,trophies:5000,role:'member',donations:0,donationsReceived:0,clanRank:1,previousClanRank:1,expLevel:200}],badgeUrls:{small:'https://example.invalid/badge.png'}}));return;
+  }
   if(req.url==='/api/v10/users/@me'){res.end(JSON.stringify({id:'999999999999999999',username:'ClashKing'}));return;}
   const user=/^\/api\/v10\/users\/(\d+)$/.exec(req.url??'');
   if(user){userReads.push(user[1]);const value=users.get(user[1]);if(!value)res.statusCode=404;res.end(JSON.stringify(value??{message:'Unknown User'}));return;}

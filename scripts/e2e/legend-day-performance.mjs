@@ -71,7 +71,7 @@ try {
     }
   }
   api=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{
-    env:{...process.env,CLASHKING_LOCAL_DISCORD_TEST_ORIGIN:profileProvider.origin,CLASHKING_LOCAL_DISCORD_BOT_TOKEN:"local-discord-token",CLASHKING_LOCAL_ADMIN_IDENTITY:"1",CLASHKING_LOCAL_ADMIN_PORT:"8804",CLASHKING_E2E_DATA_ENCRYPTION_KEY:encryptionKey,CLASHKING_E2E_AI_USAGE_SECRET:meteringKey,CLASHKING_E2E_JWT_ACCESS_SECRET:signingKey,CLASHKING_E2E_EMAIL_HASH_SECRET:emailLookupKey,CLASHKING_E2E_API_BOT_TOKEN:botKey,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',
+    env:{...process.env,CLASHKING_LOCAL_CLASH_PROXY_ORIGIN:profileProvider.origin,CLASHKING_LOCAL_DISCORD_TEST_ORIGIN:profileProvider.origin,CLASHKING_LOCAL_DISCORD_BOT_TOKEN:"local-discord-token",CLASHKING_LOCAL_ADMIN_IDENTITY:"1",CLASHKING_LOCAL_ADMIN_PORT:"8804",CLASHKING_E2E_DATA_ENCRYPTION_KEY:encryptionKey,CLASHKING_E2E_AI_USAGE_SECRET:meteringKey,CLASHKING_E2E_JWT_ACCESS_SECRET:signingKey,CLASHKING_E2E_EMAIL_HASH_SECRET:emailLookupKey,CLASHKING_E2E_API_BOT_TOKEN:botKey,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',
       CLASHKING_LOCAL_DISCORD_CLIENT_ID:'999999999999999999',CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'local-only',
       CLASHKING_LOCAL_PRODUCTION_READS:'0',CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_E2E_STATIC_ASSETS_ROOT??resolve('../clashking_assets/assets/static_data')},stdio:['ignore','pipe','pipe']})
   api.stdout.on('data',d=>logs+=d);api.stderr.on('data',d=>logs+=d)
@@ -296,7 +296,7 @@ try {
   await verifyAccountAvatars({db,origin:`http://127.0.0.1:${port}`,signingKey})
   await verifyScopedDashboardAccess({db,origin:`http://127.0.0.1:${port}`,signingKey,applicationId:'999999999999999999',botKey,meteringKey})
   await verifyGuildListCache({db,origin:`http://127.0.0.1:${port}`,signingKey,encryptionKey,provider:profileProvider})
-  await verifyManualLimits({db,origin:`http://127.0.0.1:${port}`,adminOrigin:'http://127.0.0.1:8804',signingKey,meteringKey,profileProvider})
+  await verifyManualLimits({db,origin:`http://127.0.0.1:${port}`,adminOrigin:'http://127.0.0.1:8804',signingKey,meteringKey,profileProvider,schemaRoot:process.env.CLASHKING_E2E_SCHEMA_ROOT??resolve('.ci-schema')})
   // The running API must not depend on retired permanent-family tables. Rename
   // them only inside this disposable fixture while retaining their rows.
   for (const table of ['army_family_daily_stats','army_family_members','army_families']) {

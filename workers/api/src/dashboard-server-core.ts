@@ -1,4 +1,4 @@
-import { LIMIT_SUPPORT_URL, limitMessage } from "./server-limits.js"
+import { LIMIT_SUPPORT_URL } from "./server-limits.js"
 import { executeClanVerification } from "./dashboard-clan-verification.js"
 import { executeClanLinks } from "./dashboard-clan-links.js"
 import { dashboardEndpoints, DecimalSnowflake } from "@clashking/api-contracts"
@@ -323,7 +323,7 @@ const profileOperation = (input: DashboardServerOperationInput) => database("Bot
     const sql = yield* SqlClient.SqlClient
     const grant = (yield* sql<{ enabled: boolean }>`SELECT bot_customization_enabled AS enabled FROM servers WHERE id=${serverId}`)[0]
     if (grant?.enabled !== true) return yield* new Forbidden({
-      message: `Bot customization requires approval. Join our Discord server and ask for access: ${LIMIT_SUPPORT_URL}`,
+      message: `Bot personalization is available to supporters and contributors. If you are one, ask for access in our Discord server: ${LIMIT_SUPPORT_URL}`,
     })
 
     if (body.clear_name === true) payload.nick = null
@@ -434,7 +434,7 @@ const loadSettings = (serverId: string) => Effect.gen(function* () {
 })
 
 const updateSettings = (serverId: string, body: JsonRecord) => Effect.gen(function* () {
-  if (["autoboard_limit","clan_limit","ai_monthly_limit_usd","bot_customization_enabled","botCustomizationEnabled"].some(key=>key in body)) return yield* new Forbidden({message:"Only administrators can change resource limits"})
+  if (["autoboard_limit","ai_monthly_limit_usd","bot_customization_enabled","botCustomizationEnabled"].some(key=>key in body)) return yield* new Forbidden({message:"Only administrators can change resource limits"})
   const sql = yield* SqlClient.SqlClient
   if (body.role_leave_delay_minutes !== undefined && (!Number.isInteger(body.role_leave_delay_minutes) || Number(body.role_leave_delay_minutes) < 5 || Number(body.role_leave_delay_minutes) > 60)) return yield* new InvalidRequest({ message: "Leave delay must be an integer from 5 to 60 minutes" })
   if (body.auto_eval_triggers !== undefined && body.auto_eval_triggers !== null) {
@@ -575,9 +575,6 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
 const addClanOperation = (input: DashboardServerOperationInput) => database("Clan could not be added", Effect.gen(function* () {
   const tag = normalizeTag(record(input.body).tag), serverId = serverIdFor(input)
   if (!/^#[0289PYLQGRJCUV]{3,15}$/u.test(tag)) return yield* new InvalidRequest({ message: "The clan tag is invalid. Check the tag and try again." })
-  const checkSql=yield* SqlClient.SqlClient
-  const cap=(yield* checkSql<{clan_limit:number;count:number;exists:boolean}>`SELECT s.clan_limit,(SELECT count(*)::int FROM server_clans WHERE server_id=s.id) AS count,EXISTS(SELECT 1 FROM server_clans WHERE server_id=s.id AND tag=${tag}) AS exists FROM servers s WHERE s.id=${serverId}`)[0]
-  if(cap && !cap.exists && cap.count>=cap.clan_limit)return yield* new Conflict({message:limitMessage("Clan")})
   const response = yield* Effect.tryPromise({
     try: () => input.bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy.internal/v1/clans/${encodeURIComponent(tag)}`, { signal: AbortSignal.timeout(15_000) })),
     catch: (cause) => new UpstreamUnavailable({ cause, message: "Clash of Clans API is unavailable" }),
@@ -595,10 +592,10 @@ const addClanOperation = (input: DashboardServerOperationInput) => database("Cla
     yield* sql`INSERT INTO basic_clan (tag, name, description, clan_level, location_id, cwl_league_id, capital_league_id, public_war_log, war_wins, war_win_streak, clan_points, member_count, badge_token, troops_donated, troops_received, members, last_active)
       VALUES (${clan.tag}, ${clan.name}, ${clan.description}, ${clan.clanLevel}, ${clan.locationId}, ${clan.warLeagueId}, ${clan.capitalLeagueId}, ${clan.publicWarLog}, ${clan.warWins}, ${clan.warWinStreak}, ${clan.clanPoints}, ${clan.memberCount}, ${clan.badgeToken}, ${clan.donated}, ${clan.received}, ${JSON.stringify(clan.members)}::jsonb, now())
       ON CONFLICT (tag) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, clan_level = EXCLUDED.clan_level, location_id = EXCLUDED.location_id, cwl_league_id = EXCLUDED.cwl_league_id, capital_league_id = EXCLUDED.capital_league_id, public_war_log = EXCLUDED.public_war_log, war_wins = EXCLUDED.war_wins, war_win_streak = EXCLUDED.war_win_streak, clan_points = EXCLUDED.clan_points, member_count = EXCLUDED.member_count, badge_token = EXCLUDED.badge_token, troops_donated = EXCLUDED.troops_donated, troops_received = EXCLUDED.troops_received, members = EXCLUDED.members, last_active = now()`
-    const limits=(yield* sql<{clan_limit:number}>`SELECT clan_limit FROM servers WHERE id=${serverId} FOR UPDATE`)[0]
-    if(!limits)return yield* new NotFound({message:"Server not found"})
-    const current=(yield* sql<{count:number;exists:boolean}>`SELECT count(*)::int AS count,bool_or(tag=${clan.tag}) AS exists FROM server_clans WHERE server_id=${serverId}`)[0]!
-    if(!current.exists && current.count>=limits.clan_limit)return yield* new Conflict({message:limitMessage("Clan")})
+    // Keep the server lock for deletion races and serialized role-refresh writes.
+    // Clan membership has no quota; duplicate adds still use the unique key below.
+    const server=(yield* sql<{id:string}>`SELECT id FROM servers WHERE id=${serverId} FOR UPDATE`)[0]
+    if(!server)return yield* new NotFound({message:"Server not found"})
     const added = yield* sql<{ tag: string }>`INSERT INTO server_clans (tag, server_id, updated_at) VALUES (${clan.tag}, ${serverId}, now()) ON CONFLICT (tag, server_id) DO NOTHING RETURNING tag`
     if (added.length) yield* queueServerRoleRefresh(serverId)
     else yield* sql`UPDATE server_clans SET updated_at = now() WHERE tag = ${clan.tag} AND server_id = ${serverId}`

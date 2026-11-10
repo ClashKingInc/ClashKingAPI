@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
+import {readFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
 import {SignJWT} from 'jose';
-export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meteringKey,profileProvider}){
+export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meteringKey,profileProvider,schemaRoot}){
  assert.equal(process.env.CLASHKING_DISPOSABLE_TIMESCALE,'1');
  const server='999999999999995901',actor='999999999999995902';
  await db.query("INSERT INTO servers(id,name) VALUES($1,'Manual limits fixture')",[server]);
@@ -11,8 +13,8 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  const r=await fetch(base+path,{method,headers:{origin:'http://localhost:3000','x-requested-with':'XMLHttpRequest',...(body?{'content-type':'application/json'}:{}),...headers},...(body?{body:JSON.stringify(body)}:{})});const text=await r.text();assert.equal(r.status,expected,`${method} ${path}: ${text}`);return text?JSON.parse(text):null;};
  await request(origin,'/v2/admin/server-limits?search='+server,'GET',undefined,{},401);
  let row=(await request(adminOrigin,'/v2/admin/server-limits?search='+server))[0];
- assert.equal(row.clanLimit,10);assert.equal(row.autoboardLimit,5);assert.equal(row.aiMonthlyLimitUsd,.10);assert.equal(row.botCustomizationEnabled,false);
- await request(origin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:90,autoboardLimit:90,aiMonthlyLimitUsd:9},{authorization:'Bearer '+token},401);
+ assert.equal(Object.hasOwn(row,"clanLimit"),false);assert.equal(row.autoboardLimit,5);assert.equal(row.aiMonthlyLimitUsd,.10);assert.equal(row.botCustomizationEnabled,false);
+ await request(origin,'/v2/admin/server-limits/'+server,'PATCH',{autoboardLimit:90,aiMonthlyLimitUsd:9},{authorization:'Bearer '+token},401);
  const generation=(await db.query('SELECT generation FROM discord_cache.gateway_shards WHERE application_id=$1 AND shard_id=0',['999999999999999999'])).rows[0].generation;
  await db.query('INSERT INTO discord_cache.guilds(id,data,application_id,shard_id,generation,available,metadata_complete,members_complete) VALUES($1,$2,$3,0,$4,true,true,true)',[server,{owner_id:actor},'999999999999999999',generation]);
  const userHeaders={authorization:'Bearer '+token};
@@ -66,25 +68,36 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  console.log('PASS log state: actual authorized HTTP/SQL disable and enable without Discord webhook access; destination retained');
 
 
- await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:0,autoboardLimit:0,aiMonthlyLimitUsd:.05});
- await request(origin,'/v2/server/'+server+'/clans','POST',{tag:'#PYLQRRJC'},userHeaders,409);
- await request(origin,'/v2/server/'+server+'/autoboards','POST',{boardType:'donations',targetScope:'family',targets:[],deliveryMode:'refresh',channelId:'999999999999995999',enabled:true},userHeaders,400);
- await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:10,autoboardLimit:5,aiMonthlyLimitUsd:.05});
+ await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{autoboardLimit:0,aiMonthlyLimitUsd:.05});
+ // Seed ten memberships, then exercise the real API past the former cap.
+ for(const suffix of 'PYLQGRJCUV'){
+  const tag='#PYLQ'+suffix;
+  await db.query("INSERT INTO basic_clan(tag,name,public_war_log,war_wins,member_count,badge_token,troops_donated,troops_received,members) VALUES($1,'Existing clan',true,0,1,'fixture',0,0,'[]') ON CONFLICT(tag) DO NOTHING",[tag]);
+  await db.query('INSERT INTO server_clans(tag,server_id) VALUES($1,$2)',[tag,server]);
+ }
+ await request(origin,'/v2/server/'+server+'/clans','POST',{tag:'#PYLQRRJC'},userHeaders);
+ await request(origin,'/v2/server/'+server+'/clans','POST',{tag:'#PYLQRRJC'},userHeaders);
+ assert.equal((await request(origin,'/v2/server/'+server+'/limits','GET',undefined,userHeaders)).clanCount,11,'The eleventh clan is accepted and duplicate adds remain idempotent');
+ assert.equal((await db.query("SELECT count(*)::int AS n FROM information_schema.columns WHERE table_schema='public' AND table_name='servers' AND column_name='clan_limit'")).rows[0].n,0);
+ console.log('PASS unlimited clans: eleventh clan added through actual API, duplicate add retained once, removed database column absent');
+ const boardDenied=await request(origin,'/v2/server/'+server+'/autoboards','POST',{boardType:'donations',targetScope:'family',targets:[],deliveryMode:'refresh',channelId:'999999999999995999',enabled:true},userHeaders,400);
+ assert.match(JSON.stringify(boardDenied),/AutoBoard limit reached/,'The retained AutoBoard cap must reject additions');
+ await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{autoboardLimit:5,aiMonthlyLimitUsd:.05});
  // An ordinary settings manager cannot grant customization to their server.
- await request(origin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:10,autoboardLimit:5,aiMonthlyLimitUsd:.05,botCustomizationEnabled:true},userHeaders,401);
+ await request(origin,'/v2/admin/server-limits/'+server,'PATCH',{autoboardLimit:5,aiMonthlyLimitUsd:.05,botCustomizationEnabled:true},userHeaders,401);
  const startWrites=profileProvider.writes.length;
  for(const body of [{name:'Denied name'},{bio:'Denied bio'},{avatar:'invalid-image'},{banner:'invalid-image'},{clear_name:true},{clear_avatar:true},{clear_banner:true},{clear_bio:true}])
   await request(origin,'/v2/server/'+server+'/bot-profile','PATCH',body,userHeaders,403);
  assert.equal(profileProvider.writes.length,startWrites,'Denied changes must never reach Discord');
  const existing=await request(origin,'/v2/server/'+server+'/bot-profile','GET',undefined,userHeaders);
  assert.equal(existing.name,'Existing profile','Read-only display remains available without a grant');
- await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:10,autoboardLimit:5,aiMonthlyLimitUsd:.05,botCustomizationEnabled:true});
+ await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{autoboardLimit:5,aiMonthlyLimitUsd:.05,botCustomizationEnabled:true});
  row=(await request(adminOrigin,'/v2/admin/server-limits?search='+server))[0];assert.equal(row.botCustomizationEnabled,true);
  const changed=await request(origin,'/v2/server/'+server+'/bot-profile','PATCH',{name:'Granted name',bio:'Granted bio'},userHeaders);
  assert.equal(changed.name,'Granted name');assert.equal(changed.bio,'Granted bio');
  assert.equal(profileProvider.writes.length,startWrites+1);
  // Updating unrelated limits must not silently remove a granted permission.
- await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:11,autoboardLimit:5,aiMonthlyLimitUsd:.05});
+ await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{autoboardLimit:5,aiMonthlyLimitUsd:.05});
  assert.equal((await request(origin,'/v2/server/'+server+'/limits','GET',undefined,userHeaders)).botCustomizationEnabled,true);
  const otherServer='999999999999995903';
  await db.query("INSERT INTO servers(id,name) VALUES($1,'Other customization fixture')",[otherServer]);
@@ -95,7 +108,7 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  const viewerSession=(await db.query("INSERT INTO dashboard_scoped_sessions(grant_id,user_id,server_id,permissions,refresh_hash,expires_at) VALUES($1,$2,$3,$4,$5,now()+interval '1 hour') RETURNING id",[viewerGrant,actor,server,{manager:false,sections:{settings:'view'}},randomUUID()])).rows[0].id;
  const viewerToken=await new SignJWT({dashboard_session:viewerSession}).setProtectedHeader({alg:'HS256'}).setSubject(actor).setAudience('clashking-server-dashboard').setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(signingKey));
  await request(origin,'/v2/server/'+server+'/bot-profile','PATCH',{name:'Read-only session'}, {authorization:'Bearer '+viewerToken},403);
- await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:10,autoboardLimit:5,aiMonthlyLimitUsd:.05,botCustomizationEnabled:false});
+ await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{autoboardLimit:5,aiMonthlyLimitUsd:.05,botCustomizationEnabled:false});
  await request(origin,'/v2/server/'+server+'/bot-profile','PATCH',{name:'Revoked name'},userHeaders,403);
  assert.equal(profileProvider.writes.length,startWrites+1,'Revocation and read-only sessions must not cause Discord writes');
  assert.equal((await request(origin,'/v2/server/'+server+'/bot-profile','GET',undefined,userHeaders)).name,'Granted name','Revocation retains the existing profile');
@@ -128,7 +141,7 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  await request(origin,'/v2/runtime/roster-ai/settle','POST',actual,metering);
  row=(await request(adminOrigin,'/v2/admin/server-limits?search='+server))[0];assert.equal(row.aiSpentUsd,.015);assert.equal(row.aiReservedUsd,0);
  assert.equal(Number((await db.query('SELECT reasoning_tokens FROM roster_ai_usage WHERE id=$1',[winner])).rows[0].reasoning_tokens),300);
- await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:20,autoboardLimit:15,aiMonthlyLimitUsd:.01});
+ await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{autoboardLimit:15,aiMonthlyLimitUsd:.01});
  // A prompt already admitted may exceed the cap, even after an admin lowers it.
  await request(origin,'/v2/runtime/roster-ai/reserve','POST',{requestId:ids[1],step:1,inputTokenLimit:1000,outputTokenLimit:1000},metering);
  await request(origin,'/v2/runtime/roster-ai/settle','POST',{requestId:ids[1],step:1,inputTokens:0,outputTokens:0,outcome:'unknown',failureCode:'provider_stream_interrupted'},metering);
@@ -138,12 +151,22 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  await request(origin,'/v2/runtime/roster-ai/settle','POST',{requestId:ids[1],step:1,inputTokens:2000,outputTokens:2000},metering);
  await request(origin,'/v2/runtime/roster-ai/settle','POST',{requestId:ids[1],step:1,inputTokens:0,outputTokens:0,outcome:'unknown'},metering);
  assert.equal((await db.query('SELECT outcome FROM roster_ai_step_budgets WHERE usage_id=$1 AND step=1',[ids[1]])).rows[0].outcome,'completed');
- await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{clanLimit:20,autoboardLimit:15,aiMonthlyLimitUsd:.20});
+ await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{autoboardLimit:15,aiMonthlyLimitUsd:.20});
  const longId=randomUUID();await db.query("INSERT INTO roster_ai_usage(id,server_id,discord_user_id,operation,provider,model) VALUES($1,$2,$3,'fixture','openai','gpt-6-luna')",[longId,server,actor]);
  await request(origin,'/v2/runtime/roster-ai/reserve','POST',{requestId:longId,step:0,inputTokenLimit:300000,outputTokenLimit:64000},metering);
  await request(origin,'/v2/runtime/roster-ai/settle','POST',{requestId:longId,step:0,inputTokens:300000,cacheWriteTokens:300000,outputTokens:10000},metering);
  assert.equal(Number((await db.query('SELECT total_cost_usd FROM roster_ai_usage WHERE id=$1',[longId])).rows[0].total_cost_usd),.0825,'Long-context cache-write pricing retained');
  assert((await db.query("SELECT count(*)::int AS n FROM admin_audit_events WHERE resource_id=$1 AND action='server_limits.update'",[server])).rows[0].n>=2);
  await request(origin,'/v2/billing/subscription','GET',undefined,{authorization:'Bearer '+token},410);
- console.log('PASS manual limits: real Access JWT admin boundary, audited edits, defaults 10/5/$0.05, no reservations, duplicate settlement, unknown call recovery, reasoning usage, raised/lowered limits, billing retired');
+ const migration=await readFile(resolve(schemaRoot,'database/timescale/075_remove_server_clan_limit.sql'),'utf8');
+ const [up,down]=migration.split('-- +goose Down');
+ const beforeRollback=(await request(origin,'/v2/server/'+server+'/limits','GET',undefined,userHeaders));
+ await db.query(down);
+ try {
+  assert.equal((await db.query('SELECT clan_limit FROM servers WHERE id=$1',[server])).rows[0].clan_limit,10);
+  assert.equal((await db.query('SELECT count(*)::int AS n FROM server_clans WHERE server_id=$1',[server])).rows[0].n,11,'Rollback must retain all eleven clans');
+ } finally { await db.query(up); }
+ assert.deepEqual(await request(origin,'/v2/server/'+server+'/limits','GET',undefined,userHeaders),beforeRollback,'Down/Up must preserve AutoBoard limits, grants, counts and AI spend/reservations');
+ console.log('PASS migration 075 Down/Up: restores old default without deleting clans; forward migration preserves AI accounting and all remaining settings');
+ console.log('PASS manual limits: real Access JWT admin boundary, audited edits, unlimited clans, defaults 5/$0.10, no reservations, duplicate settlement, unknown call recovery, reasoning usage, raised/lowered limits, billing retired');
 }

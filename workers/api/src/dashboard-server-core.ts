@@ -186,27 +186,36 @@ const accessOperation = (input: DashboardServerOperationInput) => database("Dash
     return { server_id: serverId, full_access: access.manager, sections: access.manager ? Object.fromEntries(sections.map((section) => [section, "manage"])) : access.sections }
   }
   const sql = yield* SqlClient.SqlClient
-  const roles = yield* rolesFromDiscord(serverId, input.bindings.DISCORD_CLIENT_ID, input.endpoint.operationId === "updateDashboardAccess")
+  // Use the same live inventory for the picker and validation. A healthy Gateway
+  // heartbeat does not guarantee that its last role update has arrived yet.
+  const roles = yield* rolesFromDiscord(serverId, input.bindings.DISCORD_CLIENT_ID, true)
   const available = roles.map(({ id, name, color, position }) => ({ id, name, color, position }))
   const before = yield* sql<{ role_id: string; section: string; access_level: "view" | "manage" }>`SELECT role_id, section, access_level FROM dashboard_role_grants WHERE server_id = ${serverId} ORDER BY role_id, section`
-  if (input.endpoint.operationId === "dashboardAccess") return { server_id: serverId, roles: available, grants: before, sections }
-  const body = yield* Schema.decodeUnknownEffect(dashboardEndpoints.updateDashboardAccess.body)(input.body).pipe(Effect.mapError(() => new InvalidRequest({ message: "Invalid Dashboard grants" })))
   const assignable = new Set(roles.map((role) => role.id))
+  // Deleted/managed roles can outlive their Discord role in stored grants. Hide
+  // those grants on read; the next explicit save removes them in the audited
+  // transaction below. A GET must never mutate access settings.
+  if (input.endpoint.operationId === "dashboardAccess") return { server_id: serverId, roles: available, grants: before.filter((grant) => assignable.has(grant.role_id)), sections }
+  const body = yield* Schema.decodeUnknownEffect(dashboardEndpoints.updateDashboardAccess.body)(input.body).pipe(Effect.mapError(() => new InvalidRequest({ message: "Invalid Dashboard grants" })))
+  const existingRoleIds = new Set(before.map((grant) => grant.role_id))
   const seen = new Set<string>()
   for (const grant of body.grants) {
-    if (!assignable.has(grant.role_id)) return yield* new InvalidRequest({ message: "A selected role is managed, missing, or @everyone" })
+    // Old clients may resubmit an unavailable saved role. Remove that stale
+    // grant without blocking valid changes, but never accept a new invalid role.
+    if (!assignable.has(grant.role_id) && !existingRoleIds.has(grant.role_id)) return yield* new InvalidRequest({ message: `Role ${grant.role_id} is no longer available. Reload Dashboard access and select an existing, unmanaged role.` })
     if (!sections.some((section) => section === grant.section)) return yield* new InvalidRequest({ message: "Invalid dashboard section" })
     const key = `${grant.role_id}:${grant.section}`
     if (seen.has(key)) return yield* new InvalidRequest({ message: "Duplicate role and section grant" })
     seen.add(key)
   }
+  const grants = body.grants.filter((grant) => assignable.has(grant.role_id))
   const actor = input.principal.kind === "user" ? input.principal.userId : null
   yield* sql.withTransaction(Effect.gen(function* () {
     yield* sql`DELETE FROM dashboard_role_grants WHERE server_id = ${serverId}`
-    for (const grant of body.grants) yield* sql`INSERT INTO dashboard_role_grants (server_id, role_id, section, access_level, created_by_user_id) VALUES (${serverId}, ${grant.role_id}, ${grant.section}, ${grant.access_level}, ${actor})`
-    yield* sql`INSERT INTO dashboard_access_audit (server_id, actor_user_id, before_grants, after_grants) VALUES (${serverId}, ${actor}, ${JSON.stringify(before)}::jsonb, ${JSON.stringify(body.grants)}::jsonb)`
+    for (const grant of grants) yield* sql`INSERT INTO dashboard_role_grants (server_id, role_id, section, access_level, created_by_user_id) VALUES (${serverId}, ${grant.role_id}, ${grant.section}, ${grant.access_level}, ${actor})`
+    yield* sql`INSERT INTO dashboard_access_audit (server_id, actor_user_id, before_grants, after_grants) VALUES (${serverId}, ${actor}, ${JSON.stringify(before)}::jsonb, ${JSON.stringify(grants)}::jsonb)`
   }))
-  return { server_id: serverId, roles: available, grants: body.grants, sections }
+  return { server_id: serverId, roles: available, grants, sections }
 }))
 
 const channelOperation = (input: DashboardServerOperationInput) => Effect.gen(function* () {

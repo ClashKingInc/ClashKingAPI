@@ -1,5 +1,3 @@
-import { PushTokenRotationEndpoint } from "./push-token-maintenance.js"
-export * from "./push-token-maintenance.js"
 import { ServerLimitsEndpoint } from "./server-limits.js"
 export * from "./server-limits.js"
 import { BotGraphTotalEndpoint } from "./bot-graph-total.js"
@@ -69,7 +67,6 @@ const coreEndpoints = {
   serverLimits: ServerLimitsEndpoint,
   botGraphTotal: BotGraphTotalEndpoint,
   botCapitalTrophyHistory: BotCapitalTrophyHistoryEndpoint,
-  pushTokenRotation: PushTokenRotationEndpoint,
   botManualReminders: BotManualRemindersEndpoint,
   aiNotice: AiNoticeGetEndpoint,
   acknowledgeAiNotice: AiNoticeAcceptEndpoint,

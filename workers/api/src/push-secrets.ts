@@ -48,19 +48,3 @@ export const hashPushToken = (token: string) => Effect.tryPromise({
     .map((byte) => byte.toString(16).padStart(2, "0")).join(""),
   catch: (cause) => new UpstreamUnavailable({ cause, message: "Push token hashing failed" }),
 })
-
-
-export interface PushEncryptionKeys {
-  readonly DATA_ENCRYPTION_KEY?: string
-  readonly MOBILE_PUSH_LEGACY_ENCRYPTION_KEY?: string
-}
-
-// The API's existing key remains the write key. The older reader key is only
-// retained to migrate old device rows without changing unrelated credentials.
-export const decryptDevicePushToken = (value: string, keys: PushEncryptionKeys) => Effect.gen(function* () {
-  for (const key of new Set([keys.DATA_ENCRYPTION_KEY, keys.MOBILE_PUSH_LEGACY_ENCRYPTION_KEY].filter((key): key is string => Boolean(key)))) {
-    const result = yield* Effect.result(decryptPushToken(value, key))
-    if (result._tag === "Success") return result.success
-  }
-  return yield* new UpstreamUnavailable({ cause: undefined, message: "Push token decryption failed" })
-})

@@ -6,7 +6,7 @@ import { readBoundedJson } from "./request-body.js"
 import { lookupStaticItem } from "./static-metadata.js"
 
 type Group = typeof CurrentCwlGroup.Type
-type War = typeof ProxyWarResponse.Type
+type War = Exclude<typeof ProxyWarResponse.Type, { readonly state: "notInWar" }>
 type Member = NonNullable<NonNullable<War["clan"]>["members"]>[number]
 type GroupMember = Group["clans"][number]["members"][number]
 type Enrichment = typeof CwlMemberEnrichment.Type
@@ -136,7 +136,7 @@ const proxyJson = <A, I>(bindings: WorkerBindings, path: string, schema: Schema.
 export const currentWarSummary = (bindings: WorkerBindings, rawTag: string, now = new Date()): Effect.Effect<typeof CurrentWarSummary.Type> => Effect.gen(function* () {
   const tag = correctTag(rawTag)
   const current = yield* proxyJson(bindings, `clans/${encodeURIComponent(tag)}/currentwar`, ProxyWarResponse)
-  const isInWar = current !== null && current.state !== "" && current.state !== "notInWar"
+  const isInWar = current !== null && current.state !== "notInWar"
   let leagueInfo: typeof EnrichedCwlGroup.Type | null = null
   let leagueWars: Array<War & { war_tag: string }> = []
   if (isCwlWindow(now)) {

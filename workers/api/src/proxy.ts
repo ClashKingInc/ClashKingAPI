@@ -1,3 +1,4 @@
+import { classifyClashResponse } from "@clashking/clash-contract/outcomes"
 import { Effect } from "effect"
 
 import { UpstreamUnavailable } from "./errors.js"
@@ -26,16 +27,11 @@ const responseHeaderAllowlist = [
   "retry-after",
 ] as const
 
-const maintenanceReasons = new Set(["maintenance", "inmaintenance"])
-
 export const normalizeClashMaintenance = async (response: Response, headers: Headers): Promise<Response> => {
   if (response.status !== 503 || !response.headers.get("content-type")?.toLowerCase().includes("application/json")) return response
   try {
     const value = await Effect.runPromise(readBoundedJson(response.clone(), 4_096))
-    const reason = typeof value === "object" && value !== null && !Array.isArray(value) && typeof (value as { reason?: unknown }).reason === "string"
-      ? (value as { reason: string }).reason.trim().toLowerCase()
-      : ""
-    if (!maintenanceReasons.has(reason)) return response
+    if (classifyClashResponse({path: "/", status: response.status, body: value}).kind !== "maintenance") return response
     await response.body?.cancel().catch(() => undefined)
     return Response.json({ reason: "maintenance", message: "Clash of Clans is currently under maintenance." }, { status: 503, headers })
   } catch {

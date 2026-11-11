@@ -70,9 +70,8 @@ jobs:
           CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
         run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/legend-day-performance.mjs
 
-      - name: Verify push token key rotation
-        run: bash .ci-schema/scripts/with-test-timescale.sh --profile retained-api -- node scripts/e2e/push-token-rotation.mjs
-
+      - name: Verify upstream Clash HTTP outcomes and removed migration route
+        run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/clash-http-outcomes.mjs
       - name: Verify tracked clan Links cache and API fallback
         run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/run-clan-links.mjs
 

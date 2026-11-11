@@ -54,7 +54,7 @@ export const makeDatabaseCompiler = (): Statement.Compiler => {
 
 /** Capture one request scope, but acquire its pool only when a query executes.
  * No sockets or request-owned promises escape into global state. */
-export const lazyDatabaseLayer = (acquire: ReturnType<typeof PgClient.make>) => Layer.effect(SqlClient.SqlClient,
+export const lazyDatabaseLayer = (acquire: Effect.Effect<PgClient.PgClient & SqlClient.SqlClient, import("effect/sql/SqlError").SqlError, Scope.Scope | Reactivity.Reactivity>) => Layer.effect(SqlClient.SqlClient,
   Effect.gen(function* () {
     const scope = yield* Scope.Scope
     const reactivity = yield* Reactivity.Reactivity
@@ -62,6 +62,7 @@ export const lazyDatabaseLayer = (acquire: ReturnType<typeof PgClient.make>) => 
       Effect.provideService(Scope.Scope, scope), Effect.provideService(Reactivity.Reactivity, reactivity),
     ))
     return yield* SqlClient.make({
+      driver: "pg",
       acquirer: client.pipe(Effect.flatMap((value) => value.reserve)),
       compiler: makeDatabaseCompiler(), spanAttributes: [["db.system", "postgresql"]],
     })

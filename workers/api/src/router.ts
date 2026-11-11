@@ -1,4 +1,3 @@
-import { dispatchPushTokenRotation } from "./push-token-rotation.js"
 import { dispatchBotPlayerAutocomplete } from "./bot-player-autocomplete.js"
 import { dispatchBotServerActivity } from "./bot-server-activity.js"
 import { ServerAuthorization } from "./server-authorization.js"
@@ -348,8 +347,6 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (accountResponse !== undefined) return accountResponse
     // Literal /links/shared must reach developer-token validation before
     // /links/:userId can interpret "shared" as a user ID.
-    const pushRotationResponse = yield* dispatchPushTokenRotation(request, bindings)
-    if (pushRotationResponse !== undefined) return pushRotationResponse
     const botAdjacentResponse = yield* dispatchBotAdjacentRuntime(request, bindings)
     if (botAdjacentResponse !== undefined) return botAdjacentResponse
     const botWarPanelResponse = yield* dispatchBotWarPanel(request, bindings)

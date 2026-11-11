@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { ClanWarLeagueClan, ClanWarLeagueClanMember, ClanWarLeagueRound } from "@clashking/clash-contract/effect"
+import { ActiveClanWar, ClanWarLeagueClan, ClanWarLeagueClanMember, ClanWarLeagueRound } from "@clashking/clash-contract/effect"
 import { IconUrls } from "./expo-common.js"
 import { ProxyCwlGroupResponse, ProxyWarResponse } from "./proxy.js"
 
@@ -37,7 +37,7 @@ export const EnrichedCwlGroup = Schema.Struct({
     members: Schema.Array(Schema.Struct({ ...ClanWarLeagueClanMember.fields, ...CwlMemberEnrichment.fields })),
   })),
 })
-export const CurrentLeagueWar = Schema.Struct({ ...ProxyWarResponse.fields, war_tag: Schema.String })
+export const CurrentLeagueWar = Schema.Struct({ ...ActiveClanWar.fields, war_tag: Schema.String })
 export const CurrentWarSummary = Schema.Struct({
   clan_tag: Schema.String, isInWar: Schema.Boolean, isInCwl: Schema.Boolean,
   war_info: Schema.Struct({ state: Schema.String, currentWarInfo: Schema.optionalKey(ProxyWarResponse), bypass: Schema.optionalKey(Schema.Boolean) }),

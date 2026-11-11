@@ -19,7 +19,7 @@ import type { AdminPrincipal } from "./access.js"
 import { appUpdateInternals } from "./app-updates.js"
 import { DatabaseFailure, InvalidRequest, NotFound, PayloadTooLarge, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import type { WorkerBindings } from "./environment.js"
-import { decryptDevicePushToken } from "./push-secrets.js"
+import { decryptPushToken } from "./push-secrets.js"
 import { executeTrackingRead } from "./tracking-operations.js"
 
 export type AdminWorkerBindings = WorkerBindings & {
@@ -1174,7 +1174,7 @@ const sendLocalizedPush = (
   for (const device of devices) {
     const outcome = yield* Effect.result(Effect.gen(function* () {
       if (device.provider !== "fcm") return yield* new UpstreamUnavailable({ cause: undefined, message: `Unsupported push provider ${device.provider}` })
-      const token = yield* decryptDevicePushToken(device.token_ciphertext, bindings)
+      const token = yield* decryptPushToken(device.token_ciphertext, bindings.DATA_ENCRYPTION_KEY)
       yield* sendFcm(bindings, token, messageForLocale(normalizeLocale(device.locale) || "en"))
     }))
     if (outcome._tag === "Success") sent += 1
@@ -1292,7 +1292,7 @@ const labSend = (input: AdminOperationInput) => Effect.gen(function* () {
     }
     const result = yield* Effect.result(Effect.gen(function* () {
       if (device.provider !== "fcm") return yield* new UpstreamUnavailable({ cause: undefined, message: `Unsupported push provider ${device.provider}` })
-      const token = yield* decryptDevicePushToken(device.token_ciphertext, input.bindings)
+      const token = yield* decryptPushToken(device.token_ciphertext, input.bindings.DATA_ENCRYPTION_KEY)
       return yield* sendFcm(input.bindings, token, {
         title: String(body.title), body: notificationBody, data,
       })

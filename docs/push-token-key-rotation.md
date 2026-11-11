@@ -32,14 +32,14 @@ must match after decryption. Conditional writes protect a concurrent fresh
 registration; settings, enabled state, timestamps and Firebase tokens remain
 unchanged. No database schema change and no app rebuild is needed.
 
-Keep the current API key and compatible readers for rollback. Retaining the
-previous key during transition lets old rows remain usable; do not change the
-API's key or unrelated services as part of this operation.
+Normal delivery reads only the current API key. The old key is available only
+to the temporary migration route, then removed after verification. Do not change
+the API key or unrelated services as part of this operation.
 
 ## Verification
 
 The real local workerd/Timescale test covers previous/current keys, encrypted
 handoff, both operator credentials, dry runs, pagination, unreadable preservation,
 idempotent reruns, original hashes/settings/timestamps, and new registrations.
-The real local notification consumer tests delivery with both existing key
-versions through disposable stores and an isolated FCM HTTP provider.
+The real local notification consumer tests multiple devices using only the
+current API key through disposable stores and an isolated FCM HTTP provider.

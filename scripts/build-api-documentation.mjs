@@ -22,7 +22,7 @@ export function jsonToYaml(value, indent = 0) {
 export function publicApiDocument(document) {
   const publicTracking = new Set(["/v2/admin/tracking/summary", "/v2/admin/tracking/timeseries"])
   const paths = Object.fromEntries(Object.entries(document.paths).flatMap(([path, methods]) => {
-    if (path.startsWith("/v2/bot/")) return []
+    if (path.startsWith("/v2/bot/") || path.startsWith("/v2/internal/")) return []
     if (!path.startsWith("/v2/admin/")) return [[path, methods]]
     return publicTracking.has(path) && methods.get ? [[path, { get: methods.get }]] : []
   }))

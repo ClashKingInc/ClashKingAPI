@@ -52,25 +52,14 @@ export const hashPushToken = (token: string) => Effect.tryPromise({
 
 export interface PushEncryptionKeys {
   readonly DATA_ENCRYPTION_KEY?: string
-  readonly MOBILE_PUSH_TOKEN_ENCRYPTION_KEY?: string
   readonly MOBILE_PUSH_LEGACY_ENCRYPTION_KEY?: string
 }
 
-// v2 identifies the dedicated push key; shared DATA_ENCRYPTION_KEY continues
-// to protect unrelated credentials and must not be rotated for this repair.
-export const encryptDevicePushToken = (token: string, keys: PushEncryptionKeys) => {
-  const dedicated = keys.MOBILE_PUSH_TOKEN_ENCRYPTION_KEY
-  return encryptPushToken(token, dedicated || keys.DATA_ENCRYPTION_KEY || "").pipe(
-    Effect.map(value => dedicated ? `v2.${value.slice(3)}` : value),
-  )
-}
-
+// The API's existing key remains the write key. The older reader key is only
+// retained to migrate old device rows without changing unrelated credentials.
 export const decryptDevicePushToken = (value: string, keys: PushEncryptionKeys) => Effect.gen(function* () {
-  const candidates = value.startsWith("v2.")
-    ? [keys.MOBILE_PUSH_TOKEN_ENCRYPTION_KEY]
-    : [keys.DATA_ENCRYPTION_KEY, keys.MOBILE_PUSH_LEGACY_ENCRYPTION_KEY]
-  for (const key of new Set(candidates.filter((key): key is string => Boolean(key)))) {
-    const result = yield* Effect.result(decryptPushToken(value.startsWith("v2.") ? `v1.${value.slice(3)}` : value, key))
+  for (const key of new Set([keys.DATA_ENCRYPTION_KEY, keys.MOBILE_PUSH_LEGACY_ENCRYPTION_KEY].filter((key): key is string => Boolean(key)))) {
+    const result = yield* Effect.result(decryptPushToken(value, key))
     if (result._tag === "Success") return result.success
   }
   return yield* new UpstreamUnavailable({ cause: undefined, message: "Push token decryption failed" })

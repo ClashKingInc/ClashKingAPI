@@ -1,47 +1,46 @@
-# Push-token encryption rotation
+# Align push tokens with the existing API encryption key
 
-Push tokens are encrypted at rest. This does not rotate Firebase device tokens,
-log users out, or change notification preferences.
+The API's existing `DATA_ENCRYPTION_KEY` remains authoritative. No third
+persistent encryption key or new ciphertext format is introduced. Firebase
+phone tokens and the app registration endpoint are unchanged.
 
-- `MOBILE_PUSH_TOKEN_ENCRYPTION_KEY` is the dedicated shared write/read key.
-  With it set, API registration writes `v2.` ciphertext.
-- `DATA_ENCRYPTION_KEY` remains unchanged for unrelated credentials. The API
-  also uses it to read the previous generation of `v1.` push tokens.
-- `MOBILE_PUSH_LEGACY_ENCRYPTION_KEY` is an optional API-only older key, used to
-  read `v1.` tokens written before the existing API key changed.
-- Tracking reads `v2.` with the dedicated key and retains its old
-  `DATA_ENCRYPTION_KEY` as a `v1.` fallback during rollout.
+The migration route temporarily accepts `MOBILE_PUSH_LEGACY_ENCRYPTION_KEY` to
+convert older records. Normal API and Tracking delivery use only
+`DATA_ENCRYPTION_KEY`.
 
-## Rollout
+## Operator flow
 
-1. Store a new random shared push key in the existing secret stores.
-2. Configure and deploy the notification worker with that key first.
-3. Configure and deploy the API with the same key and any retained legacy key.
-4. Temporarily set `PUSH_TOKEN_MIGRATION_SECRET` to a separate random secret.
-5. Call `POST /v2/internal/push-token-rotation` with the normal internal bearer
-   credential plus `x-push-token-migration-key`. Begin with `{"dryRun":true}`;
-   follow each returned `next` using `after`. Inspect unreadable counts first.
-6. Repeat with `{"dryRun":false}`. Each request processes at most 100 records.
-7. Repeat the dry run and verify all readable records are current.
-8. Remove `PUSH_TOKEN_MIGRATION_SECRET`. Without it the route returns 404.
+1. Deploy this API code. Temporarily set the retained older key and an independent
+   random `PUSH_TOKEN_MIGRATION_SECRET` operator credential.
+2. Call `POST /v2/internal/push-token-rotation` with the internal bearer credential
+   and `x-push-token-migration-key`. Body: `{"dryRun":true,"action":"handoff"}`.
+   The response contains the current API key wrapped with AES-GCM using the
+   temporary operator credential. It never returns a plaintext key or device token.
+3. Unwrap only in the authorized operator process. Configure the notification
+   worker's `DATA_ENCRYPTION_KEY` with that exact existing API key after migration.
+   No old-key fallback is configured in the notification worker.
+4. Scan with `{"dryRun":true}` and follow each returned `next` using `after`.
+   This tests actual stored records against the current and retained keys.
+5. Apply with `{"dryRun":false}`. Each request processes at most 100 rows. Rows
+   already readable with the current API key are skipped. Older readable rows
+   are re-encrypted with that same current key; unknown/corrupt rows are untouched.
+6. Switch the notification worker to the current key. Verify via another dry run,
+   then remove `MOBILE_PUSH_LEGACY_ENCRYPTION_KEY` and `PUSH_TOKEN_MIGRATION_SECRET` to close
+   the operator route (404). Remove temporary local key material.
 
-The operation verifies plaintext against the stored token hash before writing.
-It changes only ciphertext and compares the old ciphertext/hash in the update,
-so it cannot overwrite a concurrent fresh registration. Unreadable records are
-left untouched. The response contains counts and an opaque pagination cursor,
-never plaintext tokens or encryption keys. No notification is sent by rotation.
+Only `mobile_push_devices.token_ciphertext` is updated. Original token hashes
+must match after decryption. Conditional writes protect a concurrent fresh
+registration; settings, enabled state, timestamps and Firebase tokens remain
+unchanged. No database schema change and no app rebuild is needed.
 
-## Rollback
-
-After any v2 record is written, retain v2-capable API/Tracking code and the
-shared push key. Reverting to v1-only readers would break those records. The old
-keys remain usable for unreadable/unfinished rows; do not overwrite the shared
-`DATA_ENCRYPTION_KEY` as part of this migration.
+Normal delivery reads only the current API key. The old key is available only
+to the temporary migration route, then removed after verification. Do not change
+the API key or unrelated services as part of this operation.
 
 ## Verification
 
-`scripts/e2e/push-token-rotation.mjs` exercises real local API HTTP and disposable
-Timescale for two legacy keys, current v2 rows, corrupt/unknown rows, both
-credentials, dry runs, pagination, idempotent reruns, and preservation of hashes,
-settings and timestamps. Tracking's real manual/mobile-routing service check
-covers v1 and v2 deliveries through local FCM HTTP and canonical disposable stores.
+The real local workerd/Timescale test covers previous/current keys, encrypted
+handoff, both operator credentials, dry runs, pagination, unreadable preservation,
+idempotent reruns, original hashes/settings/timestamps, and new registrations.
+The real local notification consumer tests multiple devices using only the
+current API key through disposable stores and an isolated FCM HTTP provider.

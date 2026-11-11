@@ -3,6 +3,13 @@ import { Context, Layer } from "effect"
 // Wrangler owns resource and public-var types. Only secret-store values and
 // explicitly optional deployment settings are augmented here.
 interface WorkerSecrets {
+  readonly CLAN_CACHE_PASSWORD?: string
+  readonly CLAN_CACHE_NETWORK?: {
+    connect(address: string): Promise<{ readable: ReadableStream<Uint8Array>; writable: WritableStream<Uint8Array>; close(): Promise<void> }>
+  }
+  readonly CLAN_CACHE_HOST?: string
+  readonly CLAN_CACHE_PORT?: string
+  readonly CLAN_CACHE_PREFIX?: string
   readonly PROFILE_MEDIA_PUBLIC_ORIGIN?: string
   readonly GIVEAWAY_MEDIA_ORIGIN?: string
   readonly CLAN_NOTIFICATION_BETA?: string

@@ -7,6 +7,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { SignJWT } from 'jose'
 import pg from 'pg'
 import { verifyClanLinks } from './clan-links.mjs'
+import { startBotCustomizationProvider } from './bot-customization-provider.mjs'
 
 assert.equal(process.env.CLASHKING_DISPOSABLE_TIMESCALE, '1')
 const dsn=new URL(process.env.TEST_DATABASE_URL ?? '')
@@ -18,6 +19,7 @@ const port=8813,origin=`http://127.0.0.1:${port}`,applicationId='999999999999999
 const actor='999999999999994901',server='999999999999994902',other='999999999999994903'
 const signingKey=randomBytes(32).toString('base64url')
 let api,logs=''
+const clanProvider=await startBotCustomizationProvider()
 try {
   const generation=randomUUID(),permissions={manager:false,sections:{links:'view'}}
   await db.query("INSERT INTO auth_users(user_id,provider) VALUES($1,'discord')",[actor])
@@ -34,6 +36,7 @@ try {
     .setAudience('clashking-server-dashboard').setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(signingKey))
   api=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{
     env:{...process.env,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_BIND_HOST:'127.0.0.1',
+      CLASHKING_LOCAL_CLASH_PROXY_ORIGIN:clanProvider.origin,
       CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',CLASHKING_LOCAL_PRODUCTION_READS:'0',
       CLASHKING_LOCAL_DISCORD_CLIENT_ID:applicationId,CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'local-only',
       CLASHKING_E2E_DATA_ENCRYPTION_KEY:randomBytes(32).toString('base64url'),
@@ -49,14 +52,21 @@ try {
     await new Promise(resolve=>setTimeout(resolve,500))
   }
   assert(ready&&logs.includes('isolated_api_ready'),logs.slice(-3000))
-  const request=async(path,{status=200}={})=>{
-    const response=await fetch(origin+path,{headers:{authorization:`Bearer ${token}`},signal:AbortSignal.timeout(10000)})
+  const request=async(path,{status=200,method='GET',body}={})=>{
+    const response=await fetch(origin+path,{method,headers:{authorization:`Bearer ${token}`,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(10000)})
     const value=await response.json()
     assert.equal(response.status,status,`${path}: ${JSON.stringify(value)}`)
     return value
   }
-  await verifyClanLinks({db,request,server,other,actor})
+  try {
+    await verifyClanLinks({db,request,server,other,actor,clanProvider})
+    await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{links:'manage'}}])
+    await request(`/v2/links/server/${server}/clans/%23QUP/%23QUL`,{method:'POST',body:{userId:actor}})
+    assert.equal((await db.query("SELECT user_id FROM player_links WHERE tag='#QUL'")).rows[0].user_id,actor,'Link creation uses the tracked roster even when the SQL roster is empty')
+    console.log('PASS tracked roster link creation through actual HTTP, scoped auth and SQL transaction')
+  } catch(cause) { console.error(logs.slice(-6000)); throw cause }
 } finally {
   if(api&&api.exitCode===null){api.kill('SIGTERM');await Promise.race([once(api,'exit'),new Promise(resolve=>setTimeout(resolve,5000))]);if(api.exitCode===null)api.kill('SIGKILL')}
   await db.end()
+  await clanProvider.close()
 }

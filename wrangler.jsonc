@@ -102,6 +102,13 @@
   ],
   // These origins stay private on the database host and are reached through
   // the same Cloudflare tunnel as Hyperdrive.
+  "vpc_networks": [
+    {
+      "binding": "CLAN_CACHE_NETWORK",
+      "tunnel_id": "12ee1000-f012-4631-84e1-57d405f92809",
+      "remote": true
+    }
+  ],
   "vpc_services": [
     {
       "binding": "CLASH_PROXY",
@@ -113,6 +120,9 @@
     }
   ],
   "vars": {
+    "CLAN_CACHE_HOST": "127.0.0.1",
+    "CLAN_CACHE_PORT": "6379",
+    "CLAN_CACHE_PREFIX": "trackedclans:snapshot:",
     "ENVIRONMENT": "production",
     "STRIPE_MONTHLY_PRICE_ID": "",
     "STRIPE_CHECKOUT_SUCCESS_URL": "",

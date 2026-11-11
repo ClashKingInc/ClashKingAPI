@@ -96,6 +96,9 @@ const localSecret = (name) => {
   return value
 }
 const unavailable = () => Response.json({ code: "upstream_unavailable", message: "Provider is not configured in this isolated local environment" }, { status: 503 })
+const localCacheUrl = process.env.TEST_VALKEY_URL || process.env.CLASHKING_LOCAL_VALKEY_URL
+const localCache = localCacheUrl ? new URL(localCacheUrl) : undefined
+if (localCache && (localCache.protocol !== 'redis:' || !['localhost','127.0.0.1'].includes(localCache.hostname))) throw new Error('Local clan cache must use loopback Valkey')
 let remotePlatform
 if (persistent && clashProxyOrigin === "") {
   const remoteBinding = config.vpc_services.find(binding => binding.binding === "CLASH_PROXY")
@@ -198,8 +201,11 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     // Local equivalent of the public Posts bucket origin used in production.
     { type: "ESModule", path: "/local-api/entry.js", contents: `
       import worker from './index.js';
+      import { connect } from 'cloudflare:sockets';
       export { TicketRuntimeCoordinator, RuntimeRecoveryCoordinator } from './index.js';
       export default { ...worker, async fetch(request, env, ctx) {
+        // Exercise the same TCP cache reader against the actual local Valkey service.
+        if (env.CLAN_CACHE_HOST) env.CLAN_CACHE_NETWORK = { connect: async address => connect(address) };
         const path = new URL(request.url).pathname;
         if (path.startsWith('/admin-stories/') || path.startsWith('/admin-posts/')) {
           if (!['GET', 'HEAD'].includes(request.method)) return new Response(null, { status: 405 });
@@ -235,6 +241,8 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
   },
   bindings: {
     ...config.vars, ENVIRONMENT: "isolated-local",
+    CLAN_CACHE_HOST: localCache?.hostname ?? '', CLAN_CACHE_PORT: localCache?.port || '6379',
+    CLAN_CACHE_PASSWORD: localCache ? decodeURIComponent(localCache.password) : '',
     WEB_ALLOWED_ORIGINS: [...["localhost", "127.0.0.1", lan].flatMap(host => [3002, 7357, 8081].map(value => `http://${host}:${value}`)), dashboardOrigin, appOrigin].join(","),
     ADMIN_ALLOWED_ORIGINS: ["localhost", "127.0.0.1", lan].map(host => `http://${host}:3000`).join(","),
     DISCORD_API_ORIGIN: "https://discord.com/api/v10",

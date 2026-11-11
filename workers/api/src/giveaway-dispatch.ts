@@ -26,7 +26,7 @@ export const dispatchGiveawayRuntime = (request: Request, bindings: WorkerBindin
  if (pending) result = yield* pendingGiveawayPublications((yield* decode(GiveawayPublicationPendingEndpoint.body)).limit)
  else if (entry) {
    const interaction = yield* verifyRuntimeInteraction(yield* decode(RuntimeInteractionProof), bindings)
-   result = yield* Schema.encodeEffect(GiveawayEnterEndpoint.response)(yield* enterGiveaway(id, interaction)).pipe(Effect.orDie)
+   result = yield* Schema.encodeEffect(GiveawayEnterEndpoint.response)(yield* enterGiveaway(id, interaction, bindings.DISCORD_APPLICATION_ID)).pipe(Effect.orDie)
  } else if (publication?.[2] === "prepare") result = yield* prepareGiveawayPublication(id, (yield* decode(GiveawayPublicationPrepareEndpoint.body)).kind, bindings.GIVEAWAY_MEDIA_ORIGIN)
  else if (publication?.[4] === "claim") {
    yield* decode(GiveawayPublicationClaimEndpoint.body)

@@ -181,7 +181,7 @@ export const dispatchPersistentRuntime = (request: Request, bindings: DeferredRu
     Effect.mapError(() => new InvalidRequest({ message: "Invalid Discord interaction proof" })),
   )
   const interaction = yield* verifyRuntimeInteraction(proof, bindings)
-  const result = yield* enterGiveaway(giveawayId, interaction)
+  const result = yield* enterGiveaway(giveawayId, interaction, bindings.DISCORD_APPLICATION_ID)
   const body = yield* Schema.encodeEffect(GiveawayEnterEndpoint.response)(result).pipe(Effect.orDie)
   return Response.json(body, { headers: { "cache-control": "no-store" } })
 })

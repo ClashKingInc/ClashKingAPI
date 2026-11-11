@@ -19,7 +19,8 @@ export const RuntimeUUID = Schema.String.check(
 )
 export const GiveawayEnterResponse = Schema.Struct({
   giveawayId: RuntimeGiveawayId,
-  outcome: Schema.Literals(["entered", "already_entered"]),
+  outcome: Schema.Literals(["entered", "already_entered", "left", "already_left"]),
+  canLeave: Schema.Boolean,
   entryCount: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
 })
 export const GiveawayEntryRejection = Schema.Literals(["roles", "avatar", "linked_account", "not_member", "not_open", "invalid_configuration", "wrong_message"])
@@ -29,7 +30,7 @@ export const GiveawayEnterEndpoint = defineEndpoint({
   operationId: "giveawayEnter", path: "/v2/runtime/giveaways/:giveawayId/entries",
   pathParams: Schema.Struct({ giveawayId: RuntimeGiveawayId }), query: NoQuery,
   response: GiveawayEnterResponse, responseMode: "json", successStatus: 200,
-  summary: "Enter a giveaway using an independently verified Discord interaction",
+  summary: "Enter or leave a giveaway using an independently verified Discord interaction",
   errors: [
     { status: 403, body: Schema.Union([GiveawayEntryError, ErrorResponse]) },
     { status: 409, body: Schema.Union([GiveawayEntryError, ErrorResponse]) },

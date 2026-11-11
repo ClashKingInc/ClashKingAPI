@@ -1,6 +1,6 @@
 # `@clashking/api-client`
 
-Requires exactly Effect `4.0.0`. The API package versions remain independent
+Requires exactly Effect `4.1.3`. The API package versions remain independent
 release candidates; stable Effect does not change their release channel.
 
 The shared Effect v4 client executes `@clashking/api-contracts` descriptors over

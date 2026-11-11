@@ -1,4 +1,6 @@
-import { Context, Effect, Layer } from "effect"
+import { DiscordConfig, DiscordREST, DiscordRESTMemoryLive } from "dfx"
+import { Context, Effect, Layer, Redacted, Stream } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 
 import type { ApiFailure } from "./errors.js"
 import { Forbidden, InvalidRequest, NotFound, RateLimited, UpstreamUnavailable } from "./errors.js"
@@ -12,7 +14,6 @@ export interface DiscordRequestOptions {
   readonly method?: "DELETE" | "GET" | "PATCH" | "POST" | "PUT"
   readonly oauthAccessToken?: string
 }
-
 export interface DiscordTokenRequest {
   readonly client_id: string
   readonly client_secret: string
@@ -23,157 +24,81 @@ export interface DiscordTokenRequest {
   readonly refresh_token?: string
 }
 
-const retryAfterMilliseconds = async (response: Response): Promise<{ delay: number; global: boolean }> => {
-  const raw = response.headers.get("retry-after")
-  const seconds = raw === null ? NaN : Number(raw)
-  const headerDelay = Number.isFinite(seconds)
-    ? Math.max(0, seconds * 1_000)
-    : raw === null ? NaN : Math.max(0, Date.parse(raw) - Date.now())
-  let bodyDelay = NaN
-  let global = response.headers.get("x-ratelimit-global") === "true"
-  try {
-    const body: unknown = await Effect.runPromise(readBoundedJson(response, 65_536))
-    if (typeof body === "object" && body !== null && "global" in body && body.global === true) global = true
-    if (typeof body === "object" && body !== null && "retry_after" in body &&
-        typeof body.retry_after === "number" && Number.isFinite(body.retry_after)) {
-      bodyDelay = Math.max(0, body.retry_after * 1_000)
-    }
-  } catch {
-    await response.body?.cancel().catch(() => undefined)
-  }
-  const delays = [headerDelay, bodyDelay].filter(Number.isFinite)
-  return { delay: delays.length === 0 ? 1_000 : Math.max(...delays), global }
-}
+// The provider client applies OAuth after dfx's bot authorization. The token is
+// fiber-local so concurrent user requests cannot share another user's bearer.
+const OAuthBearer = Context.Reference<string | undefined>("clashking/DiscordOAuthBearer", {
+  defaultValue: () => undefined,
+})
+const providerLayer = Layer.effect(HttpClient.HttpClient, Effect.gen(function* () {
+  const client = yield* HttpClient.HttpClient
+  return HttpClient.mapRequestEffect(client, request => Effect.map(OAuthBearer, access => access === undefined
+    ? request : HttpClientRequest.setHeader(request, "authorization", `Bearer ${access}`)))
+})).pipe(Layer.provide(FetchHttpClient.layer))
 
-const fetchDiscord = (request: Request) => Effect.tryPromise({
-  try: async () => {
-    const startedAt = Date.now()
-    const retryRequest = request.clone() as unknown as Request
-    const first = await fetch(request)
-    if (first.status !== 429) return first
-    const limited = await retryAfterMilliseconds(first)
-    const delay = limited.delay
-    if (delay >= 15_000 - (Date.now() - startedAt)) {
-      throw new RateLimited({ message: "Discord API is rate limited", retryAfterSeconds: Math.max(1, Math.ceil(delay / 1_000)) })
-    }
-    await new Promise((resolve) => setTimeout(resolve, delay))
-    const retry = await fetch(retryRequest)
-    if (retry.status === 429) {
-      const next = await retryAfterMilliseconds(retry)
-      throw new RateLimited({ message: "Discord API is rate limited", retryAfterSeconds: Math.max(1, Math.ceil(next.delay / 1_000)) })
-    }
-    return retry
-  },
-  catch: (cause) => cause instanceof RateLimited ? cause : new UpstreamUnavailable({ cause, message: "Discord API request failed" }),
+const providerFailure = (cause: unknown): ApiFailure => new UpstreamUnavailable({
+  // Native SDK errors can contain authenticated requests. Preserve the error
+  // category without putting OAuth, bot or webhook tokens into API logs.
+  cause: new Error(typeof cause === "object" && cause !== null && "_tag" in cause ? String(cause._tag) : "Discord transport failure"),
+  message: "Discord API request failed",
 })
 
-const classify = (response: Response): Effect.Effect<Response, ApiFailure> => Effect.gen(function* () {
-  if (response.ok) return response
-  // Error bodies are not consumed by parseJson. Release the transport before
-  // returning the typed failure, without letting cleanup replace that failure.
-  yield* Effect.promise(async () => {
-    try { await response.body?.cancel() } catch { /* Keep the provider failure. */ }
-  })
+const decodeResponse = (response: {readonly status: number;readonly headers: Readonly<Record<string,string>>;readonly stream: Stream.Stream<Uint8Array, unknown>}): Effect.Effect<unknown, ApiFailure> => Effect.gen(function* () {
+  if (response.status === 204) return undefined
+  const body = new Response(Stream.toReadableStream(response.stream), {headers:response.headers})
+  if (response.status >= 200 && response.status < 300) {
+    if (response.status === 204) return undefined
+    return yield* readBoundedJson(body).pipe(Effect.mapError(() => new UpstreamUnavailable({
+      cause:new Error("Invalid or oversized Discord JSON"),message:"Discord returned invalid JSON",
+    })))
+  }
+  yield* Effect.promise(() => body.body?.cancel().catch(() => undefined) ?? Promise.resolve())
   if (response.status === 429) {
-    return yield* Effect.fail(new UpstreamUnavailable({
-      cause: new Error("Discord rate limit remained active after one retry"),
-      message: "Discord API is temporarily rate limited",
-    }))
+    const seconds=Number(response.headers["retry-after"])
+    return yield* new RateLimited({message:"Discord API is rate limited",retryAfterSeconds:Number.isFinite(seconds)?Math.max(1,Math.ceil(seconds)):1})
   }
-  if (response.status === 401 || response.status === 403) {
-    return yield* Effect.fail(new Forbidden({ message: "Discord rejected the configured credentials or permissions" }))
-  }
-  if (response.status === 404) {
-    return yield* Effect.fail(new NotFound({ message: "Discord resource was not found" }))
-  }
-  if (response.status >= 400 && response.status < 500) {
-    return yield* Effect.fail(new InvalidRequest({ message: `Discord rejected the request (${response.status})` }))
-  }
-  return yield* Effect.fail(new UpstreamUnavailable({
-    cause: new Error(`Discord returned ${response.status}`),
-    message: "Discord API is unavailable",
-  }))
+  if (response.status === 401 || response.status === 403) return yield* new Forbidden({message:"Discord rejected the configured credentials or permissions"})
+  if (response.status === 404) return yield* new NotFound({message:"Discord resource was not found"})
+  if (response.status >= 400 && response.status < 500) return yield* new InvalidRequest({message:`Discord rejected the request (${response.status})`})
+  return yield* new UpstreamUnavailable({cause:new Error(`Discord returned ${response.status}`),message:"Discord API is unavailable"})
 })
 
-const parseJson = (response: Response): Effect.Effect<unknown, UpstreamUnavailable> =>
-  response.status === 204
-    ? Effect.succeed(undefined)
-    : Effect.tryPromise({
-        try: () => Effect.runPromise(readBoundedJson(response)),
-        catch: (cause) => new UpstreamUnavailable({ cause, message: "Discord returned invalid JSON" }),
-      })
-
-export class DiscordApi extends Context.Service<
-  DiscordApi,
-  {
-    readonly request: (
-      path: string,
-      options?: DiscordRequestOptions,
-    ) => Effect.Effect<unknown, ApiFailure>
-    readonly token: (request: DiscordTokenRequest) => Effect.Effect<unknown, ApiFailure>
-  }
->()("clashking/DiscordApi") {
-  static readonly layer = Layer.effect(
-    DiscordApi,
-    Effect.gen(function* () {
-      const bindings = yield* WorkerEnvironment
-      const origin = bindings.DISCORD_API_ORIGIN.replace(/\/+$/u, "")
-
-      const request = (path: string, options: DiscordRequestOptions = {}) => {
-        if (!path.startsWith("/") || path.startsWith("//")) {
-          return Effect.fail(new InvalidRequest({ message: "Discord API path must be relative" }))
-        }
-        const headers = new Headers(options.headers)
-        headers.set("accept", "application/json")
-        headers.set("authorization", options.oauthAccessToken === undefined
-          ? `Bot ${bindings.DISCORD_BOT_TOKEN}`
-          : `Bearer ${options.oauthAccessToken}`)
-        let body: string | FormData | undefined
-        if (options.files?.length) {
-          const form = new FormData()
-          form.set("payload_json", JSON.stringify(options.body ?? {}))
-          options.files.forEach((file, index) => form.set(`files[${index}]`, file, file.name))
-          headers.delete("content-type")
-          body = form
-        } else if (options.body !== undefined) {
-          headers.set("content-type", "application/json")
-          body = JSON.stringify(options.body)
-        }
-        const discordRequest = new Request(`${origin}${path}`, {
-          method: options.method ?? "GET",
-          headers,
-          signal: AbortSignal.timeout(15_000),
-          ...(body === undefined ? {} : { body }),
-        })
-        return fetchDiscord(discordRequest).pipe(
-          Effect.flatMap(classify),
-          Effect.flatMap(parseJson),
-          Effect.withSpan("DiscordApi.request", { attributes: { "http.request.method": options.method ?? "GET" } }),
-        )
+export class DiscordApi extends Context.Service<DiscordApi, {
+  readonly request: (path:string,options?:DiscordRequestOptions)=>Effect.Effect<unknown,ApiFailure>
+  readonly token: (request:DiscordTokenRequest)=>Effect.Effect<unknown,ApiFailure>
+}>()("clashking/DiscordApi") {
+  static readonly layer = Layer.unwrap(Effect.gen(function* () {
+    const bindings=yield* WorkerEnvironment
+    const origin=bindings.DISCORD_API_ORIGIN.replace(/\/+$/u,"")
+    return Layer.effect(DiscordApi,Effect.gen(function* () {
+      const sdk=yield* DiscordREST
+      const http=yield* HttpClient.HttpClient
+      const finish=(request:Effect.Effect<unknown,ApiFailure>)=>request.pipe(
+        Effect.timeout("15 seconds"), Effect.catchTag("TimeoutError",providerFailureEffect),
+      )
+      const request=(path:string,options:DiscordRequestOptions={})=>{
+        if(!path.startsWith("/")||path.startsWith("//"))return Effect.fail(new InvalidRequest({message:"Discord API path must be relative"}))
+        // Existing API features supply dynamic publication paths. Use dfx's
+        // public HTTP client and file context, with no custom auth/rate buckets.
+        let req=HttpClientRequest.make(options.method??"GET")(path).pipe(HttpClientRequest.setHeaders(options.headers??{}))
+        if(options.body!==undefined||options.files?.length)req=HttpClientRequest.bodyJsonUnsafe(req,options.body??{})
+        let response=sdk.httpClient.execute(req)
+        if(options.files?.length)response=response.pipe(sdk.withFiles(options.files))
+        if(options.oauthAccessToken!==undefined)response=response.pipe(Effect.provideService(OAuthBearer,options.oauthAccessToken))
+        return finish(response.pipe(Effect.mapError(providerFailure),Effect.flatMap(decodeResponse))).pipe(Effect.withSpan("DiscordApi.request"))
       }
-
-      const token = (value: DiscordTokenRequest) => {
-        const form = new URLSearchParams()
-        for (const [key, item] of Object.entries(value)) {
-          if (item !== undefined) form.set(key, item)
-        }
-        const discordRequest = new Request(`${origin.replace(/\/v\d+$/u, "")}/oauth2/token`, {
-          method: "POST",
-          signal: AbortSignal.timeout(15_000),
-          headers: {
-            accept: "application/json",
-            "content-type": "application/x-www-form-urlencoded",
-          },
-          body: form,
-        })
-        return fetchDiscord(discordRequest).pipe(
-          Effect.flatMap(classify),
-          Effect.flatMap(parseJson),
-          Effect.withSpan("DiscordApi.token"),
-        )
+      // dfx does not expose the OAuth code/refresh token exchange endpoint.
+      // Keep only that form exchange on Effect's HTTP client, without bot auth
+      // or automatic replay of a potentially consumed authorization code.
+      const token=(value:DiscordTokenRequest)=>{
+        const form=Object.fromEntries(Object.entries(value).filter((row):row is [string,string]=>typeof row[1]==="string"))
+        const req=HttpClientRequest.post(`${origin.replace(/\/v\d+$/u,"")}/oauth2/token`).pipe(HttpClientRequest.bodyUrlParams(form))
+        return finish(http.execute(req).pipe(Effect.mapError(providerFailure),Effect.flatMap(decodeResponse))).pipe(Effect.withSpan("DiscordApi.token"))
       }
-
-      return { request, token }
-    }),
-  )
+      return {request,token}
+    })).pipe(Layer.provide([
+      DiscordRESTMemoryLive.pipe(Layer.provide([DiscordConfig.layer({token:Redacted.make(bindings.DISCORD_BOT_TOKEN),rest:{baseUrl:origin}}),providerLayer])),
+      FetchHttpClient.layer,
+    ]))
+  }))
 }
+const providerFailureEffect=(cause:unknown)=>Effect.fail(providerFailure(cause))

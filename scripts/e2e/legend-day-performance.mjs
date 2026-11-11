@@ -1,3 +1,4 @@
+import { verifyDiscordAuthentication } from './discord-authentication.mjs'
 import { verifyLeagueHistory } from "./league-history.mjs"
 import { verifySharedViewImport } from "./shared-view-import.mjs"
 import { verifyRosterWarFilter } from "./roster-war-filter.mjs"
@@ -84,6 +85,13 @@ try {
     await new Promise(r=>setTimeout(r,500))
   }
   assert(ready,logs.slice(-2000))
+  if (process.argv.includes('--discord-contract-only')) {
+    await verifyDiscordAuthentication({db,origin:`http://127.0.0.1:${port}`,provider:profileProvider})
+    await verifyGuildListCache({db,origin:`http://127.0.0.1:${port}`,signingKey,encryptionKey,provider:profileProvider})
+    await db.query('INSERT INTO discord_cache.gateway_shards(application_id,shard_id,shard_count,generation,healthy,heartbeat_at) VALUES($1,0,1,$2,true,now())',['999999999999999999',randomUUID()])
+    await verifyManualLimits({db,origin:`http://127.0.0.1:${port}`,adminOrigin:'http://127.0.0.1:8804',signingKey,meteringKey,profileProvider,schemaRoot:process.env.CLASHKING_E2E_SCHEMA_ROOT??resolve('.ci-schema')})
+    console.log('PASS actual API Discord SDK transport: OAuth guild listing, delegated permissions, managed webhooks and live bot profile mutations')
+  } else {
   await verifyLeagueHistory({db,origin:`http://127.0.0.1:${port}`})
   await verifyPublicDashboardCors({origin:`http://127.0.0.1:${port}`})
   await verifyOperationalReads({db,origin:`http://127.0.0.1:${port}`,botKey})
@@ -322,6 +330,7 @@ try {
   assert.equal(groups.items[0].attacks,10)
   console.log('PASS: actual API battle history and daily army-group reads with legacy family tables unavailable')
   console.log('PASS: real local API/Timescale; weighted periods, distinct players, disjoint rank bands, coverage, source windows, cohorts, query validation and missing observation reconciliation, unranked observed cohorts and partial current day')
+  }
 } finally {
   if(api&&api.exitCode===null){api.kill('SIGTERM');await Promise.race([once(api,'exit'),new Promise(r=>setTimeout(r,5000))]);if(api.exitCode===null)api.kill('SIGKILL')}
   await profileProvider.close()

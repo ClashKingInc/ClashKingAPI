@@ -4,9 +4,9 @@ The API's existing `DATA_ENCRYPTION_KEY` remains authoritative. No third
 persistent encryption key or new ciphertext format is introduced. Firebase
 phone tokens and the app registration endpoint are unchanged.
 
-The API temporarily accepts `MOBILE_PUSH_LEGACY_ENCRYPTION_KEY` to read older
-records. Tracking uses `DATA_ENCRYPTION_KEY` first and may retain its former key
-as `MOBILE_PUSH_PREVIOUS_ENCRYPTION_KEY` while the migration is in progress.
+The migration route temporarily accepts `MOBILE_PUSH_LEGACY_ENCRYPTION_KEY` to
+convert older records. Normal API and Tracking delivery use only
+`DATA_ENCRYPTION_KEY`.
 
 ## Operator flow
 
@@ -17,14 +17,15 @@ as `MOBILE_PUSH_PREVIOUS_ENCRYPTION_KEY` while the migration is in progress.
    The response contains the current API key wrapped with AES-GCM using the
    temporary operator credential. It never returns a plaintext key or device token.
 3. Unwrap only in the authorized operator process. Configure the notification
-   worker's `DATA_ENCRYPTION_KEY` with that exact existing API key and retain its
-   former key under `MOBILE_PUSH_PREVIOUS_ENCRYPTION_KEY`. Deploy the dual reader.
+   worker's `DATA_ENCRYPTION_KEY` with that exact existing API key after migration.
+   No old-key fallback is configured in the notification worker.
 4. Scan with `{"dryRun":true}` and follow each returned `next` using `after`.
    This tests actual stored records against the current and retained keys.
 5. Apply with `{"dryRun":false}`. Each request processes at most 100 rows. Rows
    already readable with the current API key are skipped. Older readable rows
    are re-encrypted with that same current key; unknown/corrupt rows are untouched.
-6. Verify via another dry run, then remove `PUSH_TOKEN_MIGRATION_SECRET` to close
+6. Switch the notification worker to the current key. Verify via another dry run,
+   then remove `MOBILE_PUSH_LEGACY_ENCRYPTION_KEY` and `PUSH_TOKEN_MIGRATION_SECRET` to close
    the operator route (404). Remove temporary local key material.
 
 Only `mobile_push_devices.token_ciphertext` is updated. Original token hashes

@@ -13,7 +13,7 @@ import { SqlClient } from "effect/sql"
 import { AuthIdentity, type UserPrincipal } from "./auth.js"
 import type { WorkerBindings } from "./environment.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, Unauthenticated, UpstreamUnavailable, type ApiFailure } from "./errors.js"
-import { encryptDevicePushToken, hashPushToken } from "./push-secrets.js"
+import { encryptPushToken, hashPushToken } from "./push-secrets.js"
 import { readBoundedJson } from "./request-body.js"
 import { notifyTracking } from "./tracking-wake.js"
 import { getNotificationClans, putNotificationClan } from "./clan-notifications.js"
@@ -230,7 +230,7 @@ const registerDevice = (principal: UserPrincipal, body: DeviceRequest, bindings:
     if (body.token.trim().length < 20 || body.token.length > 8192) {
       return yield* new InvalidRequest({ message: "Push token is invalid" })
     }
-    const ciphertext = yield* encryptDevicePushToken(body.token, bindings)
+    const ciphertext = yield* encryptPushToken(body.token, bindings.DATA_ENCRYPTION_KEY ?? "")
     const hash = yield* hashPushToken(body.token)
     const provider = body.provider ?? "fcm"
     const environment = body.environment ?? "production"

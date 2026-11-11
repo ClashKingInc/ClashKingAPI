@@ -15,7 +15,6 @@ interface WorkerSecrets {
   readonly CLAN_NOTIFICATION_BETA?: string
   readonly API_BOT_TOKEN: string
   readonly AI_USAGE_SECRET: string
-  readonly MOBILE_PUSH_TOKEN_ENCRYPTION_KEY?: string
   readonly MOBILE_PUSH_LEGACY_ENCRYPTION_KEY?: string
   readonly PUSH_TOKEN_MIGRATION_SECRET?: string
   readonly DATA_ENCRYPTION_KEY: string

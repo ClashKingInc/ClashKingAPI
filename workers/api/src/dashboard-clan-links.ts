@@ -15,18 +15,22 @@ const members=(bindings:WorkerBindings,serverId:string)=>readDashboardGatewayCol
   .pipe(Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Member))),Effect.mapError(cause=>new DatabaseFailure({cause,message:"Discord membership snapshot is unavailable"})))
 const object=(value:unknown):Record<string,unknown>=>typeof value==="object" && value!==null && !Array.isArray(value) ? value as Record<string,unknown> : {}
 const tag=(raw:string)=>{const value=correctTag(raw);return /^#[0289PYLQGRJCUV]{3,15}$/u.test(value) ? value : undefined}
-interface Clan {name:string;tag:string;badge_token:string;clan_level:number;last_active:Date|string|null;members:unknown;verified:boolean}
+interface Clan {category:string|null;name:string;tag:string;badge_token:string;clan_level:number;last_active:Date|string|null;members:unknown;verified:boolean}
 interface Player {tag:string;townhall_level:number|null}
 export const readClanLinks=(bindings:WorkerBindings,serverId:string)=>Effect.gen(function*(){
   const sql=yield* SqlClient.SqlClient,discordMembers=yield* members(bindings,serverId)
-  const clans=yield* sql<Clan>`SELECT clan.name,clan.tag,clan.badge_token,clan.clan_level,clan.last_active,clan.members,COALESCE(verification.state='verified',false) AS verified
-    FROM server_clans scoped JOIN basic_clan clan ON clan.tag=scoped.tag LEFT JOIN server_clan_verifications verification ON verification.server_id=scoped.server_id AND verification.clan_tag=scoped.tag WHERE scoped.server_id=${serverId} ORDER BY clan.name,clan.tag`
+  // Read the existing category order through the Links permission boundary. Requiring
+  // the separate Clans endpoint here would exclude users granted only Links access.
+  const categories=yield* sql<{id:string;name:string}>`SELECT id::text,name FROM server_clan_categories
+    WHERE server_id=${serverId} ORDER BY position,name,id`
+  const clans=yield* sql<Clan>`SELECT category.name AS category,clan.name,clan.tag,clan.badge_token,clan.clan_level,clan.last_active,clan.members,COALESCE(verification.state='verified',false) AS verified
+    FROM server_clans scoped JOIN basic_clan clan ON clan.tag=scoped.tag LEFT JOIN server_clan_categories category ON category.id=scoped.category_id AND category.server_id=scoped.server_id LEFT JOIN server_clan_verifications verification ON verification.server_id=scoped.server_id AND verification.clan_tag=scoped.tag WHERE scoped.server_id=${serverId} ORDER BY clan.name,clan.tag`
   const tags=clans.flatMap(clan=>Array.isArray(clan.members) ? clan.members.map(member=>String(object(member).tag ?? "")) : [])
   const players=tags.length ? yield* sql<Player>`SELECT player.tag,player.townhall_level FROM basic_player player WHERE player.tag=ANY(${tags}::text[])` : []
   // A roster member may not yet have a basic_player row; retain its link too.
   const links=tags.length ? yield* sql<{tag:string;user_id:string;is_verified:boolean;hidden:boolean}>`SELECT tag,user_id,is_verified,hidden FROM player_links WHERE tag=ANY(${tags}::text[]) AND user_id ~ '^[1-9][0-9]{0,19}$'` : []
   const users=new Map(discordMembers.map(member=>[member.user.id,member])),byPlayer=new Map(players.map(player=>[player.tag,player])),byLink=new Map(links.map(link=>[link.tag,link]))
-  return {clans:clans.map(clan=>({name:clan.name,tag:clan.tag,
+  return {categories,clans:clans.map(clan=>({category:clan.category,name:clan.name,tag:clan.tag,
     badge:clan.badge_token ? `https://api-assets.clashofclans.com/badges/200/${clan.badge_token.replace(/\.png$/u,"")}.png` : null,
     level:clan.clan_level,verified:clan.verified,observedAt:clan.last_active ? new Date(clan.last_active).toISOString() : null,
     members:(Array.isArray(clan.members) ? clan.members : []).map(raw=>{

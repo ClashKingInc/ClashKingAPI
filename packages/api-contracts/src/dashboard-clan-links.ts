@@ -5,7 +5,10 @@ const ServerPath = Schema.Struct({serverId:DecimalSnowflake})
 export const ServerClanLinksEndpoint = defineEndpoint({
   auth:"server-read",body:NoBody,bodyMode:"none",method:"GET",operationId:"serverClanLinks",
   path:"/v2/links/server/:serverId/clans",pathParams:ServerPath,query:NoQuery,errors:[],
-  response:Schema.Struct({clans:Schema.Array(Schema.Struct({
+  response:Schema.Struct({
+    categories:Schema.optionalKey(Schema.Array(Schema.Struct({id:Schema.String,name:Schema.String}))),
+    clans:Schema.Array(Schema.Struct({
+    category:Schema.optionalKey(Schema.NullOr(Schema.String)),
     name:Schema.String,tag:Schema.String,badge:Schema.NullOr(Schema.String),level:Schema.Number,verified:Schema.Boolean,
     observedAt:Schema.NullOr(Schema.String),members:Schema.Array(Schema.Struct({
       name:Schema.String,tag:Schema.String,townHall:Schema.NullOr(Schema.Number),hidden:Schema.Boolean,

@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { SignJWT } from 'jose'
+import { verifyClanLinks } from './clan-links.mjs'
 
 export async function verifyScopedDashboardAccess({ db, origin, signingKey, applicationId, botKey, meteringKey }) {
   assert.equal(process.env.CLASHKING_DISPOSABLE_TIMESCALE, '1')
@@ -67,6 +68,7 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
   console.log('PASS bot dashboard sign-in: actual first-use grant, anonymous exchange, replay/expiry rejection, current permission recheck, foreign-server and private-route denial')
   await request(`/v2/roster/${roster}?server_id=${server}`)
   await request(`/v2/links/server/${server}`)
+  await verifyClanLinks({db,request,server,other,actor})
   await request('/v2/roster/members/query',{method:'POST',body:{serverId:server,rosterIds:[roster]}})
   await request('/v2/roster/members/query',{method:'POST',body:{serverId:other,rosterIds:[foreignRoster]},status:403})
   await request('/v2/roster/views/shared/ScopedOwnView01',{status:403})

@@ -33,7 +33,13 @@ const providerLayer = Layer.effect(HttpClient.HttpClient, Effect.gen(function* (
   const client = yield* HttpClient.HttpClient
   return HttpClient.mapRequestEffect(client, request => Effect.map(OAuthBearer, access => access === undefined
     ? request : HttpClientRequest.setHeader(request, "authorization", `Bearer ${access}`)))
-})).pipe(Layer.provide(FetchHttpClient.layer))
+})).pipe(Layer.provide(FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch,
+  // Rate-limit sleeps belong to dfx. Only a network attempt and its body have
+  // a deadline; timing the entire operation would interrupt valid 429 waits.
+  (input, init) => globalThis.fetch(input, {...init, signal:AbortSignal.any([
+    ...(init?.signal ? [init.signal] : []), AbortSignal.timeout(15_000),
+  ])}),
+)))))
 
 const providerFailure = (cause: unknown): ApiFailure => new UpstreamUnavailable({
   // Native SDK errors can contain authenticated requests. Preserve the error
@@ -84,7 +90,7 @@ export class DiscordApi extends Context.Service<DiscordApi, {
         let response=sdk.httpClient.execute(req)
         if(options.files?.length)response=response.pipe(sdk.withFiles(options.files))
         if(options.oauthAccessToken!==undefined)response=response.pipe(Effect.provideService(OAuthBearer,options.oauthAccessToken))
-        return finish(response.pipe(Effect.mapError(providerFailure),Effect.flatMap(decodeResponse))).pipe(Effect.withSpan("DiscordApi.request"))
+        return response.pipe(Effect.mapError(providerFailure),Effect.flatMap(decodeResponse),Effect.withSpan("DiscordApi.request"))
       }
       // dfx does not expose the OAuth code/refresh token exchange endpoint.
       // Keep only that form exchange on Effect's HTTP client, without bot auth

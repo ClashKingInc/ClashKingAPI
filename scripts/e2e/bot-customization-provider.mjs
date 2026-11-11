@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 export async function startBotCustomizationProvider(){
  const writes=[];let authCodeCalls=0,profileRetries=0;
- const control={failNextReset:false,failWebhookReads:false,webhookReads:0,guilds:[]};
+ const control={stallProfile:false,profileRetrySeconds:0.01,failNextReset:false,failWebhookReads:false,webhookReads:0,guilds:[]};
  const profiles=new Map();
  const clans=new Map(),clanReads=[];
  const users=new Map(),userReads=[];
@@ -18,7 +18,8 @@ export async function startBotCustomizationProvider(){
   }
   if(req.url==='/api/v10/users/@me'&&req.headers.authorization?.startsWith('Bearer sdk-access-')){
    const index=req.headers.authorization.at(-1);
-   if(index==='0'&&profileRetries===0){profileRetries++;res.statusCode=429;res.setHeader('retry-after','0.01');res.end(JSON.stringify({retry_after:.01,global:false}));return;}
+   if(index==='0'&&profileRetries===0){profileRetries++;res.statusCode=429;res.setHeader('retry-after',String(control.profileRetrySeconds));res.end(JSON.stringify({retry_after:control.profileRetrySeconds,global:false}));return;}
+   if(control.stallProfile&&index==='1'){res.flushHeaders();await new Promise(resolve=>setTimeout(resolve,16_000));}
    await new Promise(resolve=>setTimeout(resolve,index==='0'?15:30));
    res.end(JSON.stringify({id:'99999999999999497'+(Number(index)+1),username:'SDK User '+index,discriminator:'0',global_name:null,avatar:null}));return;
   }
@@ -63,5 +64,5 @@ export async function startBotCustomizationProvider(){
   res.statusCode=404;res.end(JSON.stringify({message:'Unexpected local Discord request'}));
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- return {get authCodeCalls(){return authCodeCalls},get profileRetries(){return profileRetries},clans,clanReads,users,userReads,set guilds(value){control.guilds=value},get webhookReads(){return control.webhookReads},set failWebhookReads(value){control.failWebhookReads=value},webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
+ return {set stallProfile(value){control.stallProfile=value},set profileRetrySeconds(value){control.profileRetrySeconds=value},get authCodeCalls(){return authCodeCalls},get profileRetries(){return profileRetries},clans,clanReads,users,userReads,set guilds(value){control.guilds=value},get webhookReads(){return control.webhookReads},set failWebhookReads(value){control.failWebhookReads=value},webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
 }

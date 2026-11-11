@@ -260,6 +260,7 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     ...(emailHashSecret ? { EMAIL_HASH_SECRET: emailHashSecret } : {}),
     JWT_ACCESS_SECRET: localSecret("JWT_ACCESS_SECRET"), JWT_REFRESH_SECRET: localSecret("JWT_REFRESH_SECRET"), API_BOT_TOKEN: localSecret("API_BOT_TOKEN"),
     AI_USAGE_SECRET: localSecret("AI_USAGE_SECRET"), DATA_ENCRYPTION_KEY: localSecret("DATA_ENCRYPTION_KEY"),
+    ...Object.fromEntries(["MOBILE_PUSH_TOKEN_ENCRYPTION_KEY", "MOBILE_PUSH_LEGACY_ENCRYPTION_KEY", "PUSH_TOKEN_MIGRATION_SECRET"].filter(name => process.env[`CLASHKING_E2E_${name}`]).map(name => [name, process.env[`CLASHKING_E2E_${name}`]])),
   },
 }))
 let stopping = false

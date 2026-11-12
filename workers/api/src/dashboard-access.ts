@@ -87,6 +87,8 @@ export const dispatchDashboardAccess=(request:Request)=>Effect.gen(function*(){
   const session=yield* sql.withTransaction(Effect.gen(function*(){
    const rows=yield* sql<{id:string;user_id:string;server_id:string;source:string;device_id:string|null;permissions:unknown;pkce_challenge:string|null}>`SELECT * FROM dashboard_access_grants WHERE token_hash=${digest} AND (source='bot' OR consumed_at IS NULL) AND expires_at>now() FOR UPDATE`
    const row=rows[0];if(!row)return yield* new Unauthenticated({message:"Grant expired or unavailable"})
+   const ceiling=yield* Schema.decodeUnknownEffect(Schema.Struct({manager:Schema.Boolean,sections:Schema.Record(Schema.String,Schema.Literals(["view","manage"]))}))(row.permissions).pipe(Effect.mapError(()=>new Unauthenticated({message:"Invalid dashboard grant permissions"})))
+   let permissions=ceiling
    if(row.source==="app") {if(!input.codeVerifier||input.codeVerifier.length<43||input.codeVerifier.length>128||(yield* Effect.promise(()=>challenge(input.codeVerifier!)))!==row.pkce_challenge)return yield* new Unauthenticated({message:"Grant proof failed"})}
    else {
     // Bot grants are reusable for one hour so the same private /setup link
@@ -94,12 +96,21 @@ export const dispatchDashboardAccess=(request:Request)=>Effect.gen(function*(){
     // app/PKCE grants remain single-use and no scope can widen on replay.
     if(bearerToken(request)){const user=yield* auth.requireUser(request);if(user.userId!==row.user_id||user.dashboardScope)return yield* new Forbidden({message:"Sign in as the intended Discord user"})}
     const internal=yield* Effect.promise(()=>new SignJWT({}).setProtectedHeader({alg:"HS256"}).setSubject(row.user_id).setAudience(env.WEB_TOKEN_AUDIENCE).setIssuedAt().setExpirationTime("15s").sign(key))
-    yield* authorization.require(new Request(request.url,{headers:{authorization:`Bearer ${internal}`}}),row.server_id,{})
+    const current=yield* authorization.require(new Request(request.url,{headers:{authorization:`Bearer ${internal}`}}),row.server_id,{})
+    // A reusable grant is a ceiling, not a preserved manager entitlement.
+    // Freeze the intersection at exchange so later promotion cannot widen a
+    // browser session minted after the original user's access was reduced.
+    const sections:Record<string,"view"|"manage">={}
+    for(const [section,level]of Object.entries(ceiling.manager?current.sections:ceiling.sections)){
+      const now=current.manager?"manage":current.sections[section]
+      if(now)sections[section]=level==="manage"&&now==="manage"?"manage":"view"
+    }
+    permissions={manager:ceiling.manager&&current.manager,sections}
    }
    yield* sql`UPDATE dashboard_access_grants SET consumed_at=COALESCE(consumed_at,now()) WHERE id=${row.id}::uuid`
    const expires=new Date(Date.now()+(row.source==="app"&&row.device_id?30*86400:8*3600)*1000)
    const created=yield* sql<{id:string}>`INSERT INTO dashboard_scoped_sessions(grant_id,user_id,server_id,device_id,permissions,refresh_hash,expires_at)
-    VALUES(${row.id}::uuid,${row.user_id},${row.server_id},${row.device_id},${JSON.stringify(row.permissions)}::jsonb,${refreshHash},${expires}) RETURNING id::text`
+    VALUES(${row.id}::uuid,${row.user_id},${row.server_id},${row.device_id},${JSON.stringify(permissions)}::jsonb,${refreshHash},${expires}) RETURNING id::text`
    return {...row,sessionId:created[0]!.id,expires}
   }))
   const access=yield* tokenFor(session.user_id,session.sessionId,session.device_id)

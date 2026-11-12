@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: ClashKingInc/DevKit
-          ref: 677c0b77f20638e69e7e466df1a24a78bdc1da3a
+          ref: 8fa638630ca87f9425abb1271aa2daf7edf082bf
           path: .ci-schema
           persist-credentials: false
 
@@ -70,9 +70,14 @@ jobs:
           CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
         run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/legend-day-performance.mjs
 
-      - name: Verify push token key rotation
-        run: bash .ci-schema/scripts/with-test-timescale.sh --profile retained-api -- node scripts/e2e/push-token-rotation.mjs
+      - name: Verify SDK-backed Discord authentication and provider paths
+        env:
+          CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
+          CLASHKING_E2E_SCHEMA_ROOT: ${{ github.workspace }}/.ci-schema
+        run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/legend-day-performance.mjs --discord-contract-only
 
+      - name: Verify upstream Clash HTTP outcomes and removed migration route
+        run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/clash-http-outcomes.mjs
       - name: Verify tracked clan Links cache and API fallback
         run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/run-clan-links.mjs
 

@@ -11,13 +11,14 @@ const original = new Map(source.operations.map(([method, path, tags]) => [
 // previously undocumented handlers and intentionally new retained features.
 // This only assigns navigation; it never adds paths or changes authorization.
 const additions = new Map([
+  ["PUT /v2/server/{}/clans/order", "Server Clans"],
   ["GET /v2/roster/view-shares/{}/embed", "Roster Builder"],
   ["GET /v2/roster/view-shares/{}", "Roster Builder"],
   ["POST /v2/roster/view-shares/{}/import", "Roster Builder"],
   ["POST /v2/roster/views/{}/share", "Roster Builder"],
   ["GET /v2/server/{}/limits", "Server Settings"],
-  ["GET /v2/server/{}/clan/{}/war-events", "Server Clans"],
-  ["PUT /v2/server/{}/clan/{}/war-events", "Server Clans"],
+  ["GET /v2/server/{}/clan/{}/war-events", "Server Logs"],
+  ["PUT /v2/server/{}/clan/{}/war-events", "Server Logs"],
   ["PUT /v2/server/{}/rosters/{}/role", "Roster Builder"],
   ["POST /v2/server/{}/rosters/{}/role-refresh", "Roster Builder"],
   ["GET /v2/server/{}/roster-member-groups", "Roster Builder"],
@@ -41,6 +42,8 @@ const additions = new Map([
   ["GET /v2/server/{}/analytics", "Server Clans"],
   ["GET /v2/links/server/{}/clans", "Links"],
   ["POST /v2/links/server/{}/clans/{}/{}", "Links"],
+  ["DELETE /v2/links/server/{}/clans/{}/{}", "Links"],
+  ["POST /v2/bot/servers/{}/modlinks", "Links"],
   ["GET /v2/server/{}/clan/{}/verification", "Server Clans"],
   ["POST /v2/server/{}/clan/{}/verification", "Server Clans"],
   ["POST /v2/server/{}/clan/{}/verification/check", "Server Clans"],

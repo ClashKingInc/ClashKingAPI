@@ -1,15 +1,30 @@
+import assert from 'node:assert/strict';
 // Loopback Discord provider for the actual API service test. No real guilds.
 import { createServer } from 'node:http';
 export async function startBotCustomizationProvider(){
- const writes=[];
- const control={failNextReset:false,failWebhookReads:false,webhookReads:0,guilds:[]};
+ const writes=[];let authCodeCalls=0,profileRetries=0;
+ const control={stallProfile:false,profileRetrySeconds:0.01,failNextReset:false,failWebhookReads:false,webhookReads:0,guilds:[]};
  const profiles=new Map();
  const clans=new Map(),clanReads=[];
  const users=new Map(),userReads=[];
  const hooks=new Map(), webhookCreates=[];
  const server=createServer(async(req,res)=>{
   res.setHeader('content-type','application/json');
-  if(req.url==='/api/v10/users/@me/guilds?limit=200&with_counts=true'){res.end(JSON.stringify(control.guilds));return;}
+  if(req.url==='/api/oauth2/token'){
+   assert.equal(req.headers.authorization,undefined,'Code exchange must not send bot or user authorization');
+   let raw='';for await(const part of req)raw+=part;const form=new URLSearchParams(raw),code=form.get('code');
+   if(!/^sdk-code-[01]$/.test(code??'')){res.statusCode=400;res.end('{}');return;}
+   authCodeCalls++;const index=code.at(-1);res.end(JSON.stringify({access_token:'sdk-access-'+index,refresh_token:'sdk-refresh-'+index,expires_in:3600,token_type:'Bearer'}));return;
+  }
+  if(req.url==='/api/v10/users/@me'&&req.headers.authorization?.startsWith('Bearer sdk-access-')){
+   const index=req.headers.authorization.at(-1);
+   if(index==='0'&&profileRetries===0){profileRetries++;res.statusCode=429;res.setHeader('retry-after',String(control.profileRetrySeconds));res.end(JSON.stringify({retry_after:control.profileRetrySeconds,global:false}));return;}
+   if(control.stallProfile&&index==='1'){res.flushHeaders();await new Promise(resolve=>setTimeout(resolve,16_000));}
+   await new Promise(resolve=>setTimeout(resolve,index==='0'?15:30));
+   res.end(JSON.stringify({id:'99999999999999497'+(Number(index)+1),username:'SDK User '+index,discriminator:'0',global_name:null,avatar:null}));return;
+  }
+
+  if(req.url==='/api/v10/users/@me/guilds?limit=200&with_counts=true'){assert.equal(req.headers.authorization,'Bearer local-oauth-token');res.end(JSON.stringify(control.guilds));return;}
   if(decodeURIComponent(req.url??'')==='/v1/clans/#PYLQRRJC'){
    res.end(JSON.stringify({tag:'#PYLQRRJC',name:'Unlimited clans fixture',description:'Local fixture',isWarLogPublic:true,type:'inviteOnly',clanPoints:0,warWins:0,warWinStreak:0,clanLevel:10,members:1,memberList:[{tag:'#PYLQRRJP',name:'Fixture',townHallLevel:16,trophies:5000,role:'member',donations:0,donationsReceived:0,clanRank:1,previousClanRank:1,expLevel:200}],badgeUrls:{small:'https://example.invalid/badge.png'}}));return;
   }
@@ -49,5 +64,5 @@ export async function startBotCustomizationProvider(){
   res.statusCode=404;res.end(JSON.stringify({message:'Unexpected local Discord request'}));
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- return {clans,clanReads,users,userReads,set guilds(value){control.guilds=value},get webhookReads(){return control.webhookReads},set failWebhookReads(value){control.failWebhookReads=value},webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
+ return {set stallProfile(value){control.stallProfile=value},set profileRetrySeconds(value){control.profileRetrySeconds=value},get authCodeCalls(){return authCodeCalls},get profileRetries(){return profileRetries},clans,clanReads,users,userReads,set guilds(value){control.guilds=value},get webhookReads(){return control.webhookReads},set failWebhookReads(value){control.failWebhookReads=value},webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
 }

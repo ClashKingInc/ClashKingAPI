@@ -30,8 +30,7 @@ The interactive reference shows the available routes, what to send, what comes b
 history uses `GET /v2/player/:playerTag/ranked/history`. The existing mixed
 `/league/history` route remains a compatibility surface. Recorded historical
 league IDs, names and icon URLs retain their source namespace; missing metadata
-stays unknown. See [league history contracts and storage](docs/league-history.md)
-for calendar boundaries, population meaning, migration order and app consumers.
+stays unknown.
 
 Roster metric `cwl.performance_history` accepts an exact `season` such as
 `"2026-10"`, a rolling `windowMonths` window, or a `seasonCount` participation

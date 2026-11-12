@@ -124,7 +124,7 @@ export class BotAdjacentStore extends Context.Service<BotAdjacentStore, {
         FROM server_clans sc JOIN basic_clan clan ON clan.tag = sc.tag
         -- Imported category references must not reveal another server's label.
         LEFT JOIN server_clan_categories category ON category.id=sc.category_id AND category.server_id=sc.server_id
-        WHERE sc.server_id = ${serverId} ORDER BY clan.name, sc.tag`),
+        WHERE sc.server_id = ${serverId} ORDER BY category.position NULLS LAST, sc.position, clan.name, sc.tag`),
       upsertBaseVote: (baseId, voterId, direction) => Effect.gen(function* () {
         const vote = direction === "up" ? 1 : -1
         const rows = yield* db(sql.unsafe<{ baseId: string; voterId: string; direction: "up" | "down" }>(`UPDATE bases

@@ -1,4 +1,5 @@
-import { dispatchPushTokenRotation } from "./push-token-rotation.js"
+import { dispatchBotMemberPanels } from "./bot-member-panels.js"
+import { dispatchBotClanLinks } from "./bot-clan-links.js"
 import { dispatchBotPlayerAutocomplete } from "./bot-player-autocomplete.js"
 import { dispatchBotServerActivity } from "./bot-server-activity.js"
 import { ServerAuthorization } from "./server-authorization.js"
@@ -348,8 +349,6 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (accountResponse !== undefined) return accountResponse
     // Literal /links/shared must reach developer-token validation before
     // /links/:userId can interpret "shared" as a user ID.
-    const pushRotationResponse = yield* dispatchPushTokenRotation(request, bindings)
-    if (pushRotationResponse !== undefined) return pushRotationResponse
     const botAdjacentResponse = yield* dispatchBotAdjacentRuntime(request, bindings)
     if (botAdjacentResponse !== undefined) return botAdjacentResponse
     const botWarPanelResponse = yield* dispatchBotWarPanel(request, bindings)
@@ -360,6 +359,10 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (botClashResponse !== undefined) return botClashResponse
     const botLegendStatsResponse = yield* dispatchBotLegendStats(request)
     if (botLegendStatsResponse !== undefined) return botLegendStatsResponse
+    const memberPanelsResponse=yield* dispatchBotMemberPanels(request)
+    if(memberPanelsResponse)return memberPanelsResponse
+    const modlinksResponse=yield* dispatchBotClanLinks(request,bindings)
+    if(modlinksResponse)return modlinksResponse
     const roleMembersResponse = yield* dispatchBotRoleMembers(request, bindings)
     if (roleMembersResponse) return roleMembersResponse
     const botWarStatisticsResponse = yield* dispatchBotWarStatistics(request)

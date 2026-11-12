@@ -1,3 +1,4 @@
+import { ClientErrorResponse as ClashErrorBody } from "@clashking/clash-contract/effect"
 import type {
   AnyEndpoint,
   EndpointRequest,
@@ -33,6 +34,7 @@ export class TransportError extends Data.TaggedError("TransportError")<{
 
 export class ApiResponseError extends Data.TaggedError("ApiResponseError")<{
   readonly body: unknown
+  readonly contractMismatch?: true
   readonly requestId?: string
   readonly status: number
 }> {}
@@ -449,6 +451,11 @@ export const createApiClient = (options: ApiClientOptions) => {
         try: () => successPayload(endpoint, response),
         catch: (cause) => new ResponseDecodeError({ cause, operationId: endpoint.operationId }),
       })
+      // Empty ranked groups are legitimate, but an upstream error envelope
+      // mislabeled 200 must not decode as an empty group with unknown fields.
+      if ((endpoint.path.startsWith("/proxy/v1/") || endpoint.path.startsWith("/v2/bot/clash/")) && Schema.is(ClashErrorBody)(payload)) {
+        return yield* new ResponseDecodeError({cause: new Error("Clash returned an error envelope with a success status"), operationId:endpoint.operationId})
+      }
       const value = yield* Schema.decodeUnknownEffect(endpoint.response)(payload).pipe(
         Effect.mapError(
           (cause) => new ResponseDecodeError({ cause, operationId: endpoint.operationId }),
@@ -482,9 +489,11 @@ export const createApiClient = (options: ApiClientOptions) => {
           body,
           ...(error.requestId === undefined ? {} : { requestId: error.requestId }),
         }) as ApiStatusResult<E>),
-        Effect.mapError((cause): ApiClientError => new ResponseDecodeError({
-          cause,
-          operationId: endpoint.operationId,
+        // Error-body validation must never erase the HTTP status. Proxy HTML
+        // and future provider envelopes remain real failures, not fake success.
+        Effect.mapError((): ApiClientError => new ApiResponseError({
+          status: error.status, body: error.body, contractMismatch: true,
+          ...(error.requestId === undefined ? {} : {requestId: error.requestId}),
         })),
       )
     }

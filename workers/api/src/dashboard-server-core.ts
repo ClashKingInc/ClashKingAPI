@@ -1,3 +1,4 @@
+import { lockServerClanOrder, compactServerClanOrder, reorderServerClans } from "./server-clan-order.js"
 import { LIMIT_SUPPORT_URL } from "./server-limits.js"
 import { executeClanVerification } from "./dashboard-clan-verification.js"
 import { executeClanLinks } from "./dashboard-clan-links.js"
@@ -38,7 +39,7 @@ export const dashboardServerCoreOperationIds = [
   "previewClanCategoryDelete", "deleteClanCategory", "serverRoles", "createServerRole",
   "updateServerRole", "deleteServerRole", "serverSettings", "updateServerSettings",
   "roleSettings", "updateRoleSettings", "updateServerEmbedColor", "serverClansBasic",
-  "serverClans", "serverClanSettings", "updateServerClanSettings", "removeServerClan", "addServerClan",
+  "serverClans", "serverClanSettings", "updateServerClanSettings", "removeServerClan", "addServerClan", "reorderServerClans",
   "serverLogs", "updateServerLogsState", "serverCountdowns", "clanCountdowns",
   "serverEmbeds", "createServerEmbed", "updateServerEmbed", "deleteServerEmbed",
   "searchBannedPlayers",
@@ -121,22 +122,25 @@ const categoryOperation = (input: DashboardServerOperationInput) => database("Cl
   const id = text(input.path.categoryId)
   const body = record(input.body)
   const operation = input.endpoint.operationId
-  if (operation === "serverClanLinks" || operation === "createClanRosterLink") return executeClanLinks(input)
   if (operation === "clanCategories") {
     const items = yield* queryCategories(serverId)
     return { items, total: items.length }
   }
   if (operation === "createClanCategory") {
     const name = yield* categoryName(body.name)
+    return yield* sql.withTransaction(Effect.gen(function*(){
+    yield* lockServerClanOrder(serverId)
     const rows = yield* sql<CategoryRow>`INSERT INTO server_clan_categories (server_id, name, position)
       SELECT ${serverId}, ${name}, COALESCE(max(position) + 1, 0) FROM server_clan_categories WHERE server_id = ${serverId}
       RETURNING id::text, server_id, name, position, 0::int AS clan_count`
     return { category: categoryValue(yield* requireRow(rows, "Category was not created")) }
+    }))
   }
   if (operation === "reorderClanCategories") {
     const decoded = yield* Schema.decodeUnknownEffect(dashboardEndpoints.reorderClanCategories.body)(body).pipe(Effect.mapError(() => new InvalidRequest({ message: "Invalid category order" })))
     if (new Set(decoded.categoryIds).size !== decoded.categoryIds.length) return yield* new InvalidRequest({ message: "Category order contains duplicates" })
     yield* sql.withTransaction(Effect.gen(function* () {
+      yield* lockServerClanOrder(serverId)
       const existing = yield* sql<{ id: string }>`SELECT id::text FROM server_clan_categories WHERE server_id = ${serverId} FOR UPDATE`
       if (existing.length !== decoded.categoryIds.length || existing.some((row) => !decoded.categoryIds.includes(row.id))) {
         return yield* new InvalidRequest({ message: "Category order must contain every server category exactly once" })
@@ -152,6 +156,7 @@ const categoryOperation = (input: DashboardServerOperationInput) => database("Cl
   if (operation === "renameClanCategory") {
     const name = yield* categoryName(body.name)
     return yield* sql.withTransaction(Effect.gen(function* () {
+      yield* lockServerClanOrder(serverId)
       const previous = yield* sql<{ name: string }>`SELECT name FROM server_clan_categories WHERE server_id = ${serverId} AND id = ${id}::uuid FOR UPDATE`
       const current = yield* requireRow(previous, "Category not found")
       const rows = yield* sql.unsafe<CategoryRow>(`UPDATE server_clan_categories category SET name = $3 WHERE server_id = $1 AND id = $2::uuid RETURNING ${categoryColumns}`, [serverId, id, name])
@@ -160,10 +165,15 @@ const categoryOperation = (input: DashboardServerOperationInput) => database("Cl
     }))
   }
   return yield* sql.withTransaction(Effect.gen(function* () {
+    yield* lockServerClanOrder(serverId)
     const rows = yield* sql.unsafe<CategoryRow>(`SELECT ${categoryColumns} FROM server_clan_categories category WHERE category.server_id = $1 AND category.id = $2::uuid FOR UPDATE`, [serverId, id])
     const row = yield* requireRow(rows, "Category not found")
     if (operation === "previewClanCategoryDelete") return { category: categoryValue(row), affectedClanCount: row.clan_count }
+    // Append this category after existing uncategorized clans before the FK
+    // clears category_id. Then compact both positions and category indexes.
+    yield* sql`UPDATE server_clans SET position=position+(SELECT COALESCE(max(position)+1,0) FROM server_clans WHERE server_id=${serverId} AND category_id IS NULL) WHERE server_id=${serverId} AND category_id=${id}::uuid`
     yield* sql`DELETE FROM server_clan_categories WHERE server_id = ${serverId} AND id = ${id}::uuid`
+    yield* compactServerClanOrder(serverId)
     yield* sql`UPDATE server_clan_categories SET position = position - 1 WHERE server_id = ${serverId} AND position > ${row.position}`
     if (row.clan_count > 0) yield* queueServerRoleRefresh(serverId)
     return { categoryId: row.id, name: row.name, deleted: true, uncategorizedClanCount: row.clan_count }
@@ -380,7 +390,6 @@ const roleOperation = (input: DashboardServerOperationInput) => database("Server
   const sql = yield* SqlClient.SqlClient
   const serverId = serverIdFor(input)
   const operation = input.endpoint.operationId
-  if (operation === "serverClanLinks" || operation === "createClanRosterLink") return executeClanLinks(input)
   if (operation === "serverRoles") {
     const rows = yield* sql.unsafe<RoleRow>(`SELECT ${roleColumns} FROM server_roles WHERE server_id = $1 AND ($2 = '' OR type = $2) AND ($3 = '' OR clan_tag = $3) ORDER BY type, option, clan_tag NULLS FIRST, role_id`, [serverId, text(input.query.type), text(input.query.clan_tag)])
     const roles = rows.map(roleValue)
@@ -514,7 +523,7 @@ interface ClanRow { readonly tag: string; readonly name: string; readonly abbrev
 const clanSelect = `SELECT sc.tag, clan.name, sc.abbreviation, category.name AS category, clan.badge_token, clan.clan_level, clan.member_count, sc.added_at FROM server_clans sc JOIN basic_clan clan ON clan.tag = sc.tag LEFT JOIN server_clan_categories category ON category.id = sc.category_id WHERE sc.server_id = $1`
 const clanSettingsRows = (serverId: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql.unsafe<ClanRow>(`${clanSelect} ORDER BY clan.name, sc.tag`, [serverId])
+  const rows = yield* sql.unsafe<ClanRow>(`${clanSelect} ORDER BY category.position NULLS LAST, sc.position, clan.name, sc.tag`, [serverId])
   return rows.map((row) => ({ tag: row.tag, name: row.name, server_id: serverId, abbreviation: row.abbreviation, ...optional("category", row.category) }))
 })
 const clanOperation = (input: DashboardServerOperationInput) => database("Server clan operation failed", Effect.gen(function* () {
@@ -522,10 +531,15 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
   const serverId = serverIdFor(input), operation = input.endpoint.operationId
   const tag = normalizeTag(input.path.clanTag)
   if (input.path.clanTag !== undefined && !/^#[0289PYLQGRJCUV]{3,15}$/u.test(tag)) return yield* new InvalidRequest({ message: "The clan tag is invalid" })
+  if(operation==="reorderServerClans"){
+    const body=yield* Schema.decodeUnknownEffect(dashboardEndpoints.reorderServerClans.body)(input.body).pipe(Effect.mapError(()=>new InvalidRequest({message:"Invalid clan order"})))
+    return yield* reorderServerClans(serverId,body.categoryId,body.clanTags)
+  }
   if (operation === "removeServerClan") {
     return yield* sql.withTransaction(Effect.gen(function* () {
+      yield* lockServerClanOrder(serverId)
       const rows = yield* sql<{ tag: string }>`DELETE FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag} RETURNING tag`
-      if (rows.length) yield* queueServerRoleRefresh(serverId)
+      if (rows.length) { yield* compactServerClanOrder(serverId);yield* queueServerRoleRefresh(serverId) }
       return { message: "Clan removed successfully", server_id: serverId, clan_tag: tag, deleted_count: rows.length }
     }))
   }
@@ -533,7 +547,7 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
   if (operation === "serverClans") {
     const [servers, rows] = yield* Effect.all([
       sql<{ id: string }>`SELECT id FROM servers WHERE id = ${serverId}`,
-      sql.unsafe<ClanRow>(`${clanSelect} ORDER BY clan.name, sc.tag`, [serverId]),
+      sql.unsafe<ClanRow>(`${clanSelect} ORDER BY category.position NULLS LAST, sc.position, clan.name, sc.tag`, [serverId]),
     ], { concurrency: 2 })
     yield* requireRow(servers, "Server not found")
     return rows.map((row) => ({ tag: row.tag, name: row.name, ...(row.badge_token ? { badge_url: `https://api-assets.clashofclans.com/badges/200/${row.badge_token.replace(/\.png$/u, "")}.png` } : {}), level: row.clan_level, member_count: row.member_count, added_at: iso(row.added_at), settings: { abbreviation: row.abbreviation, ...optional("category", row.category) } }))
@@ -547,6 +561,7 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
   if (Object.keys(body).length === 0) return yield* new InvalidRequest({ message: "No fields to update" })
   let category: ReturnType<typeof categoryValue> | null = null
   yield* sql.withTransaction(Effect.gen(function* () {
+    yield* lockServerClanOrder(serverId)
     const rows = yield* sql<{ abbreviation: string; category_id: string | null }>`SELECT abbreviation, category_id::text FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag} FOR UPDATE`
     const previous = yield* requireRow(rows, "Server or clan not found")
     yield* sql`UPDATE server_clans SET updated_at = now() WHERE server_id = ${serverId} AND tag = ${tag}`
@@ -565,6 +580,10 @@ const clanOperation = (input: DashboardServerOperationInput) => database("Server
       }
     }
     const saved = yield* sql<{ abbreviation: string; category_id: string | null }>`SELECT abbreviation, category_id::text FROM server_clans WHERE server_id = ${serverId} AND tag = ${tag}`
+    if(saved[0]?.category_id!==previous.category_id){
+      yield* sql`UPDATE server_clans SET position=(SELECT COALESCE(max(position)+1,0) FROM server_clans WHERE server_id=${serverId} AND tag<>${tag} AND category_id IS NOT DISTINCT FROM ${saved[0]!.category_id}::uuid) WHERE server_id=${serverId} AND tag=${tag}`
+      yield* compactServerClanOrder(serverId)
+    }
     // These are refresh inputs even without a player update. Compare persisted
     // values so duplicate saves and category ordering do not enqueue extra work.
     if (saved[0]?.abbreviation !== previous.abbreviation || saved[0]?.category_id !== previous.category_id) yield* queueServerRoleRefresh(serverId)
@@ -596,7 +615,7 @@ const addClanOperation = (input: DashboardServerOperationInput) => database("Cla
     // Clan membership has no quota; duplicate adds still use the unique key below.
     const server=(yield* sql<{id:string}>`SELECT id FROM servers WHERE id=${serverId} FOR UPDATE`)[0]
     if(!server)return yield* new NotFound({message:"Server not found"})
-    const added = yield* sql<{ tag: string }>`INSERT INTO server_clans (tag, server_id, updated_at) VALUES (${clan.tag}, ${serverId}, now()) ON CONFLICT (tag, server_id) DO NOTHING RETURNING tag`
+    const added = yield* sql<{ tag: string }>`INSERT INTO server_clans (tag, server_id, updated_at, position) SELECT ${clan.tag}, ${serverId}, now(),COALESCE(max(position)+1,0) FROM server_clans WHERE server_id=${serverId} AND category_id IS NULL ON CONFLICT (tag, server_id) DO NOTHING RETURNING tag`
     if (added.length) yield* queueServerRoleRefresh(serverId)
     else yield* sql`UPDATE server_clans SET updated_at = now() WHERE tag = ${clan.tag} AND server_id = ${serverId}`
   }))
@@ -653,7 +672,7 @@ const countdownMutationOperation = (input: DashboardServerOperationInput) => dat
   })).pipe(Effect.catch((failure) => created === undefined ? Effect.fail(failure) : compensateCreatedDiscordResource(created).pipe(Effect.andThen(Effect.fail(failure)))))
 }))
 
-const logTypes = new Set(["clash_maintenance", "join_log", "leave_log", "clan_achievement_log", "clan_requirements_log", "clan_description_log", "war_log", "war_panel", "cwl_lineup_change_log", "capital_donations", "capital_attacks", "raid_panel", "capital_weekly_summary", "role_change", "troop_upgrade", "super_troop_boost", "th_upgrade", "league_change", "spell_upgrade", "hero_upgrade", "hero_equipment_upgrade", "name_change", "legend_log_attacks", "legend_log_defenses", "ban_alert", "reddit_feed", "reddit_user_feed"])
+const logTypes = new Set(["donation_log", "clash_maintenance", "join_log", "leave_log", "clan_achievement_log", "clan_requirements_log", "clan_description_log", "war_log", "war_panel", "cwl_lineup_change_log", "capital_donations", "capital_attacks", "raid_panel", "capital_weekly_summary", "role_change", "troop_upgrade", "super_troop_boost", "th_upgrade", "league_change", "spell_upgrade", "hero_upgrade", "hero_equipment_upgrade", "name_change", "legend_log_attacks", "legend_log_defenses", "ban_alert", "reddit_feed", "reddit_user_feed"])
 const Webhook = Schema.Struct({ id: DecimalSnowflake, channel_id: Schema.optionalKey(Schema.NullOr(DecimalSnowflake)) })
 interface LogRow { readonly clan_tag: string | null; readonly type: string; readonly webhook_id: string; readonly thread_id: string | null; readonly disabled: boolean; readonly disabled_reason: string | null; readonly reddit_role_id: string | null; readonly reddit_accounts: ReadonlyArray<string>; readonly reddit_min_townhall: number | null; readonly reddit_include_comments: boolean }
 const logsReadStateOperation = (input: DashboardServerOperationInput) => database("Server logs could not be loaded or updated", Effect.gen(function* () {
@@ -672,7 +691,6 @@ const logsReadStateOperation = (input: DashboardServerOperationInput) => databas
   const body = record(input.body)
   const selected = [...new Set((Array.isArray(body.log_types) ? body.log_types : []).map((value) => text(value).trim()).filter(Boolean))]
   if (selected.length === 0) return yield* new InvalidRequest({ message: "No log types provided" })
-  if (selected.includes("donation_log")) return yield* new InvalidRequest({ message: "Donation logs have been retired" })
   const tag = text(body.clan_tag).trim() === "" ? null : normalizeTag(body.clan_tag)
   for (const type of selected) {
     if (!logTypes.has(type)) return yield* new InvalidRequest({ message: `Unknown log type: ${type}` })
@@ -692,7 +710,6 @@ const logsMutationOperation = (input: DashboardServerOperationInput) => database
   const raw = operation === "deleteServerLogs" ? text(body.log_types).split(",") : Array.isArray(body.log_types) ? body.log_types : []
   const selected = [...new Set(raw.map((value) => text(value).trim()).filter(Boolean))]
   if (selected.length === 0) return yield* new InvalidRequest({ message: "No log types provided" })
-  if (selected.includes("donation_log") && operation !== "deleteServerLogs") return yield* new InvalidRequest({ message: "Donation logs have been retired" })
   const tag = text(body.clan_tag).trim() === "" ? null : normalizeTag(body.clan_tag)
   for (const type of selected) {
     if (!logTypes.has(type)) return yield* new InvalidRequest({ message: `Unknown log type: ${type}` })
@@ -801,7 +818,7 @@ export const executeDashboardServerCore = (
 ): Effect.Effect<unknown | undefined, ApiFailure, CoreEnvironment> => {
   const operation = input.endpoint.operationId
   if (["clanVerification", "startClanVerification", "checkClanVerification"].includes(operation)) return executeClanVerification(input)
-  if (operation === "serverClanLinks" || operation === "createClanRosterLink") return executeClanLinks(input)
+  if (operation === "serverClanLinks" || operation === "createClanRosterLink" || operation === "deleteClanRosterLink") return executeClanLinks(input)
   if (dashboardServerActivityOperationIds.some((id) => id === operation)) return executeDashboardServerActivity(input)
   if (dashboardServerBaseOperationIds.some((id) => id === operation)) return executeDashboardServerBases(input)
   if (dashboardGiveawayOperationIds.some((id) => id === operation)) return executeDashboardGiveaways(input)
@@ -829,7 +846,7 @@ export const executeDashboardServerCore = (
   if (["clanCategories", "createClanCategory", "renameClanCategory", "reorderClanCategories", "previewClanCategoryDelete", "deleteClanCategory"].includes(operation)) return categoryOperation(input)
   if (["serverRoles", "createServerRole", "updateServerRole", "deleteServerRole"].includes(operation)) return roleOperation(input)
   if (["serverSettings", "updateServerSettings", "roleSettings", "updateRoleSettings", "updateServerEmbedColor", "reactivateServer"].includes(operation)) return settingsOperation(input)
-  if (["serverClansBasic", "serverClans", "serverClanSettings", "updateServerClanSettings", "removeServerClan"].includes(operation)) return clanOperation(input)
+  if (["serverClansBasic", "serverClans", "serverClanSettings", "updateServerClanSettings", "removeServerClan", "reorderServerClans"].includes(operation)) return clanOperation(input)
   return Effect.succeed(undefined)
 }
 

@@ -1,3 +1,4 @@
+import { ClashErrorStatuses } from "@clashking/clash-contract/outcomes"
 import {
   BattleLogResponse,
   CapitalRaidSeasonsResponse,
@@ -39,11 +40,12 @@ export const ProxyMaintenanceErrorResponse = Schema.Struct({
   message: Schema.String,
 })
 export const ProxyUnavailableErrorResponse = Schema.Union([ProxyMaintenanceErrorResponse, ErrorResponse])
-const ProxyErrors = [
-  { status: 400, body: ClientErrorResponse }, { status: 403, body: ClientErrorResponse },
-  { status: 404, body: ClientErrorResponse }, { status: 429, body: ClientErrorResponse },
-  { status: 503, body: ProxyUnavailableErrorResponse },
+// Keep all upstream statuses, while allowing our authentication/transport envelope.
+export const ProxyErrors = [
+  { status: 401, body: ErrorResponse },
+  ...ClashErrorStatuses.map(status => ({ status, body: Schema.Union([ClientErrorResponse, ErrorResponse]) })),
 ] as const
+
 
 const proxyGet = <
   Path extends `/proxy/v1/${string}`,
@@ -69,7 +71,7 @@ export const ProxyCapitalRaidSeasonsEndpoint = proxyGet("getExpoProxyCapitalRaid
 export const ProxyClanWarlogEndpoint = proxyGet("getExpoProxyClanWarlog", "/proxy/v1/clans/:clanTag/warlog", ClanPath, ProxyWarlogResponse, LimitQuery)
 // Official notInWar responses can contain empty clan/opponent placeholders.
 // Keep active-war decoding strict, and discard placeholders only in this state.
-export const ProxyCurrentWarResponse = Schema.Union([Schema.Struct({ state: Schema.Literal("notInWar") }), ProxyWarResponse])
+export const ProxyCurrentWarResponse = ProxyWarResponse
 export const ProxyCurrentWarEndpoint = proxyGet("getExpoProxyCurrentWar", "/proxy/v1/clans/:clanTag/currentwar", ClanPath, ProxyCurrentWarResponse)
 export const ProxyCurrentLeagueGroupEndpoint = proxyGet("getExpoProxyCurrentLeagueGroup", "/proxy/v1/clans/:clanTag/currentwar/leaguegroup", ClanPath, ProxyCwlGroupResponse)
 export const ProxyCwlWarEndpoint = proxyGet("getExpoProxyCwlWar", "/proxy/v1/clanwarleagues/wars/:warTag", Schema.Struct({ warTag: Schema.String }), ProxyWarResponse)

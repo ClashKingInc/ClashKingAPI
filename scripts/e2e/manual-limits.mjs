@@ -32,6 +32,13 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  assert.equal((await db.query('SELECT webhook_id FROM reminders WHERE id=$1',[first.reminder_id])).rows[0].webhook_id,'999999999999994912');
  await request(origin,'/v2/server/'+server+'/reminders','POST',{...reminderBody,time:'300 min',channel_id:'999999999999994904'},userHeaders,400);
  assert.equal(profileProvider.webhookCreates.length,1,'Cross-server destination cannot create webhooks');
+ // Every clan reminder family enforces the same interval at the real write boundary.
+ for(const type of ['War','Clan Capital','Clan Games']){
+  for(const minutes of [0,15,2880])await request(origin,'/v2/server/'+server+'/reminders','POST',{...reminderBody,type,time:minutes+' min'},userHeaders);
+  for(const time of ['-1 min','14 min','2881 min','48.25 hr','nonsense'])await request(origin,'/v2/server/'+server+'/reminders','POST',{...reminderBody,type,time},userHeaders,400);
+ }
+ await request(origin,'/v2/server/'+server+'/reminders/'+first.reminder_id,'PUT',{time:'14 min'},userHeaders,400);
+ assert.equal((await db.query('SELECT minutes_remaining FROM reminders WHERE id=$1',[first.reminder_id])).rows[0].minutes_remaining,60,'Invalid edit preserves the saved offset');
  console.log('PASS reminder API: reuses log hooks, shares one hook across concurrent reminders, retains threads, changes destination, rejects cross-server channel');
  const redditPath='/v2/server/'+server+'/logs';
  const redditBody={channel_id:'999999999999994901',thread_id:'999999999999994903',log_types:['reddit_user_feed'],reddit_role_id:'999999999999995911',reddit_accounts:['Recruiter','Second'],reddit_include_comments:true};
@@ -108,13 +115,21 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  const viewerSession=(await db.query("INSERT INTO dashboard_scoped_sessions(grant_id,user_id,server_id,permissions,refresh_hash,expires_at) VALUES($1,$2,$3,$4,$5,now()+interval '1 hour') RETURNING id",[viewerGrant,actor,server,{manager:false,sections:{settings:'view'}},randomUUID()])).rows[0].id;
  const viewerToken=await new SignJWT({dashboard_session:viewerSession}).setProtectedHeader({alg:'HS256'}).setSubject(actor).setAudience('clashking-server-dashboard').setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(signingKey));
  await request(origin,'/v2/server/'+server+'/bot-profile','PATCH',{name:'Read-only session'}, {authorization:'Bearer '+viewerToken},403);
+ // A /setup browser with Settings manage can read and edit a granted profile.
+ await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[viewerSession,{manager:false,sections:{settings:'manage'}}]);
+ const scopedHeaders={authorization:'Bearer '+viewerToken};
+ assert.equal((await request(origin,'/v2/server/'+server+'/limits','GET',undefined,scopedHeaders)).botCustomizationEnabled,true);
+ assert.equal((await request(origin,'/v2/server/'+server+'/bot-profile','GET',undefined,scopedHeaders)).name,'Granted name');
+ assert.equal((await request(origin,'/v2/server/'+server+'/bot-profile','PATCH',{bio:'Scoped bio'},scopedHeaders)).bio,'Scoped bio');
  await request(adminOrigin,'/v2/admin/server-limits/'+server,'PATCH',{autoboardLimit:5,aiMonthlyLimitUsd:.05,botCustomizationEnabled:false});
  await request(origin,'/v2/server/'+server+'/bot-profile','PATCH',{name:'Revoked name'},userHeaders,403);
- assert.equal(profileProvider.writes.length,startWrites+1,'Revocation and read-only sessions must not cause Discord writes');
+ assert.equal(profileProvider.writes.length,startWrites+2,'Revocation and read-only sessions must not cause Discord writes');
+ await request(origin,'/v2/server/'+server+'/bot-profile','PATCH',{name:'Revoked scoped'},scopedHeaders,403);
  assert.equal((await request(origin,'/v2/server/'+server+'/bot-profile','GET',undefined,userHeaders)).name,'Granted name','Revocation retains the existing profile');
+ console.log('PASS scoped /setup profile access: Settings view cannot write; Settings manage reads limits/profile and edits only with an active customization grant');
  // Reset is a separate, privileged action, including after access revocation.
  await request(origin,'/v2/admin/server-limits/'+server+'/reset-bot-profile','POST',undefined,userHeaders,401);
- assert.equal(profileProvider.writes.length,startWrites+1);
+ assert.equal(profileProvider.writes.length,startWrites+2);
  await request(adminOrigin,'/v2/admin/server-limits/'+server+'/reset-bot-profile','POST');
  const reset=await request(origin,'/v2/server/'+server+'/bot-profile','GET',undefined,userHeaders);
  assert.equal(reset.name,'ClashKing');assert.equal(reset.bio,'Global profile');

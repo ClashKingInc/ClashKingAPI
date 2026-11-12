@@ -11,7 +11,9 @@ export const dispatchClanWarEvents=(request:Request)=>Effect.gen(function*(){
  const tag=yield* Effect.try({try:()=>decodeURIComponent(match[2]!),catch:()=>new InvalidRequest({message:"Invalid clan encoding"})})
  const params=yield* Schema.decodeUnknownEffect(ClanWarEventsGet.pathParams)({serverId:match[1],clanTag:tag}).pipe(Effect.mapError(()=>new InvalidRequest({message:"Invalid server or clan"})))
  if(!/^#[0289PYLQGRJCUV]{1,15}$/u.test(tag))return yield* new InvalidRequest({message:"Invalid clan tag"})
- yield* (yield* ServerAuthorization).require(request,params.serverId,{managerOnly:true,write:request.method==="PUT",section:"clans"})
+ // War events are configured beside the other clan countdowns on Logs. Use
+ // that section's live permission, including delegated Logs managers.
+ yield* (yield* ServerAuthorization).require(request,params.serverId,{write:request.method==="PUT",section:"logs"})
  const sql=yield* SqlClient.SqlClient
  if(request.method==="PUT"){
   const body=yield* readBoundedJson(request,1024).pipe(Effect.flatMap(Schema.decodeUnknownEffect(ClanWarEventsPut.body)),Effect.mapError(()=>new InvalidRequest({message:"Provide an enabled boolean"})))

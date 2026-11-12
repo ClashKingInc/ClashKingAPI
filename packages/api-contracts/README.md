@@ -1,6 +1,6 @@
 # `@clashking/api-contracts`
 
-Requires exactly Effect `4.0.0`. The API package versions remain independent
+Requires exactly Effect `4.1.3`. The API package versions remain independent
 release candidates; stable Effect does not change their release channel.
 
 Browser- and Worker-safe Effect v4 schemas plus endpoint descriptors for the
@@ -33,5 +33,5 @@ Legend history uses the existing `BotPlayerLegendHistoryEndpoint`; the Expo
 and icons, with nullable `seasonStart`/`seasonEnd` and highest-retained-rank
 `population`. Ranked tournaments use `PlayerRankedHistoryEndpoint`. The mixed
 `PlayerLeagueHistoryEndpoint` remains compatible. See
-[history contracts and storage](../../docs/league-history.md) before changing
+[the authoritative history schemas](src/bot-player-history.ts) before changing
 these historical meanings or removing the compatibility endpoint.

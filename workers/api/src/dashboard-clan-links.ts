@@ -44,15 +44,27 @@ export const readClanLinks=(bindings:WorkerBindings,serverId:string)=>Effect.gen
   const categories=yield* sql<{id:string;name:string}>`SELECT id::text,name FROM server_clan_categories
     WHERE server_id=${serverId} ORDER BY position,name,id`
   const configured=yield* sql<Clan>`SELECT category.name AS category,scoped.tag,COALESCE(verification.state='verified',false) AS verified
-    FROM server_clans scoped LEFT JOIN server_clan_categories category ON category.id=scoped.category_id AND category.server_id=scoped.server_id LEFT JOIN server_clan_verifications verification ON verification.server_id=scoped.server_id AND verification.clan_tag=scoped.tag WHERE scoped.server_id=${serverId} ORDER BY scoped.tag`
+    FROM server_clans scoped LEFT JOIN server_clan_categories category ON category.id=scoped.category_id AND category.server_id=scoped.server_id LEFT JOIN server_clan_verifications verification ON verification.server_id=scoped.server_id AND verification.clan_tag=scoped.tag WHERE scoped.server_id=${serverId} ORDER BY category.position NULLS LAST, scoped.position, scoped.tag`
   const cached=yield* readTrackedClans(bindings,configured.map(clan=>clan.tag))
   const clans=(yield* Effect.forEach(configured,clan=>liveClan(bindings,clan.tag,cached.get(clan.tag)).pipe(Effect.map(profile=>({...clan,profile}))),{concurrency:3}))
-    .sort((a,b)=>a.profile.name.localeCompare(b.profile.name) || a.tag.localeCompare(b.tag))
+
   const tags=clans.flatMap(clan=>clan.profile.memberList.map(member=>member.tag))
   // A roster member may not yet have a basic_player row; retain its link too.
   const links=tags.length ? yield* sql<{tag:string;user_id:string;is_verified:boolean;hidden:boolean}>`SELECT tag,user_id,is_verified,hidden FROM player_links WHERE tag=ANY(${tags}::text[]) AND user_id ~ '^[1-9][0-9]{0,19}$'` : []
   const users=new Map(discordMembers.map(member=>[member.user.id,member])),byLink=new Map(links.map(link=>[link.tag,link]))
-  return {categories,clans:clans.map(clan=>({category:clan.category,name:clan.profile.name,tag:clan.tag,
+  const uniquePlayers=new Map(clans.flatMap(clan=>clan.profile.memberList.map(member=>[member.tag,member] as const)))
+  const familyLinks=[...uniquePlayers.keys()].flatMap(tag=>{const link=byLink.get(tag);return link?[link]:[]})
+  const accountCounts=new Map<string,number>(),townHalls=new Map<number,number>()
+  for(const link of familyLinks)accountCounts.set(link.user_id,(accountCounts.get(link.user_id)??0)+1)
+  for(const member of uniquePlayers.values()){const level=member.townHallLevel??0;townHalls.set(level,(townHalls.get(level)??0)+1)}
+  const counts=[...accountCounts.values()]
+  // Aggregate hidden links without exposing their owner. Deduplicate players
+  // across clan snapshots so a recent transfer cannot inflate family coverage.
+  const statistics={players:uniquePlayers.size,linked:familyLinks.length,verified:familyLinks.filter(link=>link.is_verified).length,
+    discordMembers:accountCounts.size,inServer:[...accountCounts.keys()].filter(id=>users.has(id)).length,
+    accountDistribution:{one:counts.filter(n=>n===1).length,twoOrThree:counts.filter(n=>n===2||n===3).length,fourOrMore:counts.filter(n=>n>=4).length},
+    townHalls:[...townHalls].sort((a,b)=>b[0]-a[0]).map(([level,count])=>({level,count}))}
+  return {categories,statistics,clans:clans.map(clan=>({category:clan.category,name:clan.profile.name,tag:clan.tag,
     badge:clan.profile.badgeUrls?.medium ?? clan.profile.badgeUrls?.large ?? clan.profile.badgeUrls?.small ?? null,
     // The tracker snapshot has no observation timestamp. Do not label SQL last_active as roster freshness.
     level:clan.profile.clanLevel,verified:clan.verified,observedAt:null,
@@ -66,38 +78,70 @@ export const readClanLinks=(bindings:WorkerBindings,serverId:string)=>Effect.gen
   }))} satisfies EndpointResponse<typeof ServerClanLinksEndpoint>
 }).pipe(Effect.catchTag("SqlError",cause=>Effect.fail(new DatabaseFailure({cause,message:"Clan links lookup failed"}))))
 
-export const createRosterLink=(bindings:WorkerBindings,serverId:string,rawClan:string,rawPlayer:string,userId:string)=>Effect.gen(function*(){
+/** Shared eligibility for Dashboard and Discord. Provider reads happen before
+ * transaction locks; configuration and verification are locked again below. */
+const eligibleRoster = (bindings:WorkerBindings,serverId:string,rawClan:string,rawPlayer:string)=>Effect.gen(function*(){
   const clanTag=tag(rawClan),playerTag=tag(rawPlayer)
-  if (!clanTag || !playerTag || !Schema.is(DecimalSnowflake)(userId))return yield* new InvalidRequest({message:"Invalid clan, player or Discord user"})
-  const currentMembers=yield* members(bindings,serverId)
-  if(!currentMembers.some(member=>member.user.id===userId && !member.user.bot))return yield* new Forbidden({message:"Choose a current Discord server member"})
+  if(!clanTag||!playerTag)return yield* new InvalidRequest({message:"Invalid clan or player tag"})
   const sql=yield* SqlClient.SqlClient
-  const configured=yield* sql`SELECT tag FROM server_clans WHERE server_id=${serverId} AND tag=${clanTag}`
-  if(!configured.length)return yield* new NotFound({message:"Clan is not configured for this server"})
+  const configured=(yield* sql<{verified:boolean}>`SELECT EXISTS(SELECT 1 FROM server_clan_verifications v WHERE v.server_id=s.server_id AND v.clan_tag=s.tag AND v.state='verified') AS verified FROM server_clans s WHERE s.server_id=${serverId} AND s.tag=${clanTag}`)[0]
+  if(!configured)return yield* new NotFound({message:"This player must belong to a family clan linked to this server"})
+  if(!configured.verified)return yield* new Forbidden({message:"Verify this family clan before managing its unverified links"})
   const cached=yield* readTrackedClans(bindings,[clanTag])
-  const snapshot=yield* liveClan(bindings,clanTag,cached.get(clanTag))
-  if(!snapshot.memberList.some(member=>member.tag===playerTag))return yield* new NotFound({message:"Account is not on this server's clan roster"})
+  const roster=yield* liveClan(bindings,clanTag,cached.get(clanTag))
+  if(!roster.memberList.some(member=>member.tag===playerTag))return yield* new NotFound({message:"This player is not in the selected family clan"})
+  return {clanTag,playerTag}
+})
+const lockVerifiedRoster = (serverId:string,clanTag:string)=>Effect.gen(function*(){
+  const sql=yield* SqlClient.SqlClient
+  const row=(yield* sql`SELECT s.tag FROM server_clans s JOIN server_clan_verifications v ON v.server_id=s.server_id AND v.clan_tag=s.tag
+    WHERE s.server_id=${serverId} AND s.tag=${clanTag} AND v.state='verified' FOR SHARE OF s,v`)[0]
+  if(!row)return yield* new Forbidden({message:"Verify this family clan before managing its unverified links"})
+})
+export const createRosterLink=(bindings:WorkerBindings,serverId:string,rawClan:string,rawPlayer:string,userId:string)=>Effect.gen(function*(){
+  if(!Schema.is(DecimalSnowflake)(userId))return yield* new InvalidRequest({message:"Invalid Discord user"})
+  const {clanTag,playerTag}=yield* eligibleRoster(bindings,serverId,rawClan,rawPlayer)
+  const currentMembers=yield* members(bindings,serverId)
+  if(!currentMembers.some(member=>member.user.id===userId&&!member.user.bot))return yield* new Forbidden({message:"Choose a current Discord server member"})
+  const sql=yield* SqlClient.SqlClient
   return yield* sql.withTransaction(Effect.gen(function*(){
-    // Recheck configuration under lock after provider I/O; clan removal must not race a new link.
-    const roster=yield* sql`SELECT tag FROM server_clans WHERE server_id=${serverId} AND tag=${clanTag} FOR SHARE`
-    if(!roster.length)return yield* new NotFound({message:"Account is not on this server's clan roster"})
-    // Unique player tags prevent concurrent unverified claims from replacing ownership.
+    yield* lockVerifiedRoster(serverId,clanTag)
+    // A unique tag and DO NOTHING prevent this weaker proof from replacing any
+    // existing owner. Verified accounts are protected even for an identical add.
     const inserted=yield* sql`INSERT INTO player_links(tag,user_id,source,order_index,is_verified)
       SELECT ${playerTag},${userId},'dashboard',COALESCE(max(order_index)+1,0),false FROM player_links WHERE user_id=${userId}
       ON CONFLICT(tag) DO NOTHING RETURNING tag`
     if(!inserted.length){
-      const existing=(yield* sql<{user_id:string;is_verified:boolean;hidden:boolean}>`SELECT user_id,is_verified,hidden FROM player_links WHERE tag=${playerTag}`)[0]
-      if(!existing || existing.user_id!==userId || existing.hidden)return yield* new Conflict({message:"This account already has an owner. Use an in-game API token to change ownership."})
-      return {playerTag,userId,verified:existing.is_verified}
+      const existing=(yield* sql<{user_id:string;is_verified:boolean}>`SELECT user_id,is_verified FROM player_links WHERE tag=${playerTag} FOR UPDATE`)[0]
+      if(existing?.is_verified)return yield* new Forbidden({message:"Verified account links can only be changed by their owner"})
+      if(!existing||existing.user_id!==userId)return yield* new Conflict({message:"This account is already linked. Remove its unverified link before assigning it again"})
+      return {playerTag,userId,verified:false}
     }
     yield* queueSubjectRoleRefresh(userId)
     return {playerTag,userId,verified:false}
   }))
 }).pipe(Effect.catchTag("SqlError",cause=>Effect.fail(new DatabaseFailure({cause,message:"Unverified clan linking failed"}))))
 
+export const deleteRosterLink=(bindings:WorkerBindings,serverId:string,rawClan:string,rawPlayer:string)=>Effect.gen(function*(){
+  const {clanTag,playerTag}=yield* eligibleRoster(bindings,serverId,rawClan,rawPlayer)
+  const sql=yield* SqlClient.SqlClient
+  return yield* sql.withTransaction(Effect.gen(function*(){
+    yield* lockVerifiedRoster(serverId,clanTag)
+    const owner=(yield* sql<{user_id:string;is_verified:boolean}>`SELECT user_id,is_verified FROM player_links WHERE tag=${playerTag} FOR UPDATE`)[0]
+    if(!owner)return yield* new NotFound({message:"This account has no link to remove"})
+    if(owner.is_verified)return yield* new Forbidden({message:"Verified account links can only be changed by their owner"})
+    yield* sql`DELETE FROM player_links WHERE tag=${playerTag} AND is_verified=false`
+    yield* sql`WITH ordered AS(SELECT tag,row_number() OVER(ORDER BY order_index,added_at,tag)-1 AS position FROM player_links WHERE user_id=${owner.user_id})
+      UPDATE player_links p SET order_index=ordered.position FROM ordered WHERE p.tag=ordered.tag`
+    yield* queueSubjectRoleRefresh(owner.user_id)
+    return {playerTag,userId:owner.user_id,verified:false}
+  }))
+}).pipe(Effect.catchTag("SqlError",cause=>Effect.fail(new DatabaseFailure({cause,message:"Unverified clan unlinking failed"}))))
+
 export const executeClanLinks=(input:DashboardServerOperationInput)=>Effect.gen(function*(){
   if(input.endpoint.operationId==="serverClanLinks")return yield* readClanLinks(input.bindings,String(input.path.serverId))
   const path=yield* Schema.decodeUnknownEffect(CreateClanRosterLinkEndpoint.pathParams)(input.path).pipe(Effect.mapError(()=>new InvalidRequest({message:"Invalid roster link path"})))
+  if(input.endpoint.operationId==="deleteClanRosterLink")return yield* deleteRosterLink(input.bindings,path.serverId,path.clanTag,path.playerTag)
   const body=yield* Schema.decodeUnknownEffect(CreateClanRosterLinkEndpoint.body)(input.body).pipe(Effect.mapError(()=>new InvalidRequest({message:"Invalid roster link recipient"})))
   return yield* createRosterLink(input.bindings,path.serverId,path.clanTag,path.playerTag,body.userId)
 })

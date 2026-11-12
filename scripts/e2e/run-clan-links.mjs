@@ -130,6 +130,8 @@ try {
     assert.equal((await request(`/v2/server/${server}/clan-categories`)).items.length,3);
     await request(`/v2/server/${server}/clan-categories`,{method:'POST',body:{name:'Denied'},status:403});
     await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{clans:'manage'}}]);
+    assert.equal((await request(patch('#QUP'))).category,'Priority');
+    await request(`/v2/server/${server}/server-roles?type=clan_role&clan_tag=%23QUP`,{status:403});
     const created=await request(`/v2/server/${server}/clan-categories`,{method:'POST',body:{name:'Temporary category'},status:201});
     await request(`/v2/server/${server}/clan-categories/${created.category.id}`,{method:'DELETE'});
     await request(orderPath,{method:'PUT',body:{categoryId:priority,clanTags:['#QUP','#QUV']}});

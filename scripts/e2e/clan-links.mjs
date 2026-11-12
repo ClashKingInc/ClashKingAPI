@@ -15,7 +15,7 @@ export async function verifyClanLinks({ db, request, server, other, actor, clanP
   for(const [tag,name,category] of [['#QUP','Zeta',categories[0].id],['#QUQ','Alpha',categories[1].id],['#QUR','Beta',null],['#QUV','Alpha',categories[0].id]]) {
     await db.query(`INSERT INTO basic_clan(tag,name,public_war_log,war_wins,member_count,badge_token,troops_donated,troops_received,members)
       VALUES($1,$2,true,0,$3,'',0,0,$4::jsonb)`,[tag,name,0,JSON.stringify([])])
-    await db.query('INSERT INTO server_clans(server_id,tag,category_id) VALUES($1,$2,$3)',[server,tag,category])
+    await db.query('INSERT INTO server_clans(server_id,tag,category_id,position) VALUES($1,$2,$3,$4)',[server,tag,category,tag==='#QUP'?1:0])
     const profile=await storeTrackedClanFixture(tag,name,tag==='#QUP'?members:[],{cache:!clanProvider || tag!=='#QUV'})
     clanProvider?.clans.set(tag,profile)
   }
@@ -26,8 +26,8 @@ export async function verifyClanLinks({ db, request, server, other, actor, clanP
   const result=await request(endpoint)
   assert.deepEqual(result.categories,categories,'Links returns saved category order, including empty categories, without foreign-server categories')
   assert.deepEqual(result.clans.map(({name,tag,category})=>[name,tag,category]),[
-    ['Alpha','#QUQ','Casual'],['Alpha','#QUV','Priority'],['Beta','#QUR',null],['Zeta','#QUP','Priority'],
-  ],'Name/tag ordering within each category matches the Clans page')
+    ['Alpha','#QUV','Priority'],['Zeta','#QUP','Priority'],['Alpha','#QUQ','Casual'],['Beta','#QUR',null],
+  ],'Saved category/clan ordering matches the Clans page')
   const roster=result.clans.find(({tag})=>tag==='#QUP').members
   const current=roster.find(({tag})=>tag==='#QUY')
   assert.equal(current.link.inServer,true)

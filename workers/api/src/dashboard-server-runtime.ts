@@ -51,6 +51,7 @@ export const dashboardServerRuntimeRoutes = [
   { method: "GET", path: "/v2/server/:serverId/clan/:clanTag/settings" },
   { method: "PATCH", path: "/v2/server/:serverId/clan/:clanTag/settings" },
   { method: "GET", path: "/v2/server/:serverId/clans" },
+  { method: "PUT", path: "/v2/server/:serverId/clans/order" },
   { method: "GET", path: "/v2/server/:serverId/clans-basic" },
   { method: "POST", path: "/v2/server/:serverId/clans" },
   { method: "DELETE", path: "/v2/server/:serverId/clans/:clanTag" },

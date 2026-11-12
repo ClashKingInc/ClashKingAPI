@@ -120,6 +120,45 @@ try {
     await db.query("DELETE FROM giveaways WHERE id='entrant-identity' AND server_id=$1",[server]);
     console.log('PASS giveaway entries preserve weighted counts and resolve current members without inventing former-member identities');
     console.log('PASS family statistics include hidden links without identities; War events requires Logs view/manage in scoped sessions');
+    const categories=(await db.query('SELECT id::text,name FROM server_clan_categories WHERE server_id=$1',[server])).rows;
+    const priority=categories.find(row=>row.name==='Priority').id,casual=categories.find(row=>row.name==='Casual').id;
+    const orderPath=`/v2/server/${server}/clans/order`,patch=tag=>`/v2/server/${server}/clan/${encodeURIComponent(tag)}/settings`;
+    const positions=async()=> (await db.query('SELECT tag,category_id::text,position FROM server_clans WHERE server_id=$1 ORDER BY category_id NULLS LAST,position',[server])).rows;
+    const assertConsecutive=async()=>{const groups=new Map();for(const row of await positions()){const key=row.category_id??'none';const values=groups.get(key)??[];values.push(row.position);groups.set(key,values);}for(const values of groups.values())assert.deepEqual(values,values.map((_,i)=>i));};
+    await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{clans:'view'}}]);
+    await request(orderPath,{method:'PUT',body:{categoryId:priority,clanTags:['#QUP','#QUV']},status:403});
+    assert.equal((await request(`/v2/server/${server}/clan-categories`)).items.length,3);
+    await request(`/v2/server/${server}/clan-categories`,{method:'POST',body:{name:'Denied'},status:403});
+    await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{clans:'manage'}}]);
+    const created=await request(`/v2/server/${server}/clan-categories`,{method:'POST',body:{name:'Temporary category'},status:201});
+    await request(`/v2/server/${server}/clan-categories/${created.category.id}`,{method:'DELETE'});
+    await request(orderPath,{method:'PUT',body:{categoryId:priority,clanTags:['#QUP','#QUV']}});
+    assert.deepEqual((await positions()).filter(row=>row.category_id===priority).map(row=>row.tag),['#QUP','#QUV']);
+    for(const clanTags of [['#QUP'],['#QUP','#QUP'],['#QUP','#QUQ']])await request(orderPath,{method:'PUT',body:{categoryId:priority,clanTags},status:400});
+    await request(orderPath,{method:'PUT',body:{categoryId:'not-a-uuid',clanTags:[]},status:400});
+    const foreignCategory=(await db.query('SELECT id::text FROM server_clan_categories WHERE server_id=$1',[other])).rows[0].id;
+    await request(orderPath,{method:'PUT',body:{categoryId:foreignCategory,clanTags:[]},status:404});
+    await request(patch('#QUP'),{method:'PATCH',body:{category:'Casual'}});
+    assert.deepEqual((await positions()).filter(row=>row.category_id===casual).map(row=>row.tag),['#QUQ','#QUP']);await assertConsecutive();
+    await request(orderPath,{method:'PUT',body:{categoryId:casual,clanTags:['#QUP','#QUQ']}});
+    await request(patch('#QUP'),{method:'PATCH',body:{category:null}});
+    assert.deepEqual((await positions()).filter(row=>row.category_id===null).map(row=>row.tag),['#QUR','#QUP']);await assertConsecutive();
+    await request(`/v2/server/${server}/clans/%23QUQ`,{method:'DELETE'});await assertConsecutive();
+    await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{clans:'manage'}}]);
+    await request(`/v2/server/${server}/clan-categories/${priority}`,{method:'DELETE'});
+    assert.deepEqual((await positions()).map(row=>row.tag),['#QUR','#QUP','#QUV']);await assertConsecutive();
+    const results=await Promise.all([
+      fetch(origin+orderPath,{method:'PUT',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({categoryId:null,clanTags:['#QUV','#QUP','#QUR']})}),
+      fetch(origin+patch('#QUV'),{method:'PATCH',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({category:'Casual'})})
+    ]);
+    assert([200,400].includes(results[0].status));assert.equal(results[1].status,200);await assertConsecutive();
+    const listed=await request(`/v2/server/${server}/clans`);const basic=await request(`/v2/server/${server}/clans-basic`);
+    assert.deepEqual(listed.map(row=>row.tag),basic.map(row=>row.tag));
+    clanProvider.clans.set('#QQQ',{...clanProvider.clans.get('#QUP'),tag:'#QQQ',name:'New clan',members:1,description:'Fixture',isWarLogPublic:true,warWins:0,warWinStreak:0,clanPoints:0,memberList:[{tag:'#QQY',name:'Member',donations:0,donationsReceived:0}]});
+    await request(`/v2/server/${server}/clans`,{method:'POST',body:{tag:'#QQQ'}});await assertConsecutive();
+    const uncategorized=(await positions()).filter(row=>row.category_id===null);assert.equal(uncategorized.at(-1).tag,'#QQQ');
+    await request(`/v2/server/${server}/clans/%23QQQ`,{method:'DELETE'});await assertConsecutive();
+    console.log('PASS saved clan order: scoped write permission, complete category membership, invalid/foreign denial, moves/removal/category deletion reindex, concurrent move vs reorder, full/basic read consistency');
     console.log('PASS verified-clan management: Dashboard and bot share Links-manage permission, protect verified owners, deny non-family/unverified clans, reindex deletion, preserve failed edits, prevent concurrent reassignment and recheck revoked access');
     console.log('PASS tracked roster link creation through actual HTTP, scoped auth and SQL transaction')
   } catch(cause) { console.error(logs.slice(-6000)); throw cause }

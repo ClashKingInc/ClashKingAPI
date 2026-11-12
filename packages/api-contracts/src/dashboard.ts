@@ -111,6 +111,7 @@ export const dashboardEndpoints = {
   serverClanSettings: Server.ClanSettingsEndpoint,
   updateServerClanSettings: Server.UpdateClanSettingsEndpoint,
   serverClans: Server.ServerClansEndpoint,
+  reorderServerClans: Server.ReorderServerClansEndpoint,
   serverClansBasic: Server.ServerClansBasicEndpoint,
   addServerClan: Server.AddServerClanEndpoint,
   removeServerClan: Server.RemoveServerClanEndpoint,

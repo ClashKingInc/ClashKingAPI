@@ -44,10 +44,10 @@ export const readClanLinks=(bindings:WorkerBindings,serverId:string)=>Effect.gen
   const categories=yield* sql<{id:string;name:string}>`SELECT id::text,name FROM server_clan_categories
     WHERE server_id=${serverId} ORDER BY position,name,id`
   const configured=yield* sql<Clan>`SELECT category.name AS category,scoped.tag,COALESCE(verification.state='verified',false) AS verified
-    FROM server_clans scoped LEFT JOIN server_clan_categories category ON category.id=scoped.category_id AND category.server_id=scoped.server_id LEFT JOIN server_clan_verifications verification ON verification.server_id=scoped.server_id AND verification.clan_tag=scoped.tag WHERE scoped.server_id=${serverId} ORDER BY scoped.tag`
+    FROM server_clans scoped LEFT JOIN server_clan_categories category ON category.id=scoped.category_id AND category.server_id=scoped.server_id LEFT JOIN server_clan_verifications verification ON verification.server_id=scoped.server_id AND verification.clan_tag=scoped.tag WHERE scoped.server_id=${serverId} ORDER BY category.position NULLS LAST, scoped.position, scoped.tag`
   const cached=yield* readTrackedClans(bindings,configured.map(clan=>clan.tag))
   const clans=(yield* Effect.forEach(configured,clan=>liveClan(bindings,clan.tag,cached.get(clan.tag)).pipe(Effect.map(profile=>({...clan,profile}))),{concurrency:3}))
-    .sort((a,b)=>a.profile.name.localeCompare(b.profile.name) || a.tag.localeCompare(b.tag))
+
   const tags=clans.flatMap(clan=>clan.profile.memberList.map(member=>member.tag))
   // A roster member may not yet have a basic_player row; retain its link too.
   const links=tags.length ? yield* sql<{tag:string;user_id:string;is_verified:boolean;hidden:boolean}>`SELECT tag,user_id,is_verified,hidden FROM player_links WHERE tag=ANY(${tags}::text[]) AND user_id ~ '^[1-9][0-9]{0,19}$'` : []

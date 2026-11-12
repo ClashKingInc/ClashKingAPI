@@ -1111,6 +1111,13 @@ export const ServerClansEndpoint = defineEndpoint({
   response: Schema.Array(ServerClanListItem), responseMode: "json", successStatus: 200,
   summary: "List full server clans",
 })
+export const ReorderServerClansEndpoint = defineEndpoint({
+  auth:"server-write",errors:[],method:"PUT",operationId:"reorderServerClans",
+  path:"/v2/server/:serverId/clans/order",pathParams:DashboardServerPath,query:NoQuery,
+  body:Schema.Struct({categoryId:Schema.NullOr(Schema.String.check(Schema.isUUID())),clanTags:Schema.Array(Schema.String)}),bodyMode:"json",
+  response:Schema.Struct({clanTags:Schema.Array(Schema.String)}),responseMode:"json",successStatus:200,
+  summary:"Replace the complete clan order within one server category",
+})
 export const ServerClansBasicEndpoint = defineEndpoint({
   auth: "server-read", errors: [], body: NoBody,
   bodyMode: "none", method: "GET", operationId: "serverClansBasic",
@@ -1567,27 +1574,27 @@ export const BaseDownloaderEndpoint = defineEndpoint({
 })
 
 export const ClanCategoriesEndpoint = defineEndpoint({
-  auth: "server-manager-read", errors: [], body: NoBody, bodyMode: "none", method: "GET",
+  auth: "server-read", errors: [], body: NoBody, bodyMode: "none", method: "GET",
   operationId: "clanCategories", path: "/v2/server/:serverId/clan-categories",
   pathParams: DashboardServerPath, query: NoQuery, response: ClanCategoriesResponse,
   responseMode: "json", successStatus: 200, summary: "List server clan categories",
 })
 export const CreateClanCategoryEndpoint = defineEndpoint({
-  auth: "server-manager-write", errors: [], body: Schema.Struct({ name: Schema.String }),
+  auth: "server-write", errors: [], body: Schema.Struct({ name: Schema.String }),
   bodyMode: "json", method: "POST", operationId: "createClanCategory",
   path: "/v2/server/:serverId/clan-categories", pathParams: DashboardServerPath,
   query: NoQuery, response: ClanCategoryMutationResponse, responseMode: "json", successStatus: 201,
   summary: "Create a server clan category",
 })
 export const RenameClanCategoryEndpoint = defineEndpoint({
-  auth: "server-manager-write", errors: [], body: Schema.Struct({ name: Schema.String }),
+  auth: "server-write", errors: [], body: Schema.Struct({ name: Schema.String }),
   bodyMode: "json", method: "PATCH", operationId: "renameClanCategory",
   path: "/v2/server/:serverId/clan-categories/:categoryId", pathParams: ServerCategoryPath,
   query: NoQuery, response: ClanCategoryMutationResponse, responseMode: "json", successStatus: 200,
   summary: "Rename a server clan category",
 })
 export const ReorderClanCategoriesEndpoint = defineEndpoint({
-  auth: "server-manager-write", errors: [],
+  auth: "server-write", errors: [],
   body: Schema.Struct({ categoryIds: Schema.Array(Schema.String) }), bodyMode: "json",
   method: "PUT", operationId: "reorderClanCategories",
   path: "/v2/server/:serverId/clan-categories/order", pathParams: DashboardServerPath,
@@ -1595,14 +1602,14 @@ export const ReorderClanCategoriesEndpoint = defineEndpoint({
   summary: "Replace the server clan category order",
 })
 export const PreviewClanCategoryDeleteEndpoint = defineEndpoint({
-  auth: "server-manager-read", errors: [], body: NoBody, bodyMode: "none", method: "GET",
+  auth: "server-read", errors: [], body: NoBody, bodyMode: "none", method: "GET",
   operationId: "previewClanCategoryDelete",
   path: "/v2/server/:serverId/clan-categories/:categoryId/delete-preview",
   pathParams: ServerCategoryPath, query: NoQuery, response: ClanCategoryDeletePreview,
   responseMode: "json", successStatus: 200, summary: "Preview deleting a clan category",
 })
 export const DeleteClanCategoryEndpoint = defineEndpoint({
-  auth: "server-manager-write", errors: [], body: NoBody, bodyMode: "none", method: "DELETE",
+  auth: "server-write", errors: [], body: NoBody, bodyMode: "none", method: "DELETE",
   operationId: "deleteClanCategory", path: "/v2/server/:serverId/clan-categories/:categoryId",
   pathParams: ServerCategoryPath, query: NoQuery, response: ClanCategoryDeleteResponse,
   responseMode: "json", successStatus: 200, summary: "Delete a server clan category",

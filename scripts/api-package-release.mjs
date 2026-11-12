@@ -6,7 +6,7 @@ import { basename, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 export const packageNames = ["@clashking/api-contracts", "@clashking/api-client"]
-const clashContractRange = ">=1.0.1 <2"
+const clashContractRange = "^1.1.3"
 const readJson = path => JSON.parse(readFileSync(path, "utf8"))
 const digest = (bytes, algorithm, encoding) => createHash(algorithm).update(bytes).digest(encoding)
 const versionPattern = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/u

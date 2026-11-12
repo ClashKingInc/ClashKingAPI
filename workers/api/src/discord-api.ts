@@ -36,9 +36,19 @@ const providerLayer = Layer.effect(HttpClient.HttpClient, Effect.gen(function* (
 })).pipe(Layer.provide(FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch,
   // Rate-limit sleeps belong to dfx. Only a network attempt and its body have
   // a deadline; timing the entire operation would interrupt valid 429 waits.
-  (input, init) => globalThis.fetch(input, {...init, signal:AbortSignal.any([
-    ...(init?.signal ? [init.signal] : []), AbortSignal.timeout(15_000),
-  ])}),
+  async (input, init) => {
+    // dfx supplies payload_json as a Blob with filename="". Workers preserves
+    // that filename and Discord reads it as an attachment, not message JSON.
+    // Normalize only this form part; dfx still owns files, auth and rate limits.
+    const body=init?.body
+    if(body instanceof FormData){
+      const payload=body.get("payload_json")
+      if(payload instanceof Blob)body.set("payload_json",await payload.text())
+    }
+    return globalThis.fetch(input, {...init, signal:AbortSignal.any([
+      ...(init?.signal ? [init.signal] : []), AbortSignal.timeout(15_000),
+    ])})
+  },
 )))))
 
 const providerFailure = (cause: unknown): ApiFailure => new UpstreamUnavailable({

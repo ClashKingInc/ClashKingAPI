@@ -121,7 +121,6 @@ const categoryOperation = (input: DashboardServerOperationInput) => database("Cl
   const id = text(input.path.categoryId)
   const body = record(input.body)
   const operation = input.endpoint.operationId
-  if (operation === "serverClanLinks" || operation === "createClanRosterLink") return executeClanLinks(input)
   if (operation === "clanCategories") {
     const items = yield* queryCategories(serverId)
     return { items, total: items.length }
@@ -380,7 +379,6 @@ const roleOperation = (input: DashboardServerOperationInput) => database("Server
   const sql = yield* SqlClient.SqlClient
   const serverId = serverIdFor(input)
   const operation = input.endpoint.operationId
-  if (operation === "serverClanLinks" || operation === "createClanRosterLink") return executeClanLinks(input)
   if (operation === "serverRoles") {
     const rows = yield* sql.unsafe<RoleRow>(`SELECT ${roleColumns} FROM server_roles WHERE server_id = $1 AND ($2 = '' OR type = $2) AND ($3 = '' OR clan_tag = $3) ORDER BY type, option, clan_tag NULLS FIRST, role_id`, [serverId, text(input.query.type), text(input.query.clan_tag)])
     const roles = rows.map(roleValue)
@@ -801,7 +799,7 @@ export const executeDashboardServerCore = (
 ): Effect.Effect<unknown | undefined, ApiFailure, CoreEnvironment> => {
   const operation = input.endpoint.operationId
   if (["clanVerification", "startClanVerification", "checkClanVerification"].includes(operation)) return executeClanVerification(input)
-  if (operation === "serverClanLinks" || operation === "createClanRosterLink") return executeClanLinks(input)
+  if (operation === "serverClanLinks" || operation === "createClanRosterLink" || operation === "deleteClanRosterLink") return executeClanLinks(input)
   if (dashboardServerActivityOperationIds.some((id) => id === operation)) return executeDashboardServerActivity(input)
   if (dashboardServerBaseOperationIds.some((id) => id === operation)) return executeDashboardServerBases(input)
   if (dashboardGiveawayOperationIds.some((id) => id === operation)) return executeDashboardGiveaways(input)

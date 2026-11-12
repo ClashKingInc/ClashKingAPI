@@ -1,7 +1,7 @@
 import { ClanWarEventsGet, ClanWarEventsPut } from "./clan-war-events.js"
 import { ClanVerificationEndpoint, StartClanVerificationEndpoint, CheckClanVerificationEndpoint } from "./dashboard-clan-verification.js"
 export * from "./dashboard-clan-verification.js"
-import { ServerClanLinksEndpoint, CreateClanRosterLinkEndpoint } from "./dashboard-clan-links.js"
+import { ServerClanLinksEndpoint, CreateClanRosterLinkEndpoint, DeleteClanRosterLinkEndpoint } from "./dashboard-clan-links.js"
 export * from "./dashboard-clan-links.js"
 import * as Misc from "./dashboard-misc.js"
 import * as Roster from "./dashboard-roster.js"
@@ -27,6 +27,7 @@ export const dashboardEndpoints = {
   checkClanVerification: CheckClanVerificationEndpoint,
   serverClanLinks: ServerClanLinksEndpoint,
   createClanRosterLink: CreateClanRosterLinkEndpoint,
+  deleteClanRosterLink: DeleteClanRosterLinkEndpoint,
   ...dashboardRosterExtraEndpoints,
   serverGiveaway: Extra.ServerGiveawayEndpoint,
   serverDiscordTest: Extra.ServerDiscordTestEndpoint,

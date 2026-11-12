@@ -600,6 +600,9 @@ export const GiveawayMutationResponse = Schema.Struct({
 })
 export const GiveawayEntrant = Schema.Struct({
   userId: Schema.String,
+  username: Schema.optionalKey(Schema.String),
+  avatarUrl: Schema.optionalKey(Schema.String),
+  inServer: Schema.optionalKey(Schema.Boolean),
   entries: Schema.Number,
   winChance: Schema.Number,
 })

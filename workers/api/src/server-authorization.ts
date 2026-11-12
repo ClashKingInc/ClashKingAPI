@@ -2,7 +2,7 @@ import { DecimalSnowflake } from "@clashking/api-contracts"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 
-import { AuthIdentity, type ApiPrincipal } from "./auth.js"
+import { AuthIdentity, type ApiPrincipal, type UserPrincipal } from "./auth.js"
 import { DiscordApi } from "./discord-api.js"
 import { DiscordCredentials } from "./discord-credentials.js"
 import { WorkerEnvironment } from "./environment.js"
@@ -156,6 +156,7 @@ export const discordGuildManager = (guild: { readonly owner: boolean; readonly p
 export class ServerAuthorization extends Context.Service<
   ServerAuthorization,
   {
+    readonly requireBotActor: (request:Request,serverId:string,actorId:string,requirement:ServerAccessRequirement)=>Effect.Effect<ServerAccess,ApiFailure,SqlClient.SqlClient>
     readonly resolve: (request: Request, serverId: string) => Effect.Effect<ServerAccess, ApiFailure, SqlClient.SqlClient>
     readonly require: (
       request: Request,
@@ -172,11 +173,11 @@ export class ServerAuthorization extends Context.Service<
       const credentials = yield* DiscordCredentials
       const bindings = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment))
 
-      const resolveUnscoped = Effect.fn("ServerAuthorization.resolve")(function* (request: Request, serverId: string, freshOauthManager = false) {
+      const resolveUnscoped = Effect.fn("ServerAuthorization.resolve")(function* (request: Request, serverId: string, freshOauthManager = false, actor?:UserPrincipal) {
         yield* Schema.decodeUnknownEffect(DecimalSnowflake)(serverId).pipe(
           Effect.mapError(() => new InvalidRequest({ message: "server_id must be a decimal-string Discord snowflake" })),
         )
-        const principal = yield* auth.requireUserOrBot(request)
+        const principal = actor ?? (yield* auth.requireUserOrBot(request))
         if (principal.kind === "bot") return { principal, manager: true, sections: {} }
         const applicationId = bindings?.DISCORD_CLIENT_ID?.trim() ?? ""
         const cached = yield* loadGatewayAccess(applicationId, principal.userId, [serverId])
@@ -243,7 +244,17 @@ export class ServerAuthorization extends Context.Service<
         return access
       })
 
-      return { resolve, require }
+      const requireBotActor = Effect.fn("ServerAuthorization.requireBotActor")(function*(request:Request,serverId:string,actorId:string,requirement:ServerAccessRequirement){
+        // Only the authenticated interaction service can assert a Discord actor.
+        // Resolve that actor through the SAME current Gateway/role-grant rules
+        // as Dashboard; the bot credential itself never grants actor access.
+        yield* auth.requireBot(request)
+        yield* Schema.decodeUnknownEffect(DecimalSnowflake)(actorId).pipe(Effect.mapError(()=>new InvalidRequest({message:"Invalid Discord actor"})))
+        const access=yield* resolveUnscoped(request,serverId,false,{kind:"user",userId:actorId})
+        if(!serverAccessAllows(access,requirement))return yield* new Forbidden({message:"You need Dashboard Links manage permission",reason:"roles"})
+        return access
+      })
+      return { resolve, require, requireBotActor }
     }),
   )
 }

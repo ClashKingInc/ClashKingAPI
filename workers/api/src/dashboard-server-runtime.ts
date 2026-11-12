@@ -105,6 +105,7 @@ export const dashboardServerRuntimeRoutes = [
   { method: "POST", path: "/v2/server/:serverId/clan/:clanTag/verification" },
   { method: "POST", path: "/v2/server/:serverId/clan/:clanTag/verification/check" },
   { method: "POST", path: "/v2/links/server/:serverId/clans/:clanTag/:playerTag" },
+  { method: "DELETE", path: "/v2/links/server/:serverId/clans/:clanTag/:playerTag" },
   { method: "GET", path: "/v2/server/:serverId/leaderboards" },
   { method: "GET", path: "/v2/server/:serverId/leaderboards/war-performance" },
   { method: "GET", path: "/v2/server/:serverId/leaderboards/donations" },

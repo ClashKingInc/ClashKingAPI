@@ -92,7 +92,14 @@ export const executeDashboardGiveaways = (input: DashboardServerOperationInput):
     const row = (yield* sql.unsafe<Row>(`SELECT ${columns} FROM giveaways WHERE server_id=$1 AND id=$2`, [serverId, id]))[0]
     if (row === undefined) return yield* new NotFound({ message: "Giveaway not found" })
     if (operation === "serverGiveaway") return yield* rowValue(row, yield* winnerMembers(input, serverId, [row]))
-    return { giveawayId: id, serverId, ...giveawayEntrants(yield* stored(Schema.Array(GiveawayEntry), row.entries)) }
+    const totals=giveawayEntrants(yield* stored(Schema.Array(GiveawayEntry), row.entries))
+    if(!totals.entrants.length)return {giveawayId:id,serverId,...totals}
+    // Resolve the bounded entrant IDs from one current Gateway snapshot, not
+    // one Discord REST request per entrant. Reuse the winner identity rules.
+    const raw=yield* readDashboardGatewayCollection(input.bindings.DISCORD_CLIENT_ID,serverId,"members",totals.entrants.map(entry=>entry.userId))
+    const members=new Map((yield* stored(Schema.Array(Member),raw)).map(member=>[member.user.id,member]))
+    const entrants=yield* Effect.forEach(totals.entrants,entry=>giveawayWinnerValue(serverId,{user_id:entry.userId},members.get(entry.userId)).pipe(Effect.map(identity=>({...entry,...omitUndefined({username:identity.username,avatarUrl:identity.avatarUrl,inServer:identity.inServer})}))))
+    return { giveawayId: id, serverId, ...totals, entrants }
   }
   return yield* sql.withTransaction(Effect.gen(function* () {
     yield* lockServerDiscordResources(serverId)

@@ -17,7 +17,7 @@ const db=new pg.Client({connectionString:dsn.href})
 await db.connect()
 const port=8813,origin=`http://127.0.0.1:${port}`,applicationId='999999999999999999'
 const actor='999999999999994901',server='999999999999994902',other='999999999999994903'
-const signingKey=randomBytes(32).toString('base64url')
+const signingKey=randomBytes(32).toString('base64url'),botKey=randomBytes(32).toString('base64url')
 let api,logs=''
 const clanProvider=await startBotCustomizationProvider()
 try {
@@ -42,7 +42,7 @@ try {
       CLASHKING_E2E_DATA_ENCRYPTION_KEY:randomBytes(32).toString('base64url'),
       CLASHKING_E2E_AI_USAGE_SECRET:randomBytes(32).toString('base64url'),
       CLASHKING_E2E_JWT_ACCESS_SECRET:signingKey,CLASHKING_E2E_EMAIL_HASH_SECRET:randomBytes(32).toString('base64url'),
-      CLASHKING_E2E_API_BOT_TOKEN:randomBytes(32).toString('base64url')},stdio:['ignore','pipe','pipe']})
+      CLASHKING_E2E_API_BOT_TOKEN:botKey},stdio:['ignore','pipe','pipe']})
   api.stdout.on('data',data=>{logs+=data});api.stderr.on('data',data=>{logs+=data})
   let ready=false
   for(let attempt=0;attempt<120;attempt++) {
@@ -52,8 +52,8 @@ try {
     await new Promise(resolve=>setTimeout(resolve,500))
   }
   assert(ready&&logs.includes('isolated_api_ready'),logs.slice(-3000))
-  const request=async(path,{status=200,method='GET',body}={})=>{
-    const response=await fetch(origin+path,{method,headers:{authorization:`Bearer ${token}`,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(10000)})
+  const request=async(path,{status=200,method='GET',body,bearer=token}={})=>{
+    const response=await fetch(origin+path,{method,headers:{authorization:`Bearer ${bearer}`,...(body?{'content-type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(10000)})
     const value=await response.json()
     assert.equal(response.status,status,`${path}: ${JSON.stringify(value)}`)
     return value
@@ -61,8 +61,66 @@ try {
   try {
     await verifyClanLinks({db,request,server,other,actor,clanProvider})
     await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{links:'manage'}}])
-    await request(`/v2/links/server/${server}/clans/%23QUP/%23QUL`,{method:'POST',body:{userId:actor}})
-    assert.equal((await db.query("SELECT user_id FROM player_links WHERE tag='#QUL'")).rows[0].user_id,actor,'Link creation uses the tracked roster even when the SQL roster is empty')
+    const linkPath=`/v2/links/server/${server}/clans/%23QUP/%23QUL`,verifiedPath=`/v2/links/server/${server}/clans/%23QUP/%23QUY`;
+    await request(linkPath,{method:'POST',body:{userId:actor},status:403});
+    assert.equal((await db.query("SELECT count(*)::int AS n FROM player_links WHERE tag='#QUL'")).rows[0].n,0);
+    await db.query("INSERT INTO server_clan_verifications(server_id,clan_tag,challenge_id,marker,marker_index,requested_by,state,check_after,next_check_at,expires_at,verified_at) VALUES($1,'#QUP',$2,'apple',0,$3,'verified',now()+interval '1 minute',now()+interval '1 minute',now()+interval '1 hour',now())",[server,randomUUID(),actor]);
+    await request(linkPath,{method:'POST',body:{userId:'999999999999994999'},status:403});
+    await request(`/v2/links/server/${server}/clans/%23QUP/%23QQQ`,{method:'POST',body:{userId:actor},status:404});
+    await request(`/v2/links/server/${server}/clans/%23QQQ/%23QUL`,{method:'POST',body:{userId:actor},status:404});
+    const added=await request(linkPath,{method:'POST',body:{userId:actor}});assert.equal(added.verified,false);
+    await request(verifiedPath,{method:'POST',body:{userId:actor},status:403});
+    await request(verifiedPath,{method:'DELETE',status:403});
+    await request(linkPath,{method:'DELETE'});
+    const order=(await db.query('SELECT order_index FROM player_links WHERE user_id=$1 ORDER BY order_index',[actor])).rows.map(row=>row.order_index);assert.deepEqual(order,order.map((_,i)=>i));
+    const delegate='999999999999994920',role='999999999999994921';
+    await db.query('INSERT INTO discord_cache.members(guild_id,user_id,data) VALUES($1,$2,$3)',[server,delegate,{user:{id:delegate,username:'Links moderator'},roles:[role]}]);
+    await db.query('INSERT INTO discord_cache.roles(guild_id,id,data) VALUES($1,$2,$3)',[server,role,{id:role,name:'Link team',permissions:'0'}]);
+    await db.query("INSERT INTO dashboard_role_grants(server_id,role_id,section,access_level) VALUES($1,$2,'links','view')",[server,role]);
+    const modPath=`/v2/bot/servers/${server}/modlinks`,add={action:'add',actorId:delegate,clanTag:'#QUP',playerTag:'#QUL',userId:actor};
+    await request(modPath,{method:'POST',body:add,bearer:token,status:403});
+    await request(modPath,{method:'POST',body:add,bearer:botKey,status:403});
+    await db.query("UPDATE dashboard_role_grants SET access_level='manage' WHERE server_id=$1 AND role_id=$2",[server,role]);
+    const moderated=await request(modPath,{method:'POST',body:add,bearer:botKey});assert.equal(moderated.userId,actor);assert.equal(moderated.verified,false);
+    await request(modPath,{method:'POST',body:{...add,userId:delegate},bearer:botKey,status:409});
+    await request(modPath,{method:'POST',body:{...add,action:'remove',playerTag:'#QUY'},bearer:botKey,status:403});
+    await request(`/v2/bot/servers/${other}/modlinks`,{method:'POST',body:add,bearer:botKey,status:403});
+    await db.query("UPDATE server_clan_verifications SET state='expired',verified_at=NULL WHERE server_id=$1 AND clan_tag='#QUP'",[server]);
+    await request(modPath,{method:'POST',body:{...add,action:'remove'},bearer:botKey,status:403});
+    assert.equal((await db.query("SELECT user_id FROM player_links WHERE tag='#QUL'")).rows[0].user_id,actor);
+    await db.query("UPDATE server_clan_verifications SET state='verified',verified_at=now() WHERE server_id=$1 AND clan_tag='#QUP'",[server]);
+    await db.query("UPDATE player_links SET is_verified=true WHERE tag='#QUL'");
+    await request(modPath,{method:'POST',body:{...add,action:'remove'},bearer:botKey,status:403});
+    await db.query("UPDATE player_links SET is_verified=false WHERE tag='#QUL'");
+    await request(modPath,{method:'POST',body:{...add,action:'remove'},bearer:botKey});
+    await db.query("DELETE FROM dashboard_role_grants WHERE server_id=$1 AND role_id=$2",[server,role]);
+    await request(modPath,{method:'POST',body:add,bearer:botKey,status:403});
+    // Concurrent unverified assignments cannot replace one another's owner.
+    const concurrent=await Promise.all([actor,delegate].map(userId=>fetch(origin+linkPath,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({userId})})));
+    assert.deepEqual(concurrent.map(r=>r.status).sort(),[200,409]);
+    await request(linkPath,{method:'DELETE'});
+    await request(linkPath,{method:'POST',body:{userId:actor}});
+    const report=await request(`/v2/links/server/${server}/clans`);
+    assert.equal(report.statistics.players,4);assert.equal(report.statistics.linked,4);assert.equal(report.statistics.verified,2);
+    const events=`/v2/server/${server}/clan/%23QUP/war-events`;
+    await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{logs:'view'}}]);
+    assert.equal((await request(events)).enabled,false);await request(events,{method:'PUT',body:{enabled:true},status:403});
+    await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{logs:'manage'}}]);
+    assert.equal((await request(events,{method:'PUT',body:{enabled:true}})).enabled,true);
+    assert.equal((await db.query("SELECT war_events_enabled FROM server_clans WHERE server_id=$1 AND tag='#QUP'",[server])).rows[0].war_events_enabled,true);
+    await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{clans:'manage'}}]);
+    await request(events,{status:403});
+    await db.query('UPDATE dashboard_scoped_sessions SET permissions=$2 WHERE id=$1',[session,{manager:false,sections:{giveaways:'view'}}]);
+    await db.query("INSERT INTO giveaways(id,server_id,prize,status,start_time,end_time,winners,entries) VALUES('entrant-identity',$1,'Identity fixture','ongoing',now()-interval '1 hour',now()+interval '1 hour',1,$2::jsonb)",[server,JSON.stringify([actor,actor,'999999999999994999'])]);
+    const entrants=await request(`/v2/server/${server}/giveaways/entrant-identity/entries`);
+    assert.equal(entrants.totalEntries,3);assert.equal(entrants.uniqueUsers,2);
+    const current=entrants.entrants.find(row=>row.userId===actor),former=entrants.entrants.find(row=>row.userId==='999999999999994999');
+    assert.equal(current.username,'Current member');assert.equal(current.inServer,true);assert.equal(current.entries,2);assert.equal(current.winChance,66.67);
+    assert.equal(former.inServer,false);assert.equal(former.username,undefined);assert.equal(former.winChance,33.33);
+    await db.query("DELETE FROM giveaways WHERE id='entrant-identity' AND server_id=$1",[server]);
+    console.log('PASS giveaway entries preserve weighted counts and resolve current members without inventing former-member identities');
+    console.log('PASS family statistics include hidden links without identities; War events requires Logs view/manage in scoped sessions');
+    console.log('PASS verified-clan management: Dashboard and bot share Links-manage permission, protect verified owners, deny non-family/unverified clans, reindex deletion, preserve failed edits, prevent concurrent reassignment and recheck revoked access');
     console.log('PASS tracked roster link creation through actual HTTP, scoped auth and SQL transaction')
   } catch(cause) { console.error(logs.slice(-6000)); throw cause }
 } finally {

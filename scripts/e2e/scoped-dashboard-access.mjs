@@ -88,6 +88,9 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
   await db.query('UPDATE discord_cache.guilds SET data=$2 WHERE id=$1',[server,{owner_id:actor}])
   await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:revoked.code},bearer:null,status:403})
   await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:fresh.code},bearer:null,status:403})
+  // Restore the original roster before the separate server-read scenarios below.
+  await db.query('DELETE FROM discord_cache.members WHERE guild_id=$1 AND user_id=$2',[server,firstUser])
+  await db.query('DELETE FROM discord_cache.roles WHERE guild_id=$1 AND id=$2',[server,viewRole])
   console.log('PASS bot dashboard sign-in: actual first-use grant, anonymous exchange, reusable independent browsers, expiry rejection, current permission recheck, foreign-server and private-route denial')
   await request(`/v2/roster/${roster}?server_id=${server}`)
   await request(`/v2/links/server/${server}`)

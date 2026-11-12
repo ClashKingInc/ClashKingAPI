@@ -1,3 +1,4 @@
+import { dispatchBotMemberPanels } from "./bot-member-panels.js"
 import { dispatchBotClanLinks } from "./bot-clan-links.js"
 import { dispatchBotPlayerAutocomplete } from "./bot-player-autocomplete.js"
 import { dispatchBotServerActivity } from "./bot-server-activity.js"
@@ -358,6 +359,8 @@ export const route = (request: Request, bindings: WorkerBindings,
     if (botClashResponse !== undefined) return botClashResponse
     const botLegendStatsResponse = yield* dispatchBotLegendStats(request)
     if (botLegendStatsResponse !== undefined) return botLegendStatsResponse
+    const memberPanelsResponse=yield* dispatchBotMemberPanels(request)
+    if(memberPanelsResponse)return memberPanelsResponse
     const modlinksResponse=yield* dispatchBotClanLinks(request,bindings)
     if(modlinksResponse)return modlinksResponse
     const roleMembersResponse = yield* dispatchBotRoleMembers(request, bindings)

@@ -251,7 +251,7 @@ export class ServerAuthorization extends Context.Service<
         yield* auth.requireBot(request)
         yield* Schema.decodeUnknownEffect(DecimalSnowflake)(actorId).pipe(Effect.mapError(()=>new InvalidRequest({message:"Invalid Discord actor"})))
         const access=yield* resolveUnscoped(request,serverId,false,{kind:"user",userId:actorId})
-        if(!serverAccessAllows(access,requirement))return yield* new Forbidden({message:"You need Dashboard Links manage permission",reason:"roles"})
+        if(!serverAccessAllows(access,requirement))return yield* new Forbidden({message:requirement.section==="links"?"You need Dashboard Links manage permission":`You need Dashboard ${requirement.section === "panels" ? "Panels" : requirement.section} manage permission`,reason:"roles"})
         return access
       })
       return { resolve, require, requireBotActor }

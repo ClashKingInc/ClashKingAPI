@@ -1,3 +1,5 @@
+import { BotMemberPanelsEndpoint } from "./bot-member-panels.js"
+export * from "./bot-member-panels.js"
 import { BotModerateClanLinkEndpoint } from "./dashboard-clan-links.js"
 import { BotPlayerAutocompleteEndpoint } from "./bot-player-autocomplete.js"
 export * from "./bot-player-autocomplete.js"
@@ -104,6 +106,7 @@ export * from "./bot-player-identity.js"
 // Only established API operations belong here. Deferred Discord orchestration
 // schemas are available explicitly from the reference-only /deferred-runtime entry.
 export const botEndpoints = {
+  memberPanels: BotMemberPanelsEndpoint,
   botModerateClanLink: BotModerateClanLinkEndpoint,
   userPreferences: BotUserPreferencesEndpoint,
   updateUserPreferences: BotUpdateUserPreferencesEndpoint,

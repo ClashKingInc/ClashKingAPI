@@ -85,7 +85,9 @@ try {
     await new Promise(r=>setTimeout(r,500))
   }
   assert(ready,logs.slice(-2000))
-  if (process.argv.includes('--discord-contract-only')) {
+  if (process.argv.includes('--scoped-dashboard-only')) {
+    await verifyScopedDashboardAccess({db,origin:`http://127.0.0.1:${port}`,signingKey,applicationId:'999999999999999999',botKey,meteringKey})
+  } else if (process.argv.includes('--discord-contract-only')) {
     await verifyDiscordAuthentication({db,origin:`http://127.0.0.1:${port}`,provider:profileProvider})
     await verifyGuildListCache({db,origin:`http://127.0.0.1:${port}`,signingKey,encryptionKey,provider:profileProvider})
     await db.query('INSERT INTO discord_cache.gateway_shards(application_id,shard_id,shard_count,generation,healthy,heartbeat_at) VALUES($1,0,1,$2,true,now())',['999999999999999999',randomUUID()])

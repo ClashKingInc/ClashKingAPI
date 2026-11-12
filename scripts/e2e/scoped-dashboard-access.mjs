@@ -1,7 +1,7 @@
 // Runs through the real local Worker, JWT verification, Gateway cache and SQL.
 // Called by the disposable Timescale API integration runner; no remote writes.
 import assert from 'node:assert/strict'
-import { randomBytes, randomUUID } from 'node:crypto'
+import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { SignJWT } from 'jose'
 import { verifyClanLinks } from './clan-links.mjs'
 
@@ -48,7 +48,7 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
   await request('/v2/roster/ai/context',{method:'POST',body:{serverId:server,rosterIds:[],messages:[{role:'user',content:'List my roster'}]},status:403})
 
   // A real bot-issued grant signs in a first-use Discord actor without OAuth.
-  // Its short lifetime, one-use transaction and current server access remain.
+  // Its one-hour lifetime and current server access apply on every exchange.
   const firstUser='999999999999994904'
   await db.query('UPDATE discord_cache.guilds SET data=$2 WHERE id=$1',[server,{owner_id:firstUser}])
   const issue=()=>request(`/v2/server/${server}/dashboard-access-grants`,{method:'POST',body:{source:'bot',userId:firstUser},bearer:botKey,status:201})
@@ -58,14 +58,26 @@ export async function verifyScopedDashboardAccess({ db, origin, signingKey, appl
   await request(`/v2/roster/${server}/list`,{bearer:access.access_token})
   await request(`/v2/roster/${other}/list`,{bearer:access.access_token,status:403})
   await request('/v2/auth/export',{bearer:access.access_token,status:403})
-  await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:fresh.code},bearer:null,status:401})
+  assert(Date.parse(fresh.expiresAt)-Date.now()>59*60_000,'Bot link has a 60-minute lifetime')
+  const secondBrowser=await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:fresh.code},bearer:null})
+  assert.notEqual(secondBrowser.access_token,access.access_token,'Independent browser sessions')
+  await request(`/v2/roster/${server}/list`,{bearer:access.access_token})
+  await request(`/v2/roster/${server}/list`,{bearer:secondBrowser.access_token})
+  assert.equal(Number((await db.query('SELECT count(*) FROM dashboard_scoped_sessions s JOIN dashboard_access_grants g ON s.grant_id=g.id WHERE g.user_id=$1',[firstUser])).rows[0].count),2)
+  const verifier='a'.repeat(43),pkceChallenge=createHash('sha256').update(verifier).digest('base64url')
+  const mainSession=await new SignJWT({}).setProtectedHeader({alg:'HS256'}).setSubject(firstUser).setAudience('clashking-web').setIssuedAt().setExpirationTime('1h').sign(new TextEncoder().encode(signingKey))
+  const appGrant=await request(`/v2/server/${server}/dashboard-access-grants`,{method:'POST',body:{source:'app',pkceChallenge},bearer:mainSession,status:201})
+  await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:appGrant.code},bearer:null,status:401})
+  await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:appGrant.code,codeVerifier:verifier},bearer:null})
+  await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:appGrant.code,codeVerifier:verifier},bearer:null,status:401})
   const expired=await issue()
   await db.query("UPDATE dashboard_access_grants SET expires_at=now()-interval '1 second' WHERE user_id=$1 AND consumed_at IS NULL",[firstUser])
   await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:expired.code},bearer:null,status:401})
   const revoked=await issue()
   await db.query('UPDATE discord_cache.guilds SET data=$2 WHERE id=$1',[server,{owner_id:actor}])
   await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:revoked.code},bearer:null,status:403})
-  console.log('PASS bot dashboard sign-in: actual first-use grant, anonymous exchange, replay/expiry rejection, current permission recheck, foreign-server and private-route denial')
+  await request('/v2/auth/server-dashboard/exchange',{method:'POST',body:{code:fresh.code},bearer:null,status:403})
+  console.log('PASS bot dashboard sign-in: actual first-use grant, anonymous exchange, reusable independent browsers, expiry rejection, current permission recheck, foreign-server and private-route denial')
   await request(`/v2/roster/${roster}?server_id=${server}`)
   await request(`/v2/links/server/${server}`)
   await verifyClanLinks({db,request,server,other,actor})

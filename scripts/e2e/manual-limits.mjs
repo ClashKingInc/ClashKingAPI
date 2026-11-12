@@ -32,6 +32,13 @@ export async function verifyManualLimits({db,origin,adminOrigin,signingKey,meter
  assert.equal((await db.query('SELECT webhook_id FROM reminders WHERE id=$1',[first.reminder_id])).rows[0].webhook_id,'999999999999994912');
  await request(origin,'/v2/server/'+server+'/reminders','POST',{...reminderBody,time:'300 min',channel_id:'999999999999994904'},userHeaders,400);
  assert.equal(profileProvider.webhookCreates.length,1,'Cross-server destination cannot create webhooks');
+ // Every clan reminder family enforces the same interval at the real write boundary.
+ for(const type of ['War','Clan Capital','Clan Games']){
+  for(const minutes of [0,15,2880])await request(origin,'/v2/server/'+server+'/reminders','POST',{...reminderBody,type,time:minutes+' min'},userHeaders);
+  for(const time of ['-1 min','14 min','2881 min','48.25 hr','nonsense'])await request(origin,'/v2/server/'+server+'/reminders','POST',{...reminderBody,type,time},userHeaders,400);
+ }
+ await request(origin,'/v2/server/'+server+'/reminders/'+first.reminder_id,'PUT',{time:'14 min'},userHeaders,400);
+ assert.equal((await db.query('SELECT minutes_remaining FROM reminders WHERE id=$1',[first.reminder_id])).rows[0].minutes_remaining,60,'Invalid edit preserves the saved offset');
  console.log('PASS reminder API: reuses log hooks, shares one hook across concurrent reminders, retains threads, changes destination, rejects cross-server channel');
  const redditPath='/v2/server/'+server+'/logs';
  const redditBody={channel_id:'999999999999994901',thread_id:'999999999999994903',log_types:['reddit_user_feed'],reddit_role_id:'999999999999995911',reddit_accounts:['Recruiter','Second'],reddit_include_comments:true};

@@ -42,6 +42,16 @@ const validateFields = (body: Schema.Schema.Type<typeof UpdateReminderRequest>) 
   }
 })
 
+// Scheduled clan reminders use quarter-hour offsets up to two days. Existing
+// legacy offsets stay readable and unrelated edits do not rewrite their time.
+const validateOffset = (type:string,time:string|undefined) => Effect.gen(function*(){
+  if(time===undefined || !["War","Clan Capital","Clan Games"].includes(type))return
+  const match=/^\s*(\d+(?:\.\d+)?)\s*(hr|h|min|m)?\s*$/iu.exec(time)
+  const minutes=match?Number(match[1])*(match[2]?.toLowerCase().startsWith("h")?60:1):NaN
+  if(!Number.isInteger(minutes)||minutes<0||minutes>2880||minutes%15!==0)
+    return yield* new InvalidRequest({message:"Choose a reminder time from 0 to 48 hours in 15-minute increments"})
+})
+
 const rejectDuplicateReminder = (sql: SqlClient.SqlClient, serverId: string, type: string, clanTag: string, time: string, rosterId: string | null, excludingId: string | null = null) => Effect.gen(function* () {
   // The caller holds the server row lock, so concurrent configuration writers
   // cannot both pass this check before inserting or changing a reminder.
@@ -71,6 +81,7 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
   if (input.endpoint.operationId === "createServerReminder") {
     const body = yield* decode(CreateReminderRequest, input.body)
     yield* validateFields(body)
+    yield* validateOffset(body.type,body.time)
     if (!Object.hasOwn(groups, body.type)) return yield* new InvalidRequest({ message: "Unsupported reminder type" })
     yield* validateDiscordDestination(serverId, body.channel_id, body.thread_id || null)
   } else if (input.endpoint.operationId === "updateServerReminder") {
@@ -91,6 +102,7 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
     if (operation === "createServerReminder") {
       const body = yield* decode(CreateReminderRequest, input.body)
       yield* validateFields(body)
+      yield* validateOffset(body.type,body.time)
       if (!Object.hasOwn(groups, body.type)) return yield* new InvalidRequest({ message: "Unsupported reminder type" })
       yield* rejectDuplicateReminder(sql, serverId, body.type, tag(body.clan_tag ?? ""), body.time, body.roster_id ?? null)
       const hook = yield* reminderWebhook(input.bindings.DISCORD_CLIENT_ID, serverId, body.channel_id)
@@ -111,6 +123,7 @@ export const executeDashboardReminders = (input: DashboardServerOperationInput):
     }
     const body = yield* decode(UpdateReminderRequest, input.body)
     yield* validateFields(body)
+    yield* validateOffset(existing.type_name,body.time)
     if (body.time !== undefined) yield* rejectDuplicateReminder(sql, serverId, existing.type_name, existing.clan_tag, body.time, existing.roster_id, id)
     const destinationChanged = body.channel_id !== undefined || body.thread_id !== undefined
     const channel = body.channel_id ?? existing.channel_id

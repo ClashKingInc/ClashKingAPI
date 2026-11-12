@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 // Loopback Discord provider for the actual API service test. No real guilds.
 import { createServer } from 'node:http';
 export async function startBotCustomizationProvider(){
- const writes=[];let authCodeCalls=0,profileRetries=0;
+ const writes=[],basePosts=[];let authCodeCalls=0,profileRetries=0;
  const control={stallProfile:false,profileRetrySeconds:0.01,failNextReset:false,failWebhookReads:false,webhookReads:0,guilds:[]};
  const profiles=new Map();
  const clans=new Map(),clanReads=[];
@@ -10,6 +10,17 @@ export async function startBotCustomizationProvider(){
  const hooks=new Map(), webhookCreates=[];
  const server=createServer(async(req,res)=>{
   res.setHeader('content-type','application/json');
+  if(req.url==='/api/v10/channels/999999999999997603' && req.method==='GET'){
+    res.end(JSON.stringify({id:'999999999999997603',guild_id:'999999999999997601',type:0}));return;
+  }
+  if(/^\/api\/v10\/channels\/999999999999997603\/messages(?:\/999999999999997604)?$/.test(req.url??'') && ['POST','PATCH'].includes(req.method)){
+    const chunks=[];for await(const part of req)chunks.push(part);const bytes=Buffer.concat(chunks);
+    const form=await new Response(bytes,{headers:{'content-type':req.headers['content-type']}}).formData();
+    const payload=form.get('payload_json'),raw=bytes.toString();
+    basePosts.push({payload,fileCount:[...form.keys()].filter(key=>key.startsWith('files[')).length,rawPayloadHeader:raw.split('name="payload_json"')[1]?.split('\r\n\r\n')[0]??''});
+    if(typeof payload!=='string'){res.statusCode=400;res.end(JSON.stringify({message:'payload_json was sent as a file'}));return;}
+    res.end(JSON.stringify({id:'999999999999997604'}));return;
+  }
   if(req.url==='/api/oauth2/token'){
    assert.equal(req.headers.authorization,undefined,'Code exchange must not send bot or user authorization');
    let raw='';for await(const part of req)raw+=part;const form=new URLSearchParams(raw),code=form.get('code');
@@ -64,5 +75,5 @@ export async function startBotCustomizationProvider(){
   res.statusCode=404;res.end(JSON.stringify({message:'Unexpected local Discord request'}));
  });
  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
- return {set stallProfile(value){control.stallProfile=value},set profileRetrySeconds(value){control.profileRetrySeconds=value},get authCodeCalls(){return authCodeCalls},get profileRetries(){return profileRetries},clans,clanReads,users,userReads,set guilds(value){control.guilds=value},get webhookReads(){return control.webhookReads},set failWebhookReads(value){control.failWebhookReads=value},webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
+ return {basePosts,set stallProfile(value){control.stallProfile=value},set profileRetrySeconds(value){control.profileRetrySeconds=value},get authCodeCalls(){return authCodeCalls},get profileRetries(){return profileRetries},clans,clanReads,users,userReads,set guilds(value){control.guilds=value},get webhookReads(){return control.webhookReads},set failWebhookReads(value){control.failWebhookReads=value},webhookCreates,get failNextReset(){return control.failNextReset},set failNextReset(value){control.failNextReset=value},origin:`http://127.0.0.1:${server.address().port}`,writes,close:()=>new Promise(resolve=>server.close(resolve))};
 }

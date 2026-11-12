@@ -1,3 +1,4 @@
+import { verifyPublicJoinLeave } from './public-join-leave.mjs'
 import { verifyDiscordBaseUpload } from './discord-base-upload.mjs'
 import { verifyDiscordAuthentication } from './discord-authentication.mjs'
 import { verifyLeagueHistory } from "./league-history.mjs"
@@ -86,7 +87,9 @@ try {
     await new Promise(r=>setTimeout(r,500))
   }
   assert(ready,logs.slice(-2000))
-  if (process.argv.includes('--scoped-dashboard-only')) {
+  if (process.argv.includes('--join-leave-only')) {
+    await verifyPublicJoinLeave({db,origin:`http://127.0.0.1:${port}`})
+  } else if (process.argv.includes('--scoped-dashboard-only')) {
     await verifyScopedDashboardAccess({db,origin:`http://127.0.0.1:${port}`,signingKey,applicationId:'999999999999999999',botKey,meteringKey})
   } else if (process.argv.includes('--discord-upload-only')) {
     await verifyDiscordBaseUpload({db,origin:`http://127.0.0.1:${port}`,signingKey,provider:profileProvider})
@@ -98,6 +101,7 @@ try {
     await verifyManualLimits({db,origin:`http://127.0.0.1:${port}`,adminOrigin:'http://127.0.0.1:8804',signingKey,meteringKey,profileProvider,schemaRoot:process.env.CLASHKING_E2E_SCHEMA_ROOT??resolve('.ci-schema')})
     console.log('PASS actual API Discord SDK transport: OAuth guild listing, delegated permissions, managed webhooks and live bot profile mutations')
   } else {
+  await verifyPublicJoinLeave({db,origin:`http://127.0.0.1:${port}`})
   await verifyLeagueHistory({db,origin:`http://127.0.0.1:${port}`})
   await verifyPublicDashboardCors({origin:`http://127.0.0.1:${port}`})
   await verifyOperationalReads({db,origin:`http://127.0.0.1:${port}`,botKey})

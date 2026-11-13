@@ -60,7 +60,7 @@ try{
   if(mode==='denied')assert.equal((await db.query("SELECT result->>'skipped' AS skipped FROM ticket_runtime_effects WHERE operation_id=$1 AND effect_key='pin-application'",[prepared.operationId])).rows[0].skipped,'true');
   await call('/v2/runtime/tickets/actions',proof({name:'ticket',options:[{name:'status',type:1,options:[{name:'status',type:3,value:'close'}]}]},{type:2,channel:ticket.channel_id}),403);
   const close=await call('/v2/runtime/tickets/actions',proof({name:'ticket',options:[{name:'status',type:1,options:[{name:'status',type:3,value:'close'}]}]},{type:2,channel:ticket.channel_id,roles:[staffRole]}));assert.equal(close.outcome,'ready');
-  await call(`/v2/runtime/ticket-operations/${prepared.operationId}/advance`,answer);assert.equal(created.filter(c=>c.mode===mode).length,1);
+  const replay=await call(`/v2/runtime/ticket-operations/${prepared.operationId}/advance`,answer);assert.equal(replay.channelId,ticket.channel_id);assert.equal(created.filter(c=>c.mode===mode).length,1);
   assert(created.find(c=>c.id===ticket.channel_id).permission_overwrites.some(p=>p.id===staffRole&&(BigInt(p.allow)&(1n<<51n))!==0n));
   if(mode==='role'){
     // Reproduce an older operation with durable messages but no ticket row.

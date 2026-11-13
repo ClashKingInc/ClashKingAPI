@@ -106,7 +106,7 @@ const ready = (row: OperationRow, context: RuntimeContext, progress: Progress): 
 const accepted = (row: OperationRow): Accepted => ({
   outcome: row.state === "completed" ? "complete" : "accepted", operationId: row.id,
   ticketId: row.ticket_id, state: row.state,
-  ...(row.state === "completed" && row.action === "open" && typeof jsonObject(row.result)?.channelId === "string"
+  ...(["completed", "failed"].includes(row.state) && row.action === "open" && typeof jsonObject(row.result)?.channelId === "string"
     ? {channelId:String(jsonObject(row.result)!.channelId)} : {}),
 })
 const assertOperationIdentity = (row: OperationRow, interaction: VerifiedRuntimeInteraction) =>

@@ -10,6 +10,9 @@ export const ticketApprovalTokens = [
   "clan_tag", "clan_war_league", "clan_capital_league",
 ] as const
 
+// A Discord modal has five slots; account selection occupies one when enabled.
+export const ticketQuestionLimit = (accountApply: boolean): number => accountApply ? 4 : 5
+
 import { defineEndpoint, NoBody, NoPathParams, NoQuery } from "./endpoint.js"
 import { ticketMessageComponentsError } from "./ticket-message-components.js"
 import { JsonValue } from "./expo-common.js"
@@ -113,6 +116,7 @@ export const LinkParseSettings = Schema.Struct({
   show: OptionalBoolean,
 })
 export const ServerSettingsUpdate = Schema.Struct({
+  lab_tenure_roles_enabled: OptionalBoolean,
   embed_color: OptionalNumber,
   nickname_rule: OptionalString,
   non_family_nickname_rule: OptionalString,
@@ -971,6 +975,7 @@ export const ServerSettings = Schema.Struct({
   server_id: Schema.String,
   server: Schema.String,
   name: Schema.String,
+  lab_tenure_roles_enabled: Schema.Boolean,
   embed_color: OptionalString,
   nickname_rule: OptionalString,
   non_family_nickname_rule: OptionalString,

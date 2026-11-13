@@ -45,7 +45,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           repository: ClashKingInc/DevKit
-          ref: 8fa638630ca87f9425abb1271aa2daf7edf082bf
+          ref: 9c87d6d8cfc086b051c60bac89ebdafc22550b9a
           path: .ci-schema
           persist-credentials: false
 
@@ -64,6 +64,31 @@ jobs:
           ref: 82887e25ff520a522d5d673619a9277f276a3327
           path: .ci-assets
           persist-credentials: false
+
+      # The old Worker must create a real multi-page operation before Goose
+      # changes its settings. The current Worker must then finish that operation.
+      - name: Check out previous ticket Worker
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: 089455b566265ea4f772e3eebff30fbfdeb77b9e
+          path: .ci-previous-api
+          persist-credentials: false
+
+      - name: Build previous ticket Worker contracts
+        working-directory: .ci-previous-api
+        run: |
+          npm ci --strict-peer-deps
+          npm run build --workspace @clashking/api-contracts
+          npm run build --workspace @clashking/api-client
+
+      - name: Verify ticket migration and active operation continuation
+        env:
+          CLASHKING_E2E_PREVIOUS_API_REPO: ${{ github.workspace }}/.ci-previous-api
+          CLASHKING_TICKET_MIGRATION_PATH: ${{ github.workspace }}/.ci-schema/database/timescale/081_current_ticket_settings.sql
+          CLASHKING_LAB_MIGRATION_PATH: ${{ github.workspace }}/.ci-schema/database/timescale/082_server_lab_tenure.sql
+          CLASHKING_LOCAL_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
+          WRANGLER_LOG_PATH: ${{ runner.temp }}/ticket-migration-wrangler.log
+        run: bash .ci-schema/scripts/with-test-timescale.sh --profile baseline-079 -- node scripts/e2e/ticket-current-settings.mjs
 
       - name: Verify Legend performance API against disposable Timescale
         env:

@@ -122,6 +122,8 @@ const activeAnnouncements = (query: Readonly<Record<string, unknown>>) => sqlEff
   return { item: items[0] ?? null, items }
 }))
 
+// Filter before LIMIT/OFFSET so story replay can request the newest five without
+// walking article pages. Legacy story URLs keep the same classification as the app.
 const publishedPosts = (query: Readonly<Record<string, unknown>>) => sqlEffect("Published posts lookup failed", Effect.gen(function* () {
   const limit = Number(query.limit)
   const offset = Number(query.offset)
@@ -132,8 +134,11 @@ const publishedPosts = (query: Readonly<Record<string, unknown>>) => sqlEffect("
   const rows = yield* sql.unsafe<AnnouncementRow>(`SELECT ${announcementColumns("$4")} FROM admin_posts
     WHERE status IN ('live','expired') AND published_at IS NOT NULL
       AND ($1='all' OR $1=ANY(platforms))
+      AND ($5::text IS NULL OR
+        CASE WHEN presentation_type='story' OR NULLIF(btrim(story_url),'') IS NOT NULL
+          THEN 'story' ELSE 'article' END = $5::text)
     ORDER BY published_at DESC, id DESC LIMIT $2 OFFSET $3`,
-  [query.target, limit + 1, offset, localeFor(query.locale)])
+  [query.target, limit + 1, offset, localeFor(query.locale), query.presentation_type ?? null])
   const items = rows.slice(0, limit).map(mapAnnouncement)
   return { items, has_more: rows.length > limit, next_offset: offset + items.length }
 }))

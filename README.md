@@ -212,3 +212,15 @@ is disabled, leaves that grant unchanged, and audits only a successful reset.
 Revoke and save separately if further customization should also be prevented.
 
 Email account lookup uses `EMAIL_HASH_SECRET` when configured, otherwise `JWT_ACCESS_SECRET`. Preserve the key used to create existing `auth_users.email_hash` values when rotating session-signing secrets. Setting the dedicated lookup key does not change passwords or invalidate sessions.
+
+### Published post filtering
+
+`GET /v2/app/posts` accepts optional `presentation_type=article|story` alongside
+its existing target, locale, limit and offset query. The filter runs before
+pagination. A nonblank legacy `story_url` counts as a story, matching the native
+app. Omitting the filter retains the mixed feed. Publication status and platform
+checks still apply. The app uses separate cursors for the article archive and
+five recent story replays; no schema migration is required.
+
+Run the real local HTTP check against disposable SQL with:
+`bash <schema-repo>/scripts/with-test-timescale.sh --profile retained-api -- node scripts/e2e/post-story-filter.mjs`.

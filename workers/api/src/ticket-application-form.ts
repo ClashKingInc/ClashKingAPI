@@ -1,4 +1,4 @@
-import { TicketButtonSettings } from "@clashking/api-contracts"
+import { TicketButtonSettings, ticketQuestionLimit } from "@clashking/api-contracts"
 import { TicketModalField } from "@clashking/api-contracts/deferred-runtime"
 import { Schema } from "effect"
 type Settings = typeof TicketButtonSettings.Type
@@ -7,12 +7,13 @@ export type TicketApplicationField = typeof TicketModalField.Type
 export const ticketQuestionError = (settings: Pick<Settings, "application_questions" | "account_apply">): string | undefined => {
   const questions = settings.application_questions
   if (questions === undefined) return undefined
-  // Existing questionnaires may span several five-field Discord modals.
-  // Keep every migrated question; page splitting below enforces Discord's limit.
+  // This applies to new forms only. Already accepted operations retain their
+  // saved pages and progress so outstanding modal interactions can finish.
+  if (questions.length > ticketQuestionLimit(settings.account_apply)) return `Ticket forms can have at most ${ticketQuestionLimit(settings.account_apply)} questions`
   const ids = new Set<string>()
   for (const question of questions) {
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/iu.test(question.id) || ids.has(question.id)
-      || !question.label.trim() || question.type !== "text" && question.label.length > 45) return "Questions need unique IDs and labels of 1–45 characters"
+      || !question.label.trim() || question.label.length > 45) return "Questions need unique IDs and labels of 1–45 characters"
     ids.add(question.id)
     if (question.type === "single_select" && (!question.options.length || question.options.length > 25
       || question.options.some(option => !option.trim() || option.length > 100)
@@ -27,7 +28,7 @@ export function ticketApplicationPages(settings: Settings, accounts: readonly { 
   if (error) throw new Error(error)
   const questions = settings.application_questions
   const fields: TicketApplicationField[] = questions.map((question, index) => question.type === "text"
-    ? { customId: `q:${index}`, label: question.label.slice(0, 45), required: question.required, style: "paragraph", maxLength: 500 }
+    ? { customId: `q:${index}`, label: question.label, required: question.required, style: "paragraph", maxLength: 500 }
     : { customId: `q:${index}`, label: question.label, required: question.required, style: "select",
       minValues: question.required ? 1 : 0, maxValues: 1,
       options: (question.type === "boolean" ? ["Yes", "No"] : question.options).map(label => ({ label, value: label })) })
@@ -35,7 +36,7 @@ export function ticketApplicationPages(settings: Settings, accounts: readonly { 
     minValues: 1, maxValues: 1,
     options: accounts.map(account => ({ value: account.tag, label: account.label, description: account.tag,
       ...(account.townhall === undefined ? {} : { townhall: account.townhall }) })) })
-  return { questions: questions.map(question => question.label), pages: Array.from({ length: Math.ceil(fields.length / 5) }, (_, page) => fields.slice(page * 5, page * 5 + 5)) }
+  return { questions: questions.map(question => question.label), pages: fields.length ? [fields] : [] }
 }
 
 export function ticketModalAnswers(page: readonly TicketApplicationField[], submitted: ReadonlyMap<string, { value?: string; values?: readonly string[] }>) {

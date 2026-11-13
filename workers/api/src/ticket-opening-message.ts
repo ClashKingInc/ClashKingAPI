@@ -2,7 +2,6 @@ import { DiscordEmbed } from "@clashking/api-contracts"
 import { Schema } from "effect"
 
 export type TicketEmbed = typeof DiscordEmbed.Type
-const object=(value:unknown):Record<string,unknown>=>typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string,unknown> : {}
 const invalid=()=>new Error("Ticket welcome embeds exceed supported Discord limits")
 export const ticketEmbedTextLength=(embed:TicketEmbed):number=>(embed.title?.length ?? 0)+(embed.description?.length ?? 0)
   +(embed.footer?.text.length ?? 0)+(embed.author?.name.length ?? 0)
@@ -32,18 +31,8 @@ export const validateTicketEmbeds=(value:unknown):ReadonlyArray<TicketEmbed>=>{
   return embeds
 }
 
-export const ticketWelcomeEmbeds=(configured?:unknown):ReadonlyArray<TicketEmbed>=>{
-  if (configured === undefined) return [{description:"This ticket will be handled shortly!\nPlease be patient.",color:3066993}]
-  const data=object(configured)
-  // Both are current saved-editor shapes. The legacy ticket used only embeds;
-  // no arbitrary saved webhook content or mention policy crosses this boundary.
-  const embeds=Array.isArray(data.messages) ? data.messages.flatMap(message=>{
-    const values=object(object(message).data).embeds
-    if (!Array.isArray(values)) throw invalid()
-    return values
-  }) : data.embeds
-  return validateTicketEmbeds(embeds)
-}
+export const ticketWelcomeEmbeds=():ReadonlyArray<TicketEmbed>=>
+  [{description:"This ticket will be handled shortly!\nPlease be patient.",color:3066993}]
 
 export const ticketOpeningEmbedPages=(intro:ReadonlyArray<TicketEmbed>,questions:ReadonlyArray<string>,answers:ReadonlyArray<string>,accounts:ReadonlyArray<string>):ReadonlyArray<ReadonlyArray<TicketEmbed>>=>{
   const sections=questions.map((question,index)=>`**${index+1}. ${question}**\n> ${answers[index] ?? ""}`)

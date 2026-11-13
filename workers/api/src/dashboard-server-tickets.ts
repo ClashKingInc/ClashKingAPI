@@ -1,4 +1,4 @@
-import { DecimalSnowflake, TicketButton, TicketButtonSettings, TicketPanelMessage, TicketPanelActivity, TicketMessageTemplates, dashboardEndpoints, ticketQuestionAuthoringLimit } from "@clashking/api-contracts"
+import { DecimalSnowflake, TicketButton, TicketButtonSettings, TicketPanelMessage, TicketPanelActivity, TicketMessageTemplates, dashboardEndpoints } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 import type { DashboardServerOperationInput } from "./dashboard-server-runtime.js"
@@ -236,14 +236,6 @@ export const executeDashboardTickets = (input: DashboardServerOperationInput): E
       }
       case "updateTicketButtonSettings": {
         const body = yield* requestBody(dashboardEndpoints.updateTicketButtonSettings.body, input.body)
-        const previous = data[`${customId}_settings`]
-        const previousRecord = previous && typeof previous === "object" && !Array.isArray(previous) ? previous as Record<string, unknown> : {}
-        const previousQuestions = Array.isArray(previousRecord.application_questions) ? previousRecord.application_questions.length : 0
-        // The panel is already locked. Compare with its stored count, never a
-        // client claim, so legacy larger forms can be edited but not expanded.
-        if (body.application_questions.length > ticketQuestionAuthoringLimit && body.application_questions.length > previousQuestions) {
-          return yield* new InvalidRequest({ message: `New or increased ticket forms can have at most ${ticketQuestionAuthoringLimit} questions` })
-        }
         const questionError = ticketQuestionError(body)
         if (questionError) return yield* new InvalidRequest({ message: questionError })
         if (body.opening_message != null) yield* Schema.decodeUnknownEffect(TicketPanelMessage)(

@@ -37,7 +37,7 @@ try{
  await db.query("UPDATE ticket_panels SET data=jsonb_set(data,ARRAY[$2,'th_min'],'18'::jsonb) WHERE id=$1::uuid",[panel,customId+'_settings']);
  await db.query("INSERT INTO basic_player(tag,name,townhall_level) VALUES('#PYLQ20','Fixture player',5)");
  await db.query("INSERT INTO player_links(tag,user_id,source,is_verified) VALUES('#PYLQ20',$1,'discord',true)",[actor]);
- const ineligible=await call('/v2/runtime/tickets/open/prepare',proof(),403);assert.equal(ineligible.reason,'ticket_requirements');assert.match(ineligible.message,/Town Hall 18/);
+ const ineligibleProof=proof();const ineligible=await call('/v2/runtime/tickets/open/prepare',ineligibleProof);assert.equal(ineligible.outcome,'link_required');assert.match(ineligible.content,/Town Hall 18/);const replayed=await call('/v2/runtime/tickets/open/prepare',ineligibleProof);assert.equal(replayed.preparationId,ineligible.preparationId);assert.equal(replayed.content,ineligible.content);
  await db.query("UPDATE basic_player SET townhall_level=18 WHERE tag='#PYLQ20'");
  const resumed=await call('/v2/runtime/tickets/resume',proof(`ck:ticket:resume:${missing.preparationId}`));assert.equal(resumed.outcome,'ready');assert.equal(resumed.form.fields[0].customId,'account');
  console.log('PASS migrated settings: removed obsolete fields, converted questions/welcome, retained staff roles; signed opening, inline-link requirement, actor-bound resume and rechecked missing account');

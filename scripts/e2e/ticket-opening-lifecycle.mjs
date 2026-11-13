@@ -26,6 +26,7 @@ const provider=createServer(async(req,res)=>{try{
  if(match)return reply(200,[...messages.values()].filter(m=>m.channel_id===match[1]));
  match=/^\/channels\/(\d+)\/messages\/pins\/(\d+)$/.exec(path);if(match){pins.push({channel:match[1],message:match[2]});if(channels.get(match[1]).mode==='normal'&&!pinWaiting){pinWaiting=true;await new Promise(resolve=>releasePin=resolve);}return reply(channels.get(match[1]).mode==='denied'?403:204,{message:'Missing permissions'});}
  if(path.includes('/pins/'))return reply(400,{message:'Use the current pin endpoint'});
+ if(/^\/channels\/\d+\/permissions\/\d+$/.test(path))return reply(204,{});
  if(path.includes('/roles/'))return reply(allowRoles?204:403,{message:'Missing permissions'});
  return reply(404,{message:'Unexpected local provider route'});
 }catch{res.writeHead(500);res.end('{}');}});
@@ -58,10 +59,6 @@ try{
   assert.equal(created.filter(c=>c.mode===mode).length,1);assert(pins.some(p=>p.channel===ticket.channel_id));
   if(mode==='normal')assert(ticket.thread_id,'Private staff thread attached to existing ticket');
   if(mode==='denied')assert.equal((await db.query("SELECT result->>'skipped' AS skipped FROM ticket_runtime_effects WHERE operation_id=$1 AND effect_key='pin-application'",[prepared.operationId])).rows[0].skipped,'true');
-  await call('/v2/runtime/tickets/actions',proof({name:'ticket',options:[{name:'status',type:1,options:[{name:'status',type:3,value:'close'}]}]},{type:2,channel:ticket.channel_id}),403);
-  const close=await call('/v2/runtime/tickets/actions',proof({name:'ticket',options:[{name:'status',type:1,options:[{name:'status',type:3,value:'close'}]}]},{type:2,channel:ticket.channel_id,roles:[staffRole]}));assert.equal(close.outcome,'ready');
-  const replay=await call(`/v2/runtime/ticket-operations/${prepared.operationId}/advance`,answer);assert.equal(replay.channelId,ticket.channel_id);assert.equal(created.filter(c=>c.mode===mode).length,1);
-  assert(created.find(c=>c.id===ticket.channel_id).permission_overwrites.some(p=>p.id===staffRole&&(BigInt(p.allow)&(1n<<51n))!==0n));
   if(mode==='role'){
     // Reproduce an older operation with durable messages but no ticket row.
     const sent=messages.size;allowRoles=true;
@@ -73,6 +70,14 @@ try{
     assert.equal((await db.query('SELECT state FROM ticket_runtime_operations WHERE id=$1',[prepared.operationId])).rows[0].state,'completed');
     assert((await db.query('SELECT 1 FROM tickets WHERE id=$1',[prepared.ticketId])).rowCount);assert.equal(created.filter(c=>c.mode===mode).length,1);assert.equal(messages.size,sent,'Recovery must not resend successful messages');
   }
+  await call('/v2/runtime/tickets/actions',proof({name:'ticket',options:[{name:'status',type:1,options:[{name:'status',type:3,value:'close'}]}]},{type:2,channel:ticket.channel_id}),403);
+  const sleep=await call('/v2/runtime/tickets/actions',proof({name:'ticket',options:[{name:'status',type:1,options:[{name:'status',type:3,value:'sleep'}]}]},{type:2,channel:ticket.channel_id,roles:[staffRole]}));
+  for(let i=0;i<120;i++){if((await db.query('SELECT state FROM ticket_runtime_operations WHERE id=$1',[sleep.operationId])).rows[0].state==='completed')break;await new Promise(r=>setTimeout(r,250));}
+  assert.equal((await db.query('SELECT status FROM tickets WHERE id=$1',[prepared.ticketId])).rows[0].status,'sleep',JSON.stringify({sleep,operation:(await db.query('SELECT state,result FROM ticket_runtime_operations WHERE id=$1',[sleep.operationId])).rows,effects:(await db.query('SELECT effect_key,state,last_error FROM ticket_runtime_effects WHERE operation_id=$1',[sleep.operationId])).rows}));
+  const close=await call('/v2/runtime/tickets/actions',proof({name:'ticket',options:[{name:'status',type:1,options:[{name:'status',type:3,value:'close'}]}]},{type:2,channel:ticket.channel_id,roles:[staffRole]}));assert.equal(close.outcome,'ready');
+  const replay=await call(`/v2/runtime/ticket-operations/${prepared.operationId}/advance`,answer);assert.equal(replay.channelId,ticket.channel_id);assert.equal(created.filter(c=>c.mode===mode).length,1);assert.equal((await db.query('SELECT status FROM tickets WHERE id=$1',[prepared.ticketId])).rows[0].status,'sleep','Opening replay must retain a later staff status');
+  assert(created.find(c=>c.id===ticket.channel_id).permission_overwrites.some(p=>p.id===staffRole&&(BigInt(p.allow)&(1n<<51n))!==0n));
+
 
  }
  await call('/v2/runtime/tickets/actions',proof({name:'ticket',options:[{name:'status',type:1,options:[{name:'status',type:3,value:'close'}]}]},{type:2}),404);

@@ -15,7 +15,7 @@ export interface StaffTicketSnapshot {
   id: string; server_id: string; channel_id: string; panel_id: string; applicant_user_id: string | null;
   thread_id: string | null; status: string; number: number; naming_convention: string; applicant_accounts: string[];
   data: unknown; panel_name: string; panel_revision: string; assigned_clan_tag: string | null;
-  conversation_deleted_at?: string | null;
+  conversation_deleted_at?: string | null; opening_state?: string | null;
 }
 interface Operation {
   id: string; ticket_id: string; panel_id: string; server_id: string; actor_user_id: string; origin_channel_id: string;
@@ -46,11 +46,21 @@ const queue = (id: string, effects: readonly QueuedEffect[]) => Effect.gen(funct
 export const snapshotStaffTicket = (interaction: VerifiedRuntimeInteraction, ticketId?: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const rows = yield* sql<StaffTicketSnapshot>`SELECT t.id::text,t.server_id,t.channel_id,t.panel_id::text,t.applicant_user_id,t.thread_id,
-    t.status,t.number,t.naming_convention,t.applicant_accounts,t.assigned_clan_tag,t.conversation_deleted_at,p.data,p.name AS panel_name,p.updated_at::text AS panel_revision
+    t.status,t.number,t.naming_convention,t.applicant_accounts,t.assigned_clan_tag,t.conversation_deleted_at,opening.state AS opening_state,p.data,p.name AS panel_name,p.updated_at::text AS panel_revision
     FROM tickets t JOIN ticket_panels p ON p.id=t.panel_id AND p.server_id=t.server_id
+    LEFT JOIN ticket_runtime_operations opening ON opening.ticket_id=t.id AND opening.action='open'
     WHERE t.server_id=${interaction.guildId} AND t.channel_id=${interaction.channelId}
       AND (${ticketId ?? null}::uuid IS NULL OR t.id=${ticketId ?? null}::uuid)`
-  if (!rows[0]) return yield* new NotFound({ message: "Ticket not found in this channel" })
+  if (!rows[0]) {
+    const opening = (yield* sql<{state:string}>`SELECT opening.state FROM ticket_runtime_operations opening
+      JOIN ticket_runtime_effects channel ON channel.operation_id=opening.id AND channel.effect_key='channel' AND channel.state='succeeded'
+      WHERE opening.server_id=${interaction.guildId} AND opening.action='open' AND channel.result->>'id'=${interaction.channelId} LIMIT 1`)[0]
+    if (opening) return yield* new Conflict({ message: opening.state === "failed" ? "Ticket setup did not finish" : "Ticket is still being set up" })
+    return yield* new NotFound({ message: "Ticket not found in this channel" })
+  }
+  if (rows[0].opening_state && !["completed","failed"].includes(rows[0].opening_state)) {
+    return yield* new Conflict({ message: "Ticket is still being set up" })
+  }
   return rows[0]
 })
 export const checkTicketButtonSource = (ticket: StaffTicketSnapshot, interaction: VerifiedRuntimeInteraction) => Effect.gen(function* () {
@@ -58,7 +68,7 @@ export const checkTicketButtonSource = (ticket: StaffTicketSnapshot, interaction
   const sql = yield* SqlClient.SqlClient
   const rows = yield* sql`SELECT 1 FROM ticket_runtime_operations opening JOIN ticket_runtime_effects message ON message.operation_id=opening.id
     WHERE opening.ticket_id=${ticket.id}::uuid AND opening.server_id=${ticket.server_id} AND opening.action='open'
-      AND opening.state='completed' AND message.effect_key='application:0' AND message.state='succeeded'
+      AND opening.state IN ('completed','failed') AND message.effect_key='application:0' AND message.state='succeeded'
       AND message.result->>'id'=${interaction.messageId!} AND message.result->>'channelId'=${ticket.channel_id}`
   if (!rows.length) return yield* new Forbidden({ message: "Ticket control does not belong to the canonical application message" })
 })

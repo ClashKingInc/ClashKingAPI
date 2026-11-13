@@ -224,7 +224,10 @@ const runtime = new Miniflare(convertV4MiniflareOptions({
     { type: "Data", path: "/local-api/dictionary.bin", contents: readFileSync("workers/api/assets/war-json.zdict") },
   ],
   compatibilityDate: config.compatibility_date, compatibilityFlags: ["nodejs_compat"],
-  hyperdrives: { HYPERDRIVE: database.href, HYPERDRIVE_FRESH: database.href },
+  // Failure injection for real local E2E: operational paths must never use the
+  // cached binding. The unavailable endpoint is always local and test-only.
+  hyperdrives: { HYPERDRIVE: !persistent && process.env.CLASHKING_E2E_UNAVAILABLE_CACHED_DATABASE === "1"
+    ? "postgres://clashking_test:clashking_test@127.0.0.1:1/clashking_test" : database.href, HYPERDRIVE_FRESH: database.href },
   kvNamespaces: ["API_CACHE"],
   r2Buckets: ["ASSETS", "WAR_ARCHIVE", "POSTS", "APP_UPDATES", "MEDIA", "TICKETING"],
   durableObjects: {

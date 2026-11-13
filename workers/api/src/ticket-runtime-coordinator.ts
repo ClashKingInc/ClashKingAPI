@@ -1,3 +1,4 @@
+import { ticketsPaused, ticketPauseRetryMs } from "./ticket-pause.js"
 import { DurableObject } from "cloudflare:workers"
 import { Effect, Layer } from "effect"
 import { DiscordApi } from "./discord-api.js"
@@ -61,11 +62,21 @@ export class TicketRuntimeCoordinator extends DurableObject<WorkerBindings> {
   }
 
   private async drain(): Promise<void> {
+    if (ticketsPaused(this.env)) {
+      // Keep every queued operation intact; an alarm resumes work after the
+      // maintenance binding is removed, even without a new HTTP request.
+      await this.ensureAlarm(ticketPauseRetryMs)
+      return
+    }
     if (this.running) return
     this.running = true
     try {
       const rows = this.ctx.storage.sql.exec<QueueRow>("SELECT operation_id FROM operation_queue ORDER BY queued_at,operation_id LIMIT 25").toArray()
       for (const row of rows) {
+        if (ticketsPaused(this.env)) {
+          await this.ensureAlarm(ticketPauseRetryMs)
+          return
+        }
         try {
           const terminal = await this.executeJob(row.operation_id)
           if (terminal) {

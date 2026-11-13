@@ -1,0 +1,48 @@
+// Exercise the real Worker, signed Discord boundary and migrated disposable SQL.
+import assert from 'node:assert/strict';
+import {spawn,execFileSync} from 'node:child_process';
+import {randomUUID,generateKeyPairSync,sign} from 'node:crypto';
+import {mkdtempSync,copyFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import pg from 'pg';
+assert.equal(process.env.CLASHKING_DISPOSABLE_TIMESCALE,'1');
+const dsn=new URL(process.env.TEST_DATABASE_URL);assert.equal(dsn.hostname,'127.0.0.1');assert.equal(dsn.pathname,'/clashking_test');
+const db=new pg.Client({connectionString:dsn.href});await db.connect();
+const guild='922222222222222901',actor='922222222222222902',other='922222222222222903',app='922222222222222904',channel='922222222222222905',message='922222222222222906';
+const panel=randomUUID(),button=randomUUID(),customId=`ck:ticket:open:${panel}:${button}`;
+const {privateKey,publicKey}=generateKeyPairSync('ed25519');const publicHex=publicKey.export({type:'spki',format:'der'}).subarray(-32).toString('hex');
+const key='ticket-e2e-only-'.padEnd(43,'x');let seq=922222222222222910n;
+await db.query("INSERT INTO servers(id,name) VALUES($1,'Ticket settings E2E')",[guild]);
+const saved={mod_role:['922222222222222907'],no_ping_mod_role:null,questions:['Why join?','Second?','Third?','Fourth?','Fifth?','Sixth?'],account_apply:false,private_thread:false,th_min:1,naming:'{ticket_count}-{user}',num_apply:25,player_info:false,apply_clans:null,new_message:'Welcome'};
+await db.query("INSERT INTO server_custom_embeds(server_id,name,data) VALUES($1,'Welcome',$2::jsonb)",[guild,JSON.stringify({embeds:[{description:'Welcome to the ticket'}]})]);
+await db.query('INSERT INTO ticket_panels(id,server_id,name,components,data) VALUES($1::uuid,$2,$3,$4::jsonb,$5::jsonb)',[panel,guild,'Ticket fixture',JSON.stringify([{id:button,type:2,custom_id:customId,label:'Apply',style:1}]),JSON.stringify({[customId+'_settings']:saved,legacy_publications:{[channel+':'+message]:{message:{components:[{type:1,components:[{type:2,custom_id:customId,label:'Apply',style:1}]}]}}}})]);
+const migrationDir=mkdtempSync(join(tmpdir(),'ticket-migration-'));assert(process.env.CLASHKING_TICKET_MIGRATION_PATH);copyFileSync(process.env.CLASHKING_TICKET_MIGRATION_PATH,join(migrationDir,'081_current_ticket_settings.sql'));
+execFileSync('goose',['-allow-missing','-dir',migrationDir,'postgres',dsn.href,'up'],{stdio:'pipe'});
+const settings=(await db.query("SELECT data->$2 AS settings FROM ticket_panels WHERE id=$1::uuid",[panel,customId+'_settings'])).rows[0].settings;
+for(const obsolete of ['questions','num_apply','player_info','apply_clans','townhall_requirements','new_message'])assert(!Object.hasOwn(settings,obsolete),obsolete);
+assert.equal(settings.application_questions[0].label,'Why join?');assert.deepEqual(settings.no_ping_mod_role,[]);assert.equal(settings.opening_message.embeds[0].description,'Welcome to the ticket');assert.deepEqual(settings.mod_role,saved.mod_role);
+const menuId=`ck:ticket:menu:${panel}:main`;
+await db.query("UPDATE ticket_panels SET data=jsonb_set(data,ARRAY['legacy_publications',$2,'message','components'],$3::jsonb) WHERE id=$1::uuid",[panel,channel+':'+message,JSON.stringify([{type:1,components:[{type:2,custom_id:customId,label:'Apply',style:1}]},{type:1,components:[{type:3,custom_id:menuId,options:[{label:'Apply',value:customId}]}]}])]);
+let logs='';const origin='http://127.0.0.1:8831';
+const child=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{stdio:['ignore','pipe','pipe'],env:{...process.env,CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_LOCAL_STATIC_ASSETS_ROOT,CLASHKING_LOCAL_API_PORT:'8831',CLASHKING_LOCAL_ADMIN_IDENTITY:'0',CLASHKING_E2E_API_BOT_TOKEN:key,CLASHKING_LOCAL_DISCORD_CLIENT_ID:app,CLASHKING_LOCAL_DISCORD_APPLICATION_ID:app,CLASHKING_LOCAL_DISCORD_PUBLIC_KEY:publicHex,CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'fixture',CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',CLASHKING_LOCAL_PRODUCTION_READS:'0',CLASHKING_LOCAL_FCM_CREDENTIALS_FILE:''}});
+child.stdout.on('data',x=>logs+=x);child.stderr.on('data',x=>logs+=x);
+const proof=(id=customId,user=actor,values)=>{const rawBody=JSON.stringify({id:String(seq++),application_id:app,type:3,guild_id:guild,channel_id:channel,member:{user:{id:user,username:'Fixture'},roles:[],permissions:'0'},message:{id:message,author:{id:app}},data:{custom_id:id,component_type:values?3:2,...(values?{values}:{})}});const timestamp=String(Math.floor(Date.now()/1000));return {interaction:{rawBody,timestamp,signature:sign(null,Buffer.from(timestamp+rawBody),privateKey).toString('hex')}};};
+const call=async(path,body,status=200)=>{const response=await fetch(origin+path,{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify(body)});const json=await response.json();assert.equal(response.status,status,JSON.stringify(json));return json;};
+try{
+ let ready=false;for(let i=0;i<120;i++){if(child.exitCode!==null)throw Error(logs.slice(-2000));try{ready=(await fetch(origin+'/v2/health')).ok&&logs.includes('isolated_api_ready')}catch{}if(ready)break;await new Promise(r=>setTimeout(r,250));}assert(ready,logs.slice(-2000));
+ const first=await call('/v2/runtime/tickets/open/prepare',proof());assert.equal(first.outcome,'ready');assert.equal(first.form.fields.length,5);
+ await db.query("UPDATE ticket_panels SET data=jsonb_set(data,ARRAY[$2,'account_apply'],'true'::jsonb) WHERE id=$1::uuid",[panel,customId+'_settings']);
+ const missing=await call('/v2/runtime/tickets/open/prepare',proof());assert.equal(missing.outcome,'link_required');const missingMenu=await call('/v2/runtime/tickets/open/prepare',proof(menuId,actor,[customId]));assert.equal(missingMenu.outcome,'link_required');
+ await call('/v2/runtime/tickets/resume',proof(`ck:ticket:resume:${missing.preparationId}`,other),403);
+ const stillMissing=await call('/v2/runtime/tickets/resume',proof(`ck:ticket:resume:${missing.preparationId}`));assert.equal(stillMissing.outcome,'link_required');
+ await db.query("UPDATE ticket_panels SET data=jsonb_set(data,ARRAY[$2,'th_min'],'18'::jsonb) WHERE id=$1::uuid",[panel,customId+'_settings']);
+ await db.query("INSERT INTO basic_player(tag,name,townhall_level) VALUES('#PYLQ20','Fixture player',5)");
+ await db.query("INSERT INTO player_links(tag,user_id,source,is_verified) VALUES('#PYLQ20',$1,'discord',true)",[actor]);
+ await db.query("UPDATE ticket_panels SET data=jsonb_set(data,ARRAY[$2,'hero_min_percent'],'50'::jsonb) WHERE id=$1::uuid",[panel,customId+'_settings']);
+ const ineligibleProof=proof();const ineligible=await call('/v2/runtime/tickets/open/prepare',ineligibleProof);assert.equal(ineligible.outcome,'link_required');assert.match(ineligible.content,/Town Hall 18/);const replayed=await call('/v2/runtime/tickets/open/prepare',ineligibleProof);assert.equal(replayed.preparationId,ineligible.preparationId);assert.equal(replayed.content,ineligible.content);
+ await db.query("UPDATE basic_player SET townhall_level=18 WHERE tag='#PYLQ20'");
+ await db.query("UPDATE ticket_panels SET data=jsonb_set(data,ARRAY[$2,'hero_min_percent'],'0'::jsonb) WHERE id=$1::uuid",[panel,customId+'_settings']);
+ const resumed=await call('/v2/runtime/tickets/resume',proof(`ck:ticket:resume:${missing.preparationId}`));assert.equal(resumed.outcome,'ready');assert.equal(resumed.form.fields[0].customId,'account');const resumedMenu=await call('/v2/runtime/tickets/resume',proof(`ck:ticket:resume:${missingMenu.preparationId}`));assert.equal(resumedMenu.outcome,'ready');
+ console.log('PASS migrated settings: removed obsolete fields, converted questions/welcome, retained staff roles; signed opening, inline-link requirement, actor-bound resume and rechecked missing account');
+}finally{child.kill('SIGTERM');await db.end();}

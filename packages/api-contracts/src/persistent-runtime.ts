@@ -181,6 +181,13 @@ export const TicketOpenPrepareEndpoint = defineEndpoint({
   response: Schema.Union([TicketReadyResponse, TicketAcceptedResponse, TicketLinkRequiredResponse]), responseMode: "json", successStatus: 200,
   summary: "Prepare or directly accept a canonical ticket-opening interaction", errors: TicketOperationErrors,
 })
+export const TicketResumeEndpoint = defineEndpoint({
+  auth: "bot", body: RuntimeInteractionProof, bodyMode: "json", method: "POST",
+  operationId: "ticketResume", path: "/v2/runtime/tickets/resume",
+  pathParams: Schema.Struct({}), query: NoQuery,
+  response: Schema.Union([TicketReadyResponse, TicketAcceptedResponse, TicketLinkRequiredResponse]), responseMode: "json", successStatus: 200,
+  summary: "Resume an actor-bound ticket preparation after account linking", errors: TicketOperationErrors,
+})
 export const TicketApprovePrepareEndpoint = defineEndpoint({
   auth: "bot", body: RuntimeInteractionProof, bodyMode: "json", method: "POST",
   operationId: "ticketApprovePrepare", path: "/v2/runtime/tickets/approve/prepare",
@@ -241,10 +248,6 @@ export const TicketAccountInteractionEndpoint = defineEndpoint({
   operationId: "ticketAccountInteraction", path: "/v2/runtime/tickets/accounts",
   pathParams: Schema.Struct({}), query: NoQuery,
   response: Schema.Union([
-    Schema.Struct({ outcome: Schema.Literal("form"), preparationId: RuntimeUUID,
-      expiresAt: Schema.String, form: TicketModalForm }),
-    Schema.Struct({ outcome: Schema.Literal("linked"), preparationId: RuntimeUUID,
-      accountTag: TicketViewerAccount.fields.tag, content: Schema.String.check(Schema.isMaxLength(2000)) }),
     Schema.Struct({ outcome: Schema.Literal("accounts"), ticketId: RuntimeUUID, sessionId: RuntimeUUID,
       expiresAt: Schema.String, content: Schema.String.check(Schema.isMaxLength(2000)),
       accounts: Schema.Array(TicketViewerAccount).check(Schema.isMinLength(1), Schema.isMaxLength(25)),
@@ -257,7 +260,7 @@ export const TicketAccountInteractionEndpoint = defineEndpoint({
     Schema.Struct({ outcome: Schema.Literal("account"), ticketId: RuntimeUUID, sessionId: RuntimeUUID,
       content: Schema.String.check(Schema.isMaxLength(2000)), account: TicketViewerAccount }),
   ]), responseMode: "json", successStatus: 200,
-  summary: "View or link accounts through an independently verified, scoped ticket account session", errors: TicketOperationErrors,
+  summary: "View accounts through an independently verified, scoped ticket account session", errors: TicketOperationErrors,
 })
 
 export const persistentRuntimeEndpoints = {
@@ -267,6 +270,7 @@ export const persistentRuntimeEndpoints = {
   giveawayPublicationComplete: GiveawayPublicationCompleteEndpoint,
   giveawayPublicationPending: GiveawayPublicationPendingEndpoint,
   ticketOpenPrepare: TicketOpenPrepareEndpoint,
+  ticketResume: TicketResumeEndpoint,
   ticketApprovePrepare: TicketApprovePrepareEndpoint,
   ticketOperationAdvance: TicketOperationAdvanceEndpoint,
   ticketAction: TicketActionEndpoint,

@@ -1,3 +1,4 @@
+import { ticketsPaused, ticketPauseRetryMs } from "./ticket-pause.js"
 import { DurableObject } from "cloudflare:workers"
 import { Effect } from "effect"
 import type { DeferredRuntimeBindings } from "./environment.js"
@@ -28,7 +29,7 @@ export class RuntimeRecoveryCoordinator extends DurableObject<DeferredRuntimeBin
   async wake(): Promise<void> {
     // A periodic wake repairs lost alarms without restarting an in-flight scan.
     if (!this.hasScan()) this.ctx.storage.sql.exec("UPDATE recovery_scans SET cursor=NULL,active=1,turn=0")
-    await this.ensureAlarm(1_000)
+    await this.ensureAlarm(ticketsPaused(this.env) ? ticketPauseRetryMs : 1_000)
   }
 
   protected get ioTimeoutMs(): number { return 10_000 }
@@ -76,6 +77,12 @@ export class RuntimeRecoveryCoordinator extends DurableObject<DeferredRuntimeBin
   }
 
   override async alarm(): Promise<void> {
+    if (ticketsPaused(this.env)) {
+      // Do not advance scan cursors or consume wakes during migration.
+      // The retained alarm also resumes a backlog when no new cron arrives.
+      await this.ensureAlarm(ticketPauseRetryMs)
+      return
+    }
     if (this.running) return
     const row = this.ctx.storage.sql.exec<ScanRow>(
       "SELECT kind,cursor FROM recovery_scans WHERE active=1 ORDER BY turn,CASE kind WHEN 'panel' THEN 0 WHEN 'ticket' THEN 1 ELSE 2 END LIMIT 1").toArray()[0]

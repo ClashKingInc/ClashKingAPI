@@ -12,7 +12,7 @@ export class Unauthenticated extends Data.TaggedError("Unauthenticated")<{
 
 export class Forbidden extends Data.TaggedError("Forbidden")<{
   readonly message: string
-  readonly reason?: "roles" | "avatar" | "linked_account" | "not_member" | "wrong_message"
+  readonly reason?: "roles" | "avatar" | "linked_account" | "ticket_requirements" | "ticket_metadata" | "not_member" | "wrong_message"
 }> {}
 
 export class NotFound extends Data.TaggedError("NotFound")<{

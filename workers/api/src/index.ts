@@ -1,3 +1,4 @@
+import { ticketPauseResponse } from "./ticket-pause.js"
 import { runClanVerificationChecks } from "./dashboard-clan-verification.js"
 import { Effect, Layer } from "effect"
 import * as Sentry from "@sentry/cloudflare"
@@ -61,6 +62,10 @@ const handler = {
     context.waitUntil(Effect.runPromise(runClanVerificationChecks(bindings).pipe(Effect.provide(databaseLayer(bindings)), Effect.scoped)));
   },
   async fetch(request: Request, bindings: WorkerBindings, context: ExecutionContext): Promise<Response> {
+    // Stop ticket reads/writes before SQL, authentication or metadata layers
+    // initialize while their persisted settings are being migrated.
+    const paused = ticketPauseResponse(request, bindings)
+    if (paused) return applyCors(request, paused, bindings)
     // A transcript URL is a bearer credential. Keep the entire invocation out
     // of request/defect logging, SQL layers and caller request-ID echoing.
     // Wrangler invocation logs/traces must also remain disabled for this Worker.

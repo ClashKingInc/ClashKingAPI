@@ -40,15 +40,6 @@ export const parseTicketAccountAction = (interaction: VerifiedRuntimeInteraction
   if (select && interaction.type === 3 && interaction.data.component_type === 3 && interaction.data.values?.length === 1) {
     return { kind: "select" as const, sessionId: yield* uuid(select[1]!), tag: interaction.data.values[0]! }
   }
-  const link = /^ck:ticket:link:([0-9a-f-]{36})$/u.exec(customId)
-  if (link && interaction.type === 3 && interaction.data.component_type === 2 && interaction.messageId !== undefined) {
-    return { kind: "link-form" as const, preparationId: yield* uuid(link[1]!) }
-  }
-  // Submission must not mutate accounts until durable role-evaluation effects
-  // can be journaled atomically with the link and accepted receipt.
-  if (customId.startsWith("ck:ticket:link-submit:")) {
-    return yield* new Conflict({ message: "Ticket account linking is not ready" })
-  }
   return yield* new Forbidden({ message: "A canonical ticket account control is required", reason: "wrong_message" })
 })
 
@@ -69,30 +60,6 @@ const ticket = (ticketId: string, interaction: VerifiedRuntimeInteraction, locke
   return rows[0]
 })
 const preparationColumns = "id::text,interaction_id,request_hash,action,actor_user_id,server_id,channel_id,origin_message_id,ticket_id::text,panel_id::text,button_id::text,source_updated_at::text,expires_at,context"
-const linkForm = (preparationId: string, interaction: VerifiedRuntimeInteraction) => Effect.gen(function* () {
-  const sql = yield* SqlClient.SqlClient
-  const prepared = (yield* sql.unsafe<PreparationRow>(`SELECT ${preparationColumns} FROM ticket_account_preparations WHERE id=$1::uuid FOR SHARE`, [preparationId]))[0]
-  if (prepared === undefined) return yield* new NotFound({ message: "Ticket linking preparation not found" })
-  if (prepared.action !== "link" || prepared.ticket_id !== null || prepared.button_id === null
-    || prepared.actor_user_id !== interaction.actorId || prepared.server_id !== interaction.guildId || prepared.channel_id !== interaction.channelId) {
-    return yield* new Forbidden({ message: "Ticket linking preparation belongs to another interaction", reason: "wrong_message" })
-  }
-  if (new Date(prepared.expires_at).getTime() <= Date.now()) return yield* new Forbidden({ message: "Ticket linking preparation has expired" })
-  // The clicked button is on an ephemeral response; validate the original
-  // publication recorded by the opening preparation, not that response ID.
-  const source = yield* loadTicketPanelSource({ guildId: prepared.server_id, channelId: prepared.channel_id,
-    messageId: prepared.origin_message_id, panelId: prepared.panel_id, buttonId: prepared.button_id })
-  if (source.updated_at !== prepared.source_updated_at) {
-    return yield* new Forbidden({ message: "Ticket linking source has changed", reason: "wrong_message" })
-  }
-  return { outcome: "form" as const, preparationId: prepared.id, expiresAt: new Date(prepared.expires_at).toISOString(),
-    form: { kind: "modal" as const, customId: `ck:ticket:link-submit:${prepared.id}`, title: "Link an account",
-      fields: [
-        { customId: "player_tag", label: "Player tag", required: true, style: "short" as const, maxLength: 12 },
-        { customId: "api_token", label: "API token", required: true, style: "short" as const, maxLength: 12 },
-      ] },
-  }
-})
 const context = (row: PreparationRow) => Schema.decodeUnknownEffect(ViewerContext)(row.context).pipe(
   Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Stored ticket account viewer is invalid" })))
 const identity = (row: PreparationRow, interaction: VerifiedRuntimeInteraction) => {
@@ -139,7 +106,6 @@ export const ticketAccountInteraction = (interaction: VerifiedRuntimeInteraction
   // provider call outside the transaction, then fence the canonical source
   // again under the ticket/panel locks before saving or replaying a viewer.
   const authorized = yield* Effect.gen(function* () {
-    if (action.kind === "link-form") return undefined
     const prepared = action.kind === "select"
       ? (yield* sql.unsafe<PreparationRow>(`SELECT ${preparationColumns} FROM ticket_account_preparations WHERE id=$1::uuid`, [action.sessionId]))[0]
       : undefined
@@ -157,7 +123,6 @@ export const ticketAccountInteraction = (interaction: VerifiedRuntimeInteraction
     && current.staff_thread === authorized.staff_thread
     ? Effect.void : Effect.fail(new Forbidden({ message: "Ticket account viewer source has changed", reason: "wrong_message" }))
   return yield* sql.withTransaction(Effect.gen(function* () {
-    if (action.kind === "link-form") return yield* linkForm(action.preparationId, interaction)
     if (action.kind === "prepare") {
       const current = yield* ticket(action.ticketId, interaction)
       yield* checkAuthorizedSource(current)

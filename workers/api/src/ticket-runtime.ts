@@ -249,7 +249,9 @@ const prepareTicketOpenTransaction = (interaction: VerifiedRuntimeInteraction) =
   if (settings.account_apply && accounts.length === 0) return yield* prepareTicketLink(interaction,panel)
   if (settings.account_apply && eligible.length === 0) {
     if (accounts.some(account => account.townhall_level === null || account.townhall_level >= settings.th_min && (settings.hero_min_percent ?? 0) > 0 && account.heroes == null)) return yield* new Forbidden({ message: "Player details are not available yet. Try again shortly.", reason: "ticket_metadata" })
-    return yield* prepareTicketLink(interaction,panel,`This ticket requires a linked account at Town Hall ${settings.th_min} or higher${(settings.hero_min_percent ?? 0) > 0 ? ` with at least ${settings.hero_min_percent}% hero progress` : ""}. Link an eligible account to continue.`)
+    const requirements = [settings.th_min > 0 ? `Town Hall ${settings.th_min} or higher` : null,
+      (settings.hero_min_percent ?? 0) > 0 ? `at least ${settings.hero_min_percent}% hero progress` : null].filter(Boolean).join(" and ")
+    return yield* prepareTicketLink(interaction,panel,`This ticket requires a linked account with ${requirements}. Link an eligible account to continue.`)
   }
   const eligibleAccounts = eligible.map(account => ({ tag:account.tag,label:(account.name ?? account.tag).slice(0,100),
     ...(account.townhall_level === null ? {} : { townhall:account.townhall_level }) }))

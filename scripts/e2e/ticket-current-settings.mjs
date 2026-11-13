@@ -18,7 +18,7 @@ const saved={mod_role:['922222222222222907'],no_ping_mod_role:null,questions:['W
 await db.query("INSERT INTO server_custom_embeds(server_id,name,data) VALUES($1,'Welcome',$2::jsonb)",[guild,JSON.stringify({embeds:[{description:'Welcome to the ticket'}]})]);
 await db.query('INSERT INTO ticket_panels(id,server_id,name,components,data) VALUES($1::uuid,$2,$3,$4::jsonb,$5::jsonb)',[panel,guild,'Ticket fixture',JSON.stringify([{id:button,type:2,custom_id:customId,label:'Apply',style:1}]),JSON.stringify({[customId+'_settings']:saved,legacy_publications:{[channel+':'+message]:{message:{components:[{type:1,components:[{type:2,custom_id:customId,label:'Apply',style:1}]}]}}}})]);
 const migrationDir=mkdtempSync(join(tmpdir(),'ticket-migration-'));assert(process.env.CLASHKING_TICKET_MIGRATION_PATH);copyFileSync(process.env.CLASHKING_TICKET_MIGRATION_PATH,join(migrationDir,'081_current_ticket_settings.sql'));
-execFileSync('goose',['-dir',migrationDir,'postgres',dsn.href,'up'],{stdio:'pipe'});
+execFileSync('goose',['-allow-missing','-dir',migrationDir,'postgres',dsn.href,'up'],{stdio:'pipe'});
 const settings=(await db.query("SELECT data->$2 AS settings FROM ticket_panels WHERE id=$1::uuid",[panel,customId+'_settings'])).rows[0].settings;
 for(const obsolete of ['questions','num_apply','player_info','apply_clans','townhall_requirements','new_message'])assert(!Object.hasOwn(settings,obsolete),obsolete);
 assert.equal(settings.application_questions[0].label,'Why join?');assert.deepEqual(settings.no_ping_mod_role,[]);assert.equal(settings.opening_message.embeds[0].description,'Welcome to the ticket');assert.deepEqual(settings.mod_role,saved.mod_role);

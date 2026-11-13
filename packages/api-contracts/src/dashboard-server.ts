@@ -10,6 +10,9 @@ export const ticketApprovalTokens = [
   "clan_tag", "clan_war_league", "clan_capital_league",
 ] as const
 
+// New ticket forms are bounded; existing larger forms can be edited or reduced.
+export const ticketQuestionAuthoringLimit = 25
+
 import { defineEndpoint, NoBody, NoPathParams, NoQuery } from "./endpoint.js"
 import { ticketMessageComponentsError } from "./ticket-message-components.js"
 import { JsonValue } from "./expo-common.js"

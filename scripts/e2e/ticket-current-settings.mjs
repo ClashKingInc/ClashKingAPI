@@ -15,6 +15,8 @@ assert(process.env.CLASHKING_TICKET_MIGRATION_PATH);assert(process.env.CLASHKING
 const db=new pg.Client({connectionString:dsn.href});await db.connect();
 const guild='922222222222222901',actor='922222222222222902',other='922222222222222903',app='922222222222222904',channel='922222222222222905',message='922222222222222906';
 const panel=randomUUID(),button=randomUUID(),customId=`ck:ticket:open:${panel}:${button}`;
+const archivedPanel=randomUUID(),archivedButton=randomUUID(),archivedCustomId=`ck:ticket:open:${archivedPanel}:${archivedButton}`;
+const archivedTicket=randomUUID(),archivedOperation=randomUUID(),archivedChannel='922222222222222908';
 const {privateKey,publicKey}=generateKeyPairSync('ed25519');const publicHex=publicKey.export({type:'spki',format:'der'}).subarray(-32).toString('hex');
 const key='ticket-e2e-only-'.padEnd(43,'x');let seq=922222222222222910n;
 // Effects may wake as soon as the form is accepted. Route every Discord request
@@ -28,6 +30,10 @@ const extra={...saved,new_message:null,no_ping_mod_role:null,account_apply:true,
 await db.query("INSERT INTO servers(id,name) VALUES($1,'Ticket settings E2E')",[guild]);
 await db.query("INSERT INTO server_custom_embeds(server_id,name,data) VALUES($1,'Welcome',$2::jsonb)",[guild,JSON.stringify(welcome)]);
 await db.query('INSERT INTO ticket_panels(id,server_id,name,components,data) VALUES($1::uuid,$2,$3,$4::jsonb,$5::jsonb)',[panel,guild,'Ticket fixture',JSON.stringify([{id:button,type:2,custom_id:customId,label:'Apply',style:1}]),JSON.stringify({[customId+'_settings']:saved,extra_settings:extra,legacy_publications:{[channel+':'+message]:{message:{components:[{type:1,components:[{type:2,custom_id:customId,label:'Apply',style:1}]}]}}}})]);
+await db.query('INSERT INTO ticket_panels(id,server_id,name,components,data,archived_at) VALUES($1::uuid,$2,$3,$4::jsonb,$5::jsonb,$6::timestamptz)',[archivedPanel,guild,'Archived fixture',JSON.stringify([{id:archivedButton,type:2,custom_id:archivedCustomId,label:'Apply',style:1}]),JSON.stringify({[archivedCustomId+'_settings']:saved,historyMarker:'retain'}),'2025-01-02T03:04:05Z']);
+await db.query("INSERT INTO ticket_runtime_operations(id,interaction_id,action,ticket_id,ticket_number,server_id,actor_user_id,panel_id,button_id,origin_channel_id,origin_message_id,context,request,request_hash,submission_interaction_id,submitted_request,submitted_request_hash,state) VALUES($1::uuid,'922222222222223001','open',$2::uuid,214741,$3,$4,$5::uuid,$6::uuid,$7,$8,'{}'::jsonb,'{}'::jsonb,$9,'922222222222223002','{}'::jsonb,$9,'completed')",[archivedOperation,archivedTicket,guild,other,archivedPanel,archivedButton,archivedChannel,message,'0'.repeat(64)]);
+await db.query("INSERT INTO tickets(id,server_id,channel_id,number,panel_id,applicant_user_id,naming_convention) VALUES($1::uuid,$2,$3,214741,$4::uuid,$5,'ticket')",[archivedTicket,guild,archivedChannel,archivedPanel,other]);
+const archiveBefore=(await db.query('SELECT id,server_id,name,components,data,created_at,updated_at,archived_at FROM ticket_panels WHERE id=$1::uuid',[archivedPanel])).rows[0];
 let logs='';const children=[];
 const start=async(cwd,port)=>{
  const child=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{cwd,stdio:['ignore','pipe','pipe'],env:{...process.env,CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_LOCAL_STATIC_ASSETS_ROOT,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_ADMIN_IDENTITY:'0',CLASHKING_E2E_API_BOT_TOKEN:key,CLASHKING_LOCAL_DISCORD_CLIENT_ID:app,CLASHKING_LOCAL_DISCORD_APPLICATION_ID:app,CLASHKING_LOCAL_DISCORD_PUBLIC_KEY:publicHex,CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'fixture',CLASHKING_LOCAL_DISCORD_BOT_TOKEN:'fixture-only',CLASHKING_LOCAL_DISCORD_TEST_ORIGIN:providerOrigin,CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',CLASHKING_LOCAL_PRODUCTION_READS:'0',CLASHKING_LOCAL_FCM_CREDENTIALS_FILE:''}});
@@ -37,6 +43,7 @@ const start=async(cwd,port)=>{
  assert(ready,logs.slice(-3000));return origin;
 };
 const proof=(id=customId,user=actor,values,type=3,components)=>{const rawBody=JSON.stringify({id:String(seq++),application_id:app,type,guild_id:guild,channel_id:channel,member:{user:{id:user,username:'Fixture'},roles:[],permissions:'0'},message:{id:message,author:{id:app}},data:type===5?{custom_id:id,components}: {custom_id:id,component_type:values?3:2,...(values?{values}:{})}});const timestamp=String(Math.floor(Date.now()/1000));return {interaction:{rawBody,timestamp,signature:sign(null,Buffer.from(timestamp+rawBody),privateKey).toString('hex')}};};
+const archivedStaffProof=()=>{const rawBody=JSON.stringify({id:String(seq++),application_id:app,type:2,guild_id:guild,channel_id:archivedChannel,member:{user:{id:actor,username:'Fixture'},roles:saved.mod_role,permissions:'0'},data:{name:'ticket',options:[{type:1,name:'status',options:[{type:3,name:'status',value:'close'}]}]}});const timestamp=String(Math.floor(Date.now()/1000));return {interaction:{rawBody,timestamp,signature:sign(null,Buffer.from(timestamp+rawBody),privateKey).toString('hex')}};};
 const call=async(origin,path,body,status=200)=>{const response=await fetch(origin+path,{method:'POST',headers:{authorization:`Bearer ${key}`,'content-type':'application/json'},body:JSON.stringify(body)});const json=await response.json();assert.equal(response.status,status,JSON.stringify(json));return json;};
 const modalFields=indices=>indices.map(i=>({type:1,components:[{type:4,custom_id:`q:${i}`,value:`Answer ${i}`}]}));
 try {
@@ -56,12 +63,18 @@ try {
  assert.equal(settings.application_questions.length,5);assert.equal(settings.application_questions[0].label,'Why join?');assert.deepEqual(settings.mod_role,saved.mod_role);
  assert.equal(settings.opening_message.content,'Welcome text');assert.equal(settings.opening_message.embeds[0].description,'Welcome to the ticket');assert.equal(settings.opening_message.components[0].components.length,1);assert(!Object.hasOwn(settings.opening_message.components[0].components[0],'custom_id'));
  assert.equal(data.extra_settings.application_questions.length,4);assert.equal(data.extra_settings.application_questions[0].label,'😀'.repeat(22));assert.deepEqual(data.extra_settings.no_ping_mod_role,[]);assert.deepEqual(data.extra_settings.opening_message.embeds[0].image,{url:'https://example.com/image.png'});assert(!Object.hasOwn(data.extra_settings.opening_message.embeds[0],'type'));
+ const archiveAfter=(await db.query('SELECT id,server_id,name,components,data,created_at,updated_at,archived_at FROM ticket_panels WHERE id=$1::uuid',[archivedPanel])).rows[0];
+ for(const field of ['id','server_id','name','components','created_at','updated_at','archived_at'])assert.deepEqual(archiveAfter[field],archiveBefore[field],`archived ${field} stays unchanged`);
+ assert.equal(archiveAfter.data.historyMarker,'retain');assert.deepEqual(archiveAfter.data[archivedCustomId+'_settings'].mod_role,saved.mod_role);assert.equal(archiveAfter.data[archivedCustomId+'_settings'].application_questions.length,5);
+ assert.equal((await db.query("SELECT tgenabled FROM pg_trigger WHERE tgrelid='ticket_panels'::regclass AND tgname='guard_canonical_ticket_panel'")).rows[0].tgenabled,'O','archived panel guard is enabled after migration');
+ await assert.rejects(db.query("UPDATE ticket_panels SET data=jsonb_set(data,'{historyMarker}',to_jsonb('tampered'::text)) WHERE id=$1::uuid",[archivedPanel]),/archived ticket panel configuration is immutable/);
  assert.deepEqual((await db.query("SELECT data FROM server_custom_embeds WHERE server_id=$1 AND name='Welcome'",[guild])).rows[0].data,welcome,'shared source template stays intact');
  const after=(await db.query('SELECT context,progress,progress_receipts FROM ticket_runtime_operations WHERE id=$1::uuid',[operation])).rows[0];
  assert.equal(after.context.settings.application_questions.length,5);for(const field of ['questions','pages','welcomeEmbeds'])assert.deepEqual(after.context[field],before.context[field]);assert.deepEqual(after.progress,before.progress);assert.deepEqual(after.progress_receipts,before.progress_receipts);
  assert.equal((await db.query("SELECT tgenabled FROM pg_trigger WHERE tgrelid='ticket_runtime_operations'::regclass AND tgname='guard_ticket_runtime_operation'")).rows[0].tgenabled,'O','immutable context guard is enabled after migration');
  await assert.rejects(db.query("UPDATE ticket_runtime_operations SET context=jsonb_set(context,'{panelName}',to_jsonb('tampered'::text)) WHERE id=$1::uuid",[operation]),/identity and initial request are immutable/);
  const current=await start(process.cwd(),8831);
+ const archivedStaff=await call(current,'/v2/runtime/tickets/actions',archivedStaffProof());assert.equal(archivedStaff.outcome,'ready','staff role from archived panel still authorizes its ticket');
  const continued=await call(current,advance,proof(`ck:ticket:continue:${operation}:1`));assert.equal(continued.form.kind,'modal');assert.equal(continued.form.fields.length,1);
  const completed=await call(current,advance,proof(`ck:ticket:answers:${operation}:1`,actor,undefined,5,modalFields([5])));assert.equal(completed.outcome,'accepted');
  const final=(await db.query('SELECT context,progress FROM ticket_runtime_operations WHERE id=$1::uuid',[operation])).rows[0];assert.equal(final.progress.answers['q:5'],'Answer 5');assert.equal(final.context.questions.length,6);
@@ -81,5 +94,5 @@ try {
  await db.query("UPDATE ticket_panels SET data=jsonb_set(data,ARRAY[$2,'hero_min_percent'],'0'::jsonb) WHERE id=$1::uuid",[panel,customId+'_settings']);
  const resumed=await call(current,'/v2/runtime/tickets/resume',proof(`ck:ticket:resume:${missing.preparationId}`));assert.equal(resumed.outcome,'ready');assert.equal(resumed.form.fields.length,5);assert.equal(resumed.form.fields[0].customId,'account');
  const resumedMenu=await call(current,'/v2/runtime/tickets/resume',proof(`ck:ticket:resume:${missingMenu.preparationId}`));assert.equal(resumedMenu.outcome,'ready');
- console.log('PASS migrated settings and welcome; previous Worker multi-page operation resumed with all answers after migration; current single-form limits and inline-link resume');
+ console.log('PASS archived-panel settings, staff-role authorization, preserved identity and restored guard; previous Worker multi-page operation resumed with all answers after migration; current single-form limits and inline-link resume');
 } finally { for(const child of children)child.kill('SIGTERM');await new Promise(resolveClose=>provider.close(resolveClose));await db.end(); }

@@ -637,23 +637,17 @@ export const TicketButton = Schema.Struct({
   type: Schema.Number,
 })
 export const TicketButtonSettings = Schema.Struct({
-  questions: Schema.Array(Schema.String),
   mod_role: Schema.Array(Schema.String),
   no_ping_mod_role: Schema.Array(Schema.String),
   private_thread: Schema.Boolean,
   th_min: Schema.Number,
   hero_min_percent: Schema.optionalKey(Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
-  num_apply: Schema.Number,
   naming: Schema.String,
   account_apply: Schema.Boolean,
-  player_info: Schema.Boolean,
-  apply_clans: Schema.Array(Schema.String),
   roles_to_add: Schema.Array(Schema.String),
   roles_to_remove: Schema.Array(Schema.String),
-  townhall_requirements: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Number)),
-  new_message: Schema.optionalKey(Schema.NullOr(Schema.String)),
   opening_message: Schema.optionalKey(Schema.NullOr(Schema.suspend(() => TicketPanelMessage))),
-  application_questions: Schema.optionalKey(Schema.Array(DashboardRosterQuestion)),
+  application_questions: Schema.Array(DashboardRosterQuestion),
 })
 export const ApproveMessage = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(100), Schema.makeFilter(value => value.trim() !== "" ? undefined : "Template name must not be blank")),
@@ -803,23 +797,17 @@ export const CreateTicketButtonRequest = Schema.Struct({
 })
 export const UpdateTicketButtonAppearanceRequest = CreateTicketButtonRequest
 export const UpdateTicketButtonSettingsRequest = Schema.Struct({
-  questions: Schema.Array(Schema.String),
   mod_role: Schema.Array(Schema.String),
   no_ping_mod_role: Schema.Array(Schema.String),
   private_thread: Schema.Boolean,
   th_min: Schema.Number,
   hero_min_percent: Schema.optionalKey(Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
-  num_apply: Schema.Number,
   naming: Schema.String,
   account_apply: Schema.Boolean,
-  player_info: Schema.Boolean,
-  apply_clans: Schema.Array(Schema.String),
   roles_to_add: Schema.Array(Schema.String),
   roles_to_remove: Schema.Array(Schema.String),
-  townhall_requirements: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Number)),
-  new_message: Schema.NullOr(Schema.String),
   opening_message: Schema.optionalKey(Schema.NullOr(TicketPanelMessage)),
-  application_questions: Schema.optionalKey(Schema.Array(DashboardRosterQuestion)),
+  application_questions: Schema.Array(DashboardRosterQuestion),
 })
 export const UpdateApproveMessagesRequest = Schema.Struct({
   messages: Schema.Array(Schema.Struct({ name: Schema.String, message: Schema.String })),

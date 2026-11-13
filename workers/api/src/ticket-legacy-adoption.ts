@@ -51,16 +51,9 @@ export const adoptLegacyTicketPanel = (interaction: VerifiedRuntimeInteraction, 
       components: remap(snapshot.components ?? []) }).pipe(Effect.mapError(() => new InvalidRequest({ message: "Legacy panel message cannot be represented safely" })))
     const publications = { ...object(data.legacy_publications), [`${interaction.channelId}:${interaction.messageId}`]: { message } }
     const updated: Record<string,unknown> = { ...data, legacy_button_ids: aliases, legacy_publications: publications, panel_message: data.panel_message ?? message }
-    // Normalize nullable Python-era settings through the current public contract.
-    const saved = object(updated[`${canonicalId}_settings`])
-    const normalized: Record<string,unknown> = { questions:[],mod_role:[],no_ping_mod_role:[],private_thread:false,th_min:0,num_apply:1,naming:"",account_apply:false,player_info:false,apply_clans:[],roles_to_add:[],roles_to_remove:[],townhall_requirements:{},...saved }
-    for (const key of ["questions","mod_role","no_ping_mod_role","apply_clans","roles_to_add","roles_to_remove"] as const) {
-      const value = normalized[key]
-      normalized[key] = value === null ? [] : typeof value === "string" ? [value] : value
-      if (key !== "questions" && Array.isArray(normalized[key])) normalized[key] = normalized[key].map(String)
-    }
-    if (normalized.townhall_requirements === null) normalized.townhall_requirements = {}
-    const settings = yield* Schema.decodeUnknownEffect(TicketButtonSettings)(normalized).pipe(Effect.mapError(() => new InvalidRequest({ message: "Legacy ticket settings require review" })))
+    // Stored settings are migrated once; opening a panel must not silently
+    // discard or reinterpret requirements at request time.
+    const settings = yield* Schema.decodeUnknownEffect(TicketButtonSettings)(updated[`${canonicalId}_settings`]).pipe(Effect.mapError(() => new InvalidRequest({ message: "Ticket settings require review" })))
     updated[`${canonicalId}_settings`] = settings
     yield* sql`UPDATE ticket_panels SET data=${JSON.stringify(updated)}::jsonb,updated_at=clock_timestamp() WHERE id=${panel.id}::uuid`
     return { ...interaction, data: { ...interaction.data, custom_id: canonicalId } }

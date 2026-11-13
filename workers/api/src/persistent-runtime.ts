@@ -17,7 +17,7 @@ import { enqueueTicketButtonClick } from "./ticket-button-click-logs.js"
 import { adoptLegacyTicketPanel } from "./ticket-legacy-adoption.js"
 import { advanceTicketOperation, prepareTicketOpen, ticketOperationStatus, wakeTicketOperation } from "./ticket-runtime.js"
 import { prepareTicketPanelPublication,ticketPanelPublicationStatus } from "./ticket-panel-publications.js"
-import { ticketAccountInteraction } from "./ticket-account-runtime.js"
+import { resumeTicketAfterLink, ticketAccountInteraction } from "./ticket-account-runtime.js"
 import { advanceTicketApproval, prepareTicketApproval, TicketApprovalResolver } from "./ticket-approval-runtime.js"
 import { resolveTicketApproval, TicketApprovalGuildCounts } from "./ticket-approval-resolver.js"
 // Mount only tickets. Other reference runtime routes remain disabled.
@@ -86,24 +86,30 @@ export const dispatchPersistentRuntime = (request: Request, bindings: DeferredRu
   const ticketPrepare = path === "/v2/runtime/tickets/open/prepare"
   const ticketApprove = path === "/v2/runtime/tickets/approve/prepare"
   const ticketAction = path === "/v2/runtime/tickets/actions"
+  const ticketResume = path === "/v2/runtime/tickets/resume"
   const ticketAccounts = path === "/v2/runtime/tickets/accounts"
   const ticketOperation = /^\/v2\/runtime\/ticket-operations\/([0-9a-f-]{36})\/(advance|status)$/iu.exec(path)
   const panelPrepare=path==="/v2/runtime/ticket-panel-publications/prepare"
   const panelStatus=/^\/v2\/runtime\/ticket-panel-publications\/([0-9a-f]{64})\/status$/u.exec(path)
   if (request.method !== "POST" || (match === null && publication === null && !pending && !ticketPrepare &&
-    !ticketApprove && !ticketAction && !ticketAccounts && ticketOperation === null && !panelPrepare && panelStatus === null)) return undefined
+    !ticketApprove && !ticketAction && !ticketAccounts && !ticketResume && ticketOperation === null && !panelPrepare && panelStatus === null)) return undefined
   const auth = yield* AuthIdentity
   yield* auth.requireBot(request)
   if (request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() !== "application/json") {
     return yield* new InvalidRequest({ message: "Content-Type must be application/json", status: 415 })
   }
-  if (ticketPrepare || ticketApprove || ticketAction || ticketAccounts || ticketOperation !== null) {
+  if (ticketPrepare || ticketApprove || ticketAction || ticketAccounts || ticketResume || ticketOperation !== null) {
     const raw = yield* readBoundedJson(request, 2 * 1_048_576 + 1024)
     const proof = yield* Schema.decodeUnknownEffect(RuntimeInteractionProof)(raw).pipe(
       Effect.mapError(() => new InvalidRequest({ message:"Invalid Discord interaction proof" })),
     )
     const verified = yield* verifyRuntimeInteraction(proof,bindings)
     const interaction = ticketPrepare ? yield* adoptLegacyTicketPanel(verified,bindings.DISCORD_APPLICATION_ID) : verified
+    if (ticketResume) {
+      const result = yield* resumeTicketAfterLink(interaction)
+      if (result.outcome === "accepted") yield* wakeTicketOperation(bindings,result.operationId,interaction.guildId,result.ticketId)
+      return Response.json(result,{ headers:{ "cache-control":"no-store" } })
+    }
     if (ticketAccounts) return Response.json(yield* ticketAccountInteraction(interaction), { headers: { "cache-control":"no-store" } })
     if (ticketAction || ticketApprove) {
       const approval = (interaction.type === 2 && "options" in interaction.data && (interaction.data.options?.[0] as {name?:string}|undefined)?.name === "messages") || ticketApprove || ("custom_id" in interaction.data && interaction.data.custom_id.startsWith("ck:ticket:approve:"))

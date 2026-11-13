@@ -7,11 +7,12 @@ export type TicketApplicationField = typeof TicketModalField.Type
 export const ticketQuestionError = (settings: Pick<Settings, "application_questions" | "account_apply">): string | undefined => {
   const questions = settings.application_questions
   if (questions === undefined) return undefined
-  if (questions.length > (settings.account_apply ? 4 : 5)) return "The modal supports five fields, including the account selector"
+  // Existing questionnaires may span several five-field Discord modals.
+  // Keep every migrated question; page splitting below enforces Discord's limit.
   const ids = new Set<string>()
   for (const question of questions) {
     if (!/^[a-z0-9][a-z0-9_-]{0,63}$/iu.test(question.id) || ids.has(question.id)
-      || !question.label.trim() || question.label.length > 45) return "Questions need unique IDs and labels of 1–45 characters"
+      || !question.label.trim() || question.type !== "text" && question.label.length > 45) return "Questions need unique IDs and labels of 1–45 characters"
     ids.add(question.id)
     if (question.type === "single_select" && (!question.options.length || question.options.length > 25
       || question.options.some(option => !option.trim() || option.length > 100)
@@ -24,9 +25,7 @@ export const ticketQuestionError = (settings: Pick<Settings, "application_questi
 export function ticketApplicationPages(settings: Settings, accounts: readonly { tag: string; label: string; townhall?: number }[]) {
   const error = ticketQuestionError(settings)
   if (error) throw new Error(error)
-  const questions = settings.application_questions ?? settings.questions.filter(question => question.trim()).map((label, order) => ({
-    id: `legacy-${order}`, label, order, type: "text" as const, required: true, options: [],
-  }))
+  const questions = settings.application_questions
   const fields: TicketApplicationField[] = questions.map((question, index) => question.type === "text"
     ? { customId: `q:${index}`, label: question.label.slice(0, 45), required: question.required, style: "paragraph", maxLength: 500 }
     : { customId: `q:${index}`, label: question.label, required: question.required, style: "select",

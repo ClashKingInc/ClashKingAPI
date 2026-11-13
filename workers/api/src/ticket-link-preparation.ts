@@ -11,7 +11,7 @@ interface Preparation {
 }
 const response = (row: Preparation) => Schema.decodeUnknownEffect(TicketLinkRequiredResponse)({
   outcome:"link_required",preparationId:row.id,expiresAt:new Date(row.expires_at).toISOString(),
-  content:"Link an account first. Once you are done, open a ticket again.",
+  content:"Link an account to continue this ticket application.",
   link:{customId:`ck:ticket:link:${row.id}`,label:"Link an account"},
 }).pipe(Effect.mapError(cause=>new DatabaseFailure({cause,message:"Stored ticket linking preparation is invalid"})))
 

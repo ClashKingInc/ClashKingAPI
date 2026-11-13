@@ -4,6 +4,7 @@ import { SqlClient } from "effect/sql"
 
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound } from "./errors.js"
 import { requireFreshInteraction, type VerifiedRuntimeInteraction } from "./runtime-interaction.js"
+import { prepareTicketOpen } from "./ticket-runtime.js"
 import { loadTicketPanelSource } from "./ticket-panel-source.js"
 import { requireTicketStaff } from "./ticket-staff-authorization.js"
 
@@ -222,3 +223,20 @@ export const ticketAccountInteraction = (interaction: VerifiedRuntimeInteraction
     Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Ticket account response failed contract validation" })))),
   Effect.catchTag("SqlError", (cause) => Effect.fail(new DatabaseFailure({ cause, message: "Ticket account runtime database operation failed" }))),
 )
+
+/** A fresh signed click may resume only its actor's unexpired preparation.
+ * Resolve the original publication server-side; never accept client-supplied
+ * panel, applicant or channel identities from the linking modal.
+ */
+export const resumeTicketAfterLink = (interaction: VerifiedRuntimeInteraction) => Effect.gen(function* () {
+  yield* requireFreshInteraction(interaction)
+  const match = /^ck:ticket:resume:([0-9a-f-]{36})$/u.exec(interaction.data.custom_id ?? "")
+  if (interaction.type !== 3 || interaction.data.component_type !== 2 || !match) return yield* new Forbidden({ message: "Invalid ticket continuation", reason: "wrong_message" })
+  const sql = yield* SqlClient.SqlClient
+  const prepared = (yield* sql.unsafe<PreparationRow>(`SELECT ${preparationColumns} FROM ticket_account_preparations WHERE id=$1::uuid`, [yield* uuid(match[1]!)]))[0]
+  if (!prepared || prepared.action !== "link" || !prepared.button_id || prepared.actor_user_id !== interaction.actorId || prepared.server_id !== interaction.guildId || prepared.channel_id !== interaction.channelId) return yield* new Forbidden({ message: "This ticket continuation belongs to another user or server", reason: "wrong_message" })
+  if (new Date(prepared.expires_at).getTime() <= Date.now()) return yield* new Conflict({ message: "Ticket continuation expired. Click the ticket panel again." })
+  const source = yield* loadTicketPanelSource({ guildId: prepared.server_id, channelId: prepared.channel_id, messageId: prepared.origin_message_id, panelId: prepared.panel_id, buttonId: prepared.button_id })
+  if (source.updated_at !== prepared.source_updated_at) return yield* new Conflict({ message: "Ticket settings changed. Click the ticket panel again." })
+  return yield* prepareTicketOpen({ ...interaction, messageId: prepared.origin_message_id, data: { component_type: 2, custom_id: source.customId } })
+}).pipe(Effect.catchTag("SqlError", cause => Effect.fail(new DatabaseFailure({ cause, message: "Ticket continuation lookup failed" }))))

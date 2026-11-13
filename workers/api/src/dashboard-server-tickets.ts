@@ -23,8 +23,7 @@ const optional = (key: string, value: unknown) => value === undefined || value =
 const stored = <A>(schema: Schema.Codec<A, unknown, never, never>, value: unknown) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError((cause) => new DatabaseFailure({ cause, message: "Stored ticket configuration failed schema validation" })))
 const requestBody = <A>(schema: Schema.Codec<A, unknown, never, never>, value: unknown) => Schema.decodeUnknownEffect(schema)(value).pipe(Effect.mapError(() => new InvalidRequest({ message: "Ticket request failed schema validation" })))
 const categoryFields = { open_category: "open-category", sleep_category: "sleep-category", closed_category: "closed-category", status_change_log: "status_change_log", ticket_button_click_log: "ticket_button_click_log" } as const
-const emptySettings = { questions: [], mod_role: [], no_ping_mod_role: [], private_thread: false, th_min: 0, num_apply: 1, naming: "", account_apply: false, player_info: false, apply_clans: [], roles_to_add: [], roles_to_remove: [], townhall_requirements: {} } as const
-const listSettingFields = ["questions", "mod_role", "no_ping_mod_role", "apply_clans", "roles_to_add", "roles_to_remove"] as const
+const emptySettings = { mod_role: [], no_ping_mod_role: [], private_thread: false, th_min: 0, naming: "", account_apply: false, roles_to_add: [], roles_to_remove: [], application_questions: [] } as const
 const normalizedPanelColumns = `panel.id::text,panel.server_id,panel.name,panel.updated_at::text,COALESCE((
   SELECT jsonb_agg(CASE
     WHEN component.value->'emoji' = 'null'::jsonb THEN component.value - 'emoji'::text
@@ -42,19 +41,6 @@ const normalizedPanelColumns = `panel.id::text,panel.server_id,panel.name,panel.
   FROM jsonb_each(panel.data) entry
 ),'{}'::jsonb) AS data`
 
-const normalizeStoredSettings = (saved: Record<string, Schema.Json>) => {
-  const normalized: Record<string, unknown> = { ...emptySettings, ...saved }
-  for (const field of listSettingFields) {
-    const value = saved[field]
-    if (value === null) normalized[field] = []
-    else if (typeof value === "string") normalized[field] = [value]
-  }
-  if (saved.townhall_requirements === null) normalized.townhall_requirements = {}
-  normalized.num_apply = 1
-  normalized.apply_clans = []
-  normalized.townhall_requirements = {}
-  return normalized
-}
 
 const approvalMessages = (messages: ReadonlyArray<{ readonly name: string; readonly message: string }>) =>
   messages.filter(message => message.name.trim() !== "")
@@ -66,7 +52,7 @@ const panelValue = (row: PanelRow) => Effect.gen(function* () {
   const settings: Record<string, Schema.Schema.Type<typeof TicketButtonSettings>> = {}
   for (const [key, value] of Object.entries(data)) if (key.endsWith("_settings")) {
     const saved = yield* stored(JsonObject, value)
-    settings[key.slice(0, -"_settings".length)] = yield* stored(TicketButtonSettings, normalizeStoredSettings(saved))
+    settings[key.slice(0, -"_settings".length)] = yield* stored(TicketButtonSettings, saved)
   }
   const messages = Array.isArray(data.approve_messages) ? data.approve_messages : []
   const decoded = yield* stored(dashboardEndpoints.updateTicketApproveMessages.body, { messages })
@@ -258,9 +244,9 @@ export const executeDashboardTickets = (input: DashboardServerOperationInput): E
         for (const roleId of [...body.mod_role, ...body.no_ping_mod_role, ...body.roles_to_add, ...body.roles_to_remove]) yield* requestBody(DecimalSnowflake, roleId)
         if ([...body.mod_role,...body.no_ping_mod_role].includes(serverId)) return yield* new InvalidRequest({message:"The everyone role cannot be configured as ticket staff"})
         if (!Number.isSafeInteger(body.th_min) || body.th_min < 0 || body.th_min > 18) return yield* new InvalidRequest({ message: "Invalid minimum Town Hall" })
-        data[`${customId}_settings`] = { ...body, naming: body.naming || "{ticket_count}-{user}", num_apply: 1,
-          apply_clans: [], townhall_requirements: {}, hero_min_percent: body.account_apply ? body.hero_min_percent ?? 0 : 0,
-          th_min: body.account_apply ? body.th_min : 0, player_info: body.account_apply && body.player_info }
+        data[`${customId}_settings`] = { ...body, naming: body.naming || "{ticket_count}-{user}",
+          hero_min_percent: body.account_apply ? body.hero_min_percent ?? 0 : 0,
+          th_min: body.account_apply ? body.th_min : 0 }
         message = "Button settings updated successfully"
         break
       }

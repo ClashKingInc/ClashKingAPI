@@ -247,7 +247,10 @@ const prepareTicketOpenTransaction = (interaction: VerifiedRuntimeInteraction) =
     WHERE links.user_id=${interaction.actorId} ORDER BY links.order_index,links.added_at` : []
   const eligible = accounts.filter((account) => accountEligible(account,settings)).slice(0,25)
   if (settings.account_apply && accounts.length === 0) return yield* prepareTicketLink(interaction,panel)
-  if (settings.account_apply && eligible.length === 0) return yield* new Forbidden({ message: "No linked account meets this ticket's requirements", reason:"linked_account" })
+  if (settings.account_apply && eligible.length === 0) {
+    if (accounts.some(account => account.townhall_level === null)) return yield* new Forbidden({ message: "Player details are not available yet. Try again shortly.", reason: "ticket_metadata" })
+    return yield* new Forbidden({ message: `This ticket requires a linked account at Town Hall ${settings.th_min} or higher${(settings.hero_min_percent ?? 0) > 0 ? ` with at least ${settings.hero_min_percent}% hero progress` : ""}.`, reason: "ticket_requirements" })
+  }
   const eligibleAccounts = eligible.map(account => ({ tag:account.tag,label:(account.name ?? account.tag).slice(0,100),
     ...(account.townhall_level === null ? {} : { townhall:account.townhall_level }) }))
   const { questions, pages } = yield* Effect.try({ try:() => ticketApplicationPages(settings,eligibleAccounts),
@@ -256,11 +259,7 @@ const prepareTicketOpenTransaction = (interaction: VerifiedRuntimeInteraction) =
   const pingLength = settings.mod_role.map((roleId) => `<@&${roleId}>`).join(" ").length + interaction.actorId.length + 4
   const staffPingLength = settings.private_thread ? [...new Set([...settings.mod_role,...settings.no_ping_mod_role])].map(roleId=>`<@&${roleId}>`).join(" ").length : 0
   if (pingLength > 2000 || staffPingLength > 2000) return yield* new Conflict({ message:"Ticket configuration exceeds Discord message limits" })
-  const configuredWelcome=!settings.opening_message && settings.new_message ? (yield* sql<{data:unknown}>`SELECT data FROM server_custom_embeds
-    WHERE server_id=${interaction.guildId} AND name=${settings.new_message}`)[0] : undefined
-  if (!settings.opening_message && settings.new_message && !configuredWelcome) return yield* new Conflict({message:"Configured ticket welcome embed no longer exists"})
-  const welcomeEmbeds=yield* Effect.try({try:()=>ticketWelcomeEmbeds(configuredWelcome?.data),
-    catch:()=>new Conflict({message:"Configured ticket welcome embeds cannot be published"})})
+  const welcomeEmbeds = ticketWelcomeEmbeds()
   const context: RuntimeContext = { panelName:panel.name,actorLabel:interaction.actorLabel,settings,questions,pages,welcomeEmbeds,
     ...(settings.opening_message ? { openingMessage:settings.opening_message } : {}),eligibleAccounts,
     ...(typeof data?.ticket_button_click_log === "string" ? {buttonClickLogChannelId:data.ticket_button_click_log} : {}),

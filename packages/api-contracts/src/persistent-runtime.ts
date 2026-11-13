@@ -181,6 +181,13 @@ export const TicketOpenPrepareEndpoint = defineEndpoint({
   response: Schema.Union([TicketReadyResponse, TicketAcceptedResponse, TicketLinkRequiredResponse]), responseMode: "json", successStatus: 200,
   summary: "Prepare or directly accept a canonical ticket-opening interaction", errors: TicketOperationErrors,
 })
+export const TicketResumeEndpoint = defineEndpoint({
+  auth: "bot", body: RuntimeInteractionProof, bodyMode: "json", method: "POST",
+  operationId: "ticketResume", path: "/v2/runtime/tickets/resume",
+  pathParams: Schema.Struct({}), query: NoQuery,
+  response: Schema.Union([TicketReadyResponse, TicketAcceptedResponse, TicketLinkRequiredResponse]), responseMode: "json", successStatus: 200,
+  summary: "Resume an actor-bound ticket preparation after account linking", errors: TicketOperationErrors,
+})
 export const TicketApprovePrepareEndpoint = defineEndpoint({
   auth: "bot", body: RuntimeInteractionProof, bodyMode: "json", method: "POST",
   operationId: "ticketApprovePrepare", path: "/v2/runtime/tickets/approve/prepare",
@@ -267,6 +274,7 @@ export const persistentRuntimeEndpoints = {
   giveawayPublicationComplete: GiveawayPublicationCompleteEndpoint,
   giveawayPublicationPending: GiveawayPublicationPendingEndpoint,
   ticketOpenPrepare: TicketOpenPrepareEndpoint,
+  ticketResume: TicketResumeEndpoint,
   ticketApprovePrepare: TicketApprovePrepareEndpoint,
   ticketOperationAdvance: TicketOperationAdvanceEndpoint,
   ticketAction: TicketActionEndpoint,

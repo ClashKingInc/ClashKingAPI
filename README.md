@@ -224,3 +224,26 @@ five recent story replays; no schema migration is required.
 
 Run the real local HTTP check against disposable SQL with:
 `bash <schema-repo>/scripts/with-test-timescale.sh --profile retained-api -- node scripts/e2e/post-story-filter.mjs`.
+
+### Ticket settings migration pause
+
+`TICKETS_PAUSED=true` temporarily returns HTTP 503 with `Retry-After: 30` for
+server ticket settings, ticket runtime controls, and the bot ticket-panel list.
+The check runs before database/authentication/metadata dependencies. Other API
+routes and public transcript files remain available. Unset the binding (or set
+it to `false`) for normal operation.
+
+Ticket and recovery Durable Objects retain queues, cursors and pending wakes
+while paused and rearm their alarms. This gate does not cancel a request or
+Discord effect already running in an older deployment. Confirm the paused
+version is fully active and existing ticket work has drained before migrating.
+For migration 081, deploy the reviewed API with this binding enabled first,
+apply the schema migrations with Goose, verify the normalized settings, then
+remove the binding. API 126's pause does not require migration 081 or the Lab
+column from migration 082; the later Lab API requires 082 before deployment.
+
+Verify this path locally with the canonical schema helper's `baseline-079`
+profile and `node scripts/e2e/ticket-pause.mjs`. The test uses the real API,
+production Durable Object implementations, persisted SQLite queues, and a
+pre-081 disposable PostgreSQL database. It checks pause responses, continued
+health availability, retained work, and SQL execution after unpausing.

@@ -1,3 +1,44 @@
 {
   "name": "@clashking/api-workspace",
   "version": "0.1.0-rc.89",
+  "private": true,
+  "packageManager": "npm@12.0.1",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "workers/api"
+  ],
+  "engines": {
+    "node": ">=26.0.0",
+    "npm": ">=12.0.0"
+  },
+  "scripts": {
+    "build": "npm run build --workspace @clashking/api-contracts && npm run build --workspace @clashking/api-client && npm run build --workspace @clashking/api-worker",
+    "clean": "node -e \"for (const path of ['dist','packages/api-contracts/dist','packages/api-client/dist','workers/api/dist','workers/api/documentation-assets']) require('fs').rmSync(path,{recursive:true,force:true})\"",
+    "dev": "npm run docs:build && node scripts/local-api-database.mjs run",
+    "contracts:pack": "node -e \"require('fs').mkdirSync('dist/packages',{recursive:true})\" && npm pack --workspace @clashking/api-contracts --pack-destination dist/packages && npm pack --workspace @clashking/api-client --pack-destination dist/packages",
+    "openapi:generate": "npm run build --workspace @clashking/api-contracts && node scripts/generate-openapi.mjs",
+    "openapi:check": "npm run openapi:generate && node scripts/check-openapi.mjs",
+    "docs:build": "npm run openapi:generate && node scripts/build-api-documentation.mjs",
+    "lint": "oxlint --deny-warnings --ignore-pattern '**/dist/**' packages workers/api",
+    "e2e:roster-assistant": "node scripts/e2e/roster-assistant.mjs",
+    "typecheck": "npm run build --workspace @clashking/api-contracts && npm run typecheck --workspace @clashking/api-client && npm run typecheck --workspace @clashking/api-worker",
+    "worker:build": "npm run build --workspace @clashking/api-worker",
+    "worker:deploy": "npm run deploy --workspace @clashking/api-worker",
+    "worker:types": "npm run types --workspace @clashking/api-worker",
+    "worker:dry-run": "npm run deploy:dry-run --workspace @clashking/api-worker"
+  },
+  "devDependencies": {
+    "@types/node": "26.4.1",
+    "miniflare": "5.20261101.0-beta",
+    "oxlint": "1.81.0",
+    "pg": "8.23.0",
+    "typescript": "7.0.2",
+    "wrangler": "4.156.1"
+  },
+  "dependencies": {
+    "@bokuweb/zstd-wasm": "0.0.27",
+    "@clashking/clash-contract": "https://github.com/ClashKingInc/ClashTestingAPI/releases/download/v1.1.3/clashking-clash-contract-1.1.3.tgz",
+    "@sentry/cloudflare": "10.73.0"
+  }
+}

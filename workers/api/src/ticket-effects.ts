@@ -61,9 +61,16 @@ const prepareChannelPayload=(work:Work)=>Effect.gen(function* () {
   return {name,type:0,topic:`ClashKing ticket ${ticketId}`,...(parentId ? {parent_id:parentId} : {}),permission_overwrites:permissionOverwrites}
 })
 
-const prepareEffect=(work:Work)=>Effect.gen(function* () {
+const prepareEffect=(work:Work,prior:Map<string,Record<string,unknown>>)=>Effect.gen(function* () {
   if (work.effect.effect_type === "create_channel") return yield* prepareChannelPayload(work)
   const request=object(work.effect.request)
+  if (work.effect.effect_type === "pin_message") {
+    const target = text(prior.get(request.target === "thread" ? "thread" : "channel")?.id)
+    if (!target) return yield* new Conflict({message:"Ticket pin target is not provisioned"})
+    // A deleted channel is not an optional pin failure and must not be revived
+    // as a usable ticket while recovering an older partial opening.
+    yield* requireTicketChannel(work.operation.server_id,target)
+  }
   if (["send_message","edit_channel","set_channel_permission","delete_message","delete_channel"].includes(work.effect.effect_type)
     && request.channelId !== undefined) {
     if (typeof request.channelId !== "string") return yield* new Conflict({message:"Stored ticket channel target is invalid"})
@@ -154,7 +161,7 @@ const executeEffect = (work: Work, prior: Map<string,Record<string,unknown>>, ch
       const messageKey = text(request.messageEffectKey), messageId = messageKey ? text(prior.get(messageKey)?.id) : undefined
       const target = request.target === "thread" ? threadId : channelId
       if (!target || !messageId || prior.get(messageKey!)?.channelId !== target) return yield* new Conflict({ message:"Ticket pin dependencies are not provisioned" })
-      yield* discord.request(`/channels/${target}/pins/${messageId}`,{ method:"PUT" })
+      yield* discord.request(`/channels/${target}/messages/pins/${messageId}`,{ method:"PUT" })
       return { id:messageId,channelId:target }
     }
     case "add_thread_member": {
@@ -303,6 +310,30 @@ const reconcile = (operation: Operation,effect: StoredEffect) => Effect.gen(func
   return undefined
 })
 
+// The channel becomes a real ticket as soon as its canonical application
+// message is durable. Optional pin/role/log failures must not erase that identity.
+const persistOpenedTicket = (operation: Operation) => Effect.gen(function* () {
+  const sql = yield* SqlClient.SqlClient
+  if (operation.ticket_number === null) return yield* new Conflict({ message:"Ticket operation has no allocated number" })
+  const results = yield* effectResults(operation.id), channelId = text(results.get("channel")?.id), threadId = text(results.get("thread")?.id)
+  if (!channelId) return yield* new Conflict({ message:"Ticket operation completed without a channel" })
+  const context = object(operation.context),settings = object(context.settings),progress = object((yield* sql<{ progress:unknown }>`SELECT progress FROM ticket_runtime_operations WHERE id=${operation.id}::uuid FOR UPDATE`)[0]?.progress)
+  const inserted = yield* sql<{ id:string }>`INSERT INTO tickets(id,server_id,channel_id,is_thread,status_id,number,panel_id,applicant_accounts,applicant_user_id,
+    thread_id,status,naming_convention,application_accounts) VALUES(${operation.ticket_id}::uuid,${operation.server_id},${channelId},false,0,
+    ${operation.ticket_number},${operation.panel_id}::uuid,${strings(progress.accounts)},${operation.actor_user_id},${threadId ?? null},'open',
+    ${text(settings.naming) ?? "{ticket_count}-{user}"},${JSON.stringify(Array.isArray(progress.applicationAccounts) ? progress.applicationAccounts : [])}::jsonb) ON CONFLICT(id) DO NOTHING RETURNING id::text`
+  if (inserted.length === 0) {
+    const existing = (yield* sql<{ server_id:string;channel_id:string;number:number;panel_id:string;applicant_user_id:string|null;thread_id:string|null }>`
+      SELECT server_id,channel_id,number,panel_id::text,applicant_user_id,thread_id FROM tickets WHERE id=${operation.ticket_id}::uuid FOR UPDATE`)[0]
+    if (!existing || existing.server_id !== operation.server_id || existing.channel_id !== channelId ||
+      existing.number !== operation.ticket_number || existing.panel_id !== operation.panel_id ||
+      existing.applicant_user_id !== operation.actor_user_id || (existing.thread_id !== null && existing.thread_id !== (threadId ?? null))) {
+      return yield* new Conflict({ message:"Ticket completion conflicts with an existing ticket identity" })
+    }
+  }
+  if (threadId) yield* sql`UPDATE tickets SET thread_id=${threadId} WHERE id=${operation.ticket_id}::uuid AND thread_id IS NULL`
+})
+
 const complete = (work: Work,outcome: "succeeded"|"pending"|"uncertain"|"failed",result: Record<string,unknown> = {},failure?: string,delay=5) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   yield* sql.withTransaction(Effect.gen(function* () {
@@ -315,8 +346,14 @@ const complete = (work: Work,outcome: "succeeded"|"pending"|"uncertain"|"failed"
       claimed_at=CASE WHEN ${outcome}='uncertain' THEN claimed_at ELSE NULL END,
       lease_expires_at=CASE WHEN ${outcome}='uncertain' THEN lease_expires_at ELSE NULL END,updated_at=clock_timestamp()
       WHERE operation_id=${work.operation.id}::uuid AND effect_key=${work.effect.effect_key}`
-    if (outcome === "failed") yield* sql`UPDATE ticket_runtime_operations SET state='failed',result=${JSON.stringify({ failure:failure ?? "ticket_effect_failed" })}::jsonb,
-      updated_at=clock_timestamp() WHERE id=${work.operation.id}::uuid`
+    if (outcome === "succeeded" && work.operation.action === "open" && work.effect.effect_key === "application:0") {
+      yield* persistOpenedTicket(work.operation)
+    }
+    if (outcome === "failed") {
+      const ticket = work.operation.action === "open" ? (yield* sql<{channel_id:string}>`SELECT channel_id FROM tickets WHERE id=${work.operation.ticket_id}::uuid`)[0] : undefined
+      yield* sql`UPDATE ticket_runtime_operations SET state='failed',result=${JSON.stringify({ failure:failure ?? "ticket_effect_failed",...(ticket ? {channelId:ticket.channel_id} : {}) })}::jsonb,
+        updated_at=clock_timestamp() WHERE id=${work.operation.id}::uuid`
+    }
     else if (outcome === "uncertain") yield* sql`UPDATE ticket_runtime_operations SET state='reconciling',updated_at=clock_timestamp() WHERE id=${work.operation.id}::uuid`
   }))
 })
@@ -356,22 +393,8 @@ const finalize = (operation: Operation) => Effect.gen(function* () {
   }
   if (operation.ticket_number === null) return yield* new Conflict({ message:"Ticket operation has no allocated number" })
   yield* sql.withTransaction(Effect.gen(function* () {
+    yield* persistOpenedTicket(operation)
     const results = yield* effectResults(operation.id), channelId = text(results.get("channel")?.id), threadId = text(results.get("thread")?.id)
-    if (!channelId) return yield* new Conflict({ message:"Ticket operation completed without a channel" })
-    const context = object(operation.context),settings = object(context.settings),progress = object((yield* sql<{ progress:unknown }>`SELECT progress FROM ticket_runtime_operations WHERE id=${operation.id}::uuid FOR UPDATE`)[0]?.progress)
-    const inserted = yield* sql<{ id:string }>`INSERT INTO tickets(id,server_id,channel_id,is_thread,status_id,number,panel_id,applicant_accounts,applicant_user_id,
-      thread_id,status,naming_convention,application_accounts) VALUES(${operation.ticket_id}::uuid,${operation.server_id},${channelId},false,0,
-      ${operation.ticket_number},${operation.panel_id}::uuid,${strings(progress.accounts)},${operation.actor_user_id},${threadId ?? null},'open',
-      ${text(settings.naming) ?? "{ticket_count}-{user}"},${JSON.stringify(Array.isArray(progress.applicationAccounts) ? progress.applicationAccounts : [])}::jsonb) ON CONFLICT(id) DO NOTHING RETURNING id::text`
-    if (inserted.length === 0) {
-      const existing = (yield* sql<{ server_id:string;channel_id:string;number:number;panel_id:string;applicant_user_id:string|null;thread_id:string|null }>`
-        SELECT server_id,channel_id,number,panel_id::text,applicant_user_id,thread_id FROM tickets WHERE id=${operation.ticket_id}::uuid FOR UPDATE`)[0]
-      if (!existing || existing.server_id !== operation.server_id || existing.channel_id !== channelId ||
-        existing.number !== operation.ticket_number || existing.panel_id !== operation.panel_id ||
-        existing.applicant_user_id !== operation.actor_user_id || existing.thread_id !== (threadId ?? null)) {
-        return yield* new Conflict({ message:"Ticket completion conflicts with an existing ticket identity" })
-      }
-    }
     yield* sql`UPDATE ticket_runtime_operations SET state='completed',result=${JSON.stringify({ channelId,...(threadId ? { threadId } : {}) })}::jsonb,
       updated_at=clock_timestamp() WHERE id=${operation.id}::uuid AND state<>'completed'`
   }))
@@ -390,6 +413,7 @@ export const runTicketOperation = (operationId: string) => Effect.gen(function* 
     yield* sql`UPDATE ticket_runtime_operations SET state=${completed ? "completed" : "failed"},result=${JSON.stringify(completed ? job.result : {failure:job?.last_error})}::jsonb,updated_at=clock_timestamp() WHERE id=${operationId}::uuid`
     return completed ? "completed" as const : "failed" as const
   }
+  let identityRecorded = false
   for (let step=0;step<32;step++) {
     const claimed = yield* claimNext(operationId)
     if (claimed.outcome === "missing" || claimed.outcome === "completed" || claimed.outcome === "failed" || claimed.outcome === "waiting") return claimed.outcome
@@ -408,9 +432,15 @@ export const runTicketOperation = (operationId: string) => Effect.gen(function* 
       const recovered = yield* reconcile(claimed.operation,claimed.effect)
       if (recovered === undefined) return "reconciling" as const
       const sql = yield* SqlClient.SqlClient
-      yield* sql`UPDATE ticket_runtime_effects SET state='succeeded',result=${JSON.stringify(recovered)}::jsonb,
-        lease_token=NULL,claimed_at=NULL,lease_expires_at=NULL,last_error=NULL,updated_at=clock_timestamp()
-        WHERE operation_id=${operationId}::uuid AND effect_key=${claimed.effect.effect_key} AND state='uncertain'`
+      yield* sql.withTransaction(Effect.gen(function* () {
+        yield* sql`UPDATE ticket_runtime_effects SET state='succeeded',result=${JSON.stringify(recovered)}::jsonb,
+          lease_token=NULL,claimed_at=NULL,lease_expires_at=NULL,last_error=NULL,updated_at=clock_timestamp()
+          WHERE operation_id=${operationId}::uuid AND effect_key=${claimed.effect.effect_key} AND state='uncertain'`
+        if (claimed.operation.action === "open" && claimed.effect.effect_key === "application:0") {
+          yield* persistOpenedTicket(claimed.operation)
+          identityRecorded = true
+        }
+      }))
       continue
     }
     if (claimed.outcome !== "work") return "waiting" as const
@@ -425,7 +455,7 @@ export const runTicketOperation = (operationId: string) => Effect.gen(function* 
     // Explicit channel/category lookups are read-only and precede mutations. Their
     // known failures must not enter ambiguous-create reconciliation: there is
     // no created channel to discover. Only executeEffect crosses that boundary.
-    const preflight=yield* prepareEffect(work).pipe(Effect.result)
+    const preflight=yield* prepareEffect(work,dependencies.success).pipe(Effect.result)
     if (preflight._tag === "Failure") {
       const failure=preflight.failure
       if (failure instanceof UpstreamUnavailable || failure instanceof RateLimited) {
@@ -435,9 +465,25 @@ export const runTicketOperation = (operationId: string) => Effect.gen(function* 
       yield* complete(work,"failed",{},failure._tag)
       return "failed" as const
     }
+    // Also register older resumed operations whose message receipt predates
+    // early registration. Never replay a successful channel or message effect.
+    if (!identityRecorded && work.operation.action === "open" && dependencies.success.has("application:0")) {
+      yield* sql.withTransaction(persistOpenedTicket(work.operation))
+      identityRecorded = true
+    }
     const result = yield* executeEffect(work,dependencies.success,preflight.success).pipe(Effect.result)
-    if (result._tag === "Success") { yield* complete(work,"succeeded",result.success); continue }
+    if (result._tag === "Success") {
+      yield* complete(work,"succeeded",result.success)
+      if (work.operation.action === "open" && work.effect.effect_key === "application:0") identityRecorded = true
+      continue
+    }
     const failure = result.failure
+    // Pinning is optional presentation. A denied pin or removed message must
+    // not strand a usable channel or prevent its staff controls from working.
+    if (work.effect.effect_type === "pin_message" && (failure instanceof Forbidden || failure instanceof InvalidRequest || failure instanceof NotFound)) {
+      yield* complete(work,"succeeded",{ skipped:true,reason:failure._tag },"pin_unavailable")
+      continue
+    }
     if (failure instanceof RateLimited) { yield* complete(work,"pending",{},"rate_limited",failure.retryAfterSeconds); return "waiting" as const }
     if (failure instanceof UpstreamUnavailable) {
       const safelyRepeatable = replaySafeEffectTypes.includes(work.effect.effect_type)

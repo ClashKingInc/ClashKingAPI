@@ -90,6 +90,11 @@ jobs:
           WRANGLER_LOG_PATH: ${{ runner.temp }}/ticket-migration-wrangler.log
         run: bash .ci-schema/scripts/with-test-timescale.sh --profile baseline-079 -- node scripts/e2e/ticket-current-settings.mjs
 
+      - name: Verify complete ticket opening and recovery with uncached reads
+        env:
+          CLASHKING_LOCAL_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data
+        run: bash .ci-schema/scripts/with-test-timescale.sh --profile retained-api -- node scripts/e2e/ticket-opening-lifecycle.mjs
+
       - name: Verify Legend performance API against disposable Timescale
         env:
           CLASHKING_E2E_STATIC_ASSETS_ROOT: ${{ github.workspace }}/.ci-assets/assets/static_data

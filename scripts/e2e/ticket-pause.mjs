@@ -27,7 +27,7 @@ const compiled = await build({ entryPoints: ['workers/api/src/index.ts'], bundle
 const base = {
   host: '127.0.0.1', port: 8834, resourcePersistencePath: storage, modulesRoot: '/local-api',
   compatibilityDate: '2026-08-22', compatibilityFlags: ['nodejs_compat'],
-  hyperdrives: { HYPERDRIVE: database.href, HYPERDRIVE_FRESH: database.href },
+  hyperdrives: { HYPERDRIVE: "postgres://clashking_test:clashking_test@127.0.0.1:1/clashking_test", HYPERDRIVE_FRESH: database.href },
   kvNamespaces: ['API_CACHE'], r2Buckets: ['ASSETS','WAR_ARCHIVE','POSTS','APP_UPDATES','MEDIA','TICKETING'],
   durableObjects: { TICKET_RUNTIME: {className:'ObservedTicket',useSQLite:true}, RUNTIME_RECOVERY:{className:'ObservedRecovery',useSQLite:true} },
   outboundService: () => new Response('No external providers in pause E2E', {status:503}),

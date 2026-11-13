@@ -37,7 +37,9 @@ export class RuntimeRecoveryCoordinator extends DurableObject<DeferredRuntimeBin
 
   protected async readPage(kind: RecoveryKind, cursor?: RecoveryCursor, signal?: AbortSignal): Promise<RecoveryPage> {
     const { databaseLayer } = await import("./database.js")
-    return Effect.runPromise(pendingRuntimePage(kind,cursor).pipe(Effect.provide(databaseLayer(this.env)),Effect.scoped),{signal})
+    // Operational reads must observe preceding writes; cached Hyperdrive can
+    // hide effect receipts and make a created ticket fail during setup.
+    return Effect.runPromise(pendingRuntimePage(kind,cursor).pipe(Effect.provide(databaseLayer(this.env, true)),Effect.scoped),{signal})
   }
 
   protected async wakeJob(job: RecoveryJob): Promise<void> {

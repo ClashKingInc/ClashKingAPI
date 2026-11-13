@@ -48,9 +48,11 @@ export class TicketRuntimeCoordinator extends DurableObject<WorkerBindings> {
    * exercise real storage without pretending to run PostgreSQL in Workerd. */
   protected async executeJob(operationId: string): Promise<boolean> {
     const { databaseLayer } = await import("./database.js")
+    // Operational reads must observe preceding writes; cached Hyperdrive can
+    // hide effect receipts and make a created ticket fail during setup.
     const environment = WorkerEnvironment.layer(this.env)
     const discord = DiscordApi.layer.pipe(Layer.provideMerge(environment))
-    const layer = Layer.mergeAll(databaseLayer(this.env),discord)
+    const layer = Layer.mergeAll(databaseLayer(this.env, true),discord)
     if (operationId.startsWith("click:")) return Effect.runPromise(runTicketButtonClickLog(operationId.slice(6)).pipe(Effect.provide(layer),Effect.scoped))
     if (operationId.startsWith("dashboard:")) return Effect.runPromise(runTicketDashboardJob(operationId.slice(10)).pipe(Effect.provide(layer),Effect.scoped))
     if (/^[0-9a-f]{64}$/u.test(operationId)) {

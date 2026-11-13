@@ -201,7 +201,9 @@ export const resumeTicketAfterLink = (interaction: VerifiedRuntimeInteraction) =
   const prepared = (yield* sql.unsafe<PreparationRow>(`SELECT ${preparationColumns} FROM ticket_account_preparations WHERE id=$1::uuid`, [yield* uuid(match[1]!)]))[0]
   if (!prepared || prepared.action !== "link" || !prepared.button_id || prepared.actor_user_id !== interaction.actorId || prepared.server_id !== interaction.guildId || prepared.channel_id !== interaction.channelId) return yield* new Forbidden({ message: "This ticket continuation belongs to another user or server", reason: "wrong_message" })
   if (new Date(prepared.expires_at).getTime() <= Date.now()) return yield* new Conflict({ message: "Ticket continuation expired. Click the ticket panel again." })
-  const source = yield* loadTicketPanelSource({ guildId: prepared.server_id, channelId: prepared.channel_id, messageId: prepared.origin_message_id, panelId: prepared.panel_id, buttonId: prepared.button_id })
+  const savedContext = prepared.context !== null && typeof prepared.context === "object" ? prepared.context as { menuId?: unknown } : {}
+  const menuId = typeof savedContext.menuId === "string" ? savedContext.menuId : undefined
+  const source = yield* loadTicketPanelSource({ guildId: prepared.server_id, channelId: prepared.channel_id, messageId: prepared.origin_message_id, panelId: prepared.panel_id, buttonId: prepared.button_id, ...(menuId ? { menuId } : {}) })
   if (source.updated_at !== prepared.source_updated_at) return yield* new Conflict({ message: "Ticket settings changed. Click the ticket panel again." })
-  return yield* prepareTicketOpen({ ...interaction, messageId: prepared.origin_message_id, data: { component_type: 2, custom_id: source.customId } })
+  return yield* prepareTicketOpen({ ...interaction, messageId: prepared.origin_message_id, data: menuId ? { component_type: 3, custom_id: menuId, values: [source.customId] } : { component_type: 2, custom_id: source.customId } })
 }).pipe(Effect.catchTag("SqlError", cause => Effect.fail(new DatabaseFailure({ cause, message: "Ticket continuation lookup failed" }))))

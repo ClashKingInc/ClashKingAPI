@@ -40,7 +40,7 @@ export const prepareTicketLink = (interaction: VerifiedRuntimeInteraction, panel
   const row = (yield* sql<Preparation>`INSERT INTO ticket_account_preparations
     (id,interaction_id,request_hash,action,actor_user_id,server_id,channel_id,origin_message_id,panel_id,button_id,source_updated_at,context)
     VALUES (${crypto.randomUUID()}::uuid,${interaction.id},${interaction.requestHash},'link',${interaction.actorId},${interaction.guildId},
-      ${interaction.channelId},${interaction.messageId!},${panel.id}::uuid,${panel.buttonId}::uuid,${panel.updated_at}::timestamptz,${JSON.stringify({ content })}::jsonb)
+      ${interaction.channelId},${interaction.messageId!},${panel.id}::uuid,${panel.buttonId}::uuid,${panel.updated_at}::timestamptz,${JSON.stringify({ content, ...(interaction.data.component_type === 3 ? { menuId: interaction.data.custom_id } : {}) })}::jsonb)
     RETURNING id::text,interaction_id,request_hash,action,actor_user_id,server_id,channel_id,origin_message_id,panel_id::text,button_id::text,expires_at::text,context`)[0]
   if (row === undefined) return yield* new DatabaseFailure({cause:undefined,message:"Ticket linking preparation was not saved"})
   return yield* response(row)

@@ -346,7 +346,7 @@ const complete = (work: Work,outcome: "succeeded"|"pending"|"uncertain"|"failed"
       claimed_at=CASE WHEN ${outcome}='uncertain' THEN claimed_at ELSE NULL END,
       lease_expires_at=CASE WHEN ${outcome}='uncertain' THEN lease_expires_at ELSE NULL END,updated_at=clock_timestamp()
       WHERE operation_id=${work.operation.id}::uuid AND effect_key=${work.effect.effect_key}`
-    if (outcome === "succeeded" && work.operation.action === "open" && work.effect.effect_key === "application:0") {
+    if (outcome === "succeeded" && work.operation.action === "open" && ["application:0", "thread"].includes(work.effect.effect_key)) {
       yield* persistOpenedTicket(work.operation)
     }
     if (outcome === "failed") {
@@ -436,7 +436,7 @@ export const runTicketOperation = (operationId: string) => Effect.gen(function* 
         yield* sql`UPDATE ticket_runtime_effects SET state='succeeded',result=${JSON.stringify(recovered)}::jsonb,
           lease_token=NULL,claimed_at=NULL,lease_expires_at=NULL,last_error=NULL,updated_at=clock_timestamp()
           WHERE operation_id=${operationId}::uuid AND effect_key=${claimed.effect.effect_key} AND state='uncertain'`
-        if (claimed.operation.action === "open" && claimed.effect.effect_key === "application:0") {
+        if (claimed.operation.action === "open" && ["application:0", "thread"].includes(claimed.effect.effect_key)) {
           yield* persistOpenedTicket(claimed.operation)
           identityRecorded = true
         }

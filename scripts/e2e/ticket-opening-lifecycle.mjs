@@ -41,7 +41,7 @@ try{
  await db.query("INSERT INTO servers(id,name) VALUES($1,'Opening lifecycle')",[guild]);
  for(const mode of ['normal','denied','role']){
   const panel=randomUUID(),button=randomUUID(),customId=`ck:ticket:open:${panel}:${button}`;
-  const settings={mod_role:[staffRole],no_ping_mod_role:[],private_thread:mode==='normal',th_min:0,hero_min_percent:0,naming:mode+'-{user}',account_apply:false,roles_to_add:mode==='role'?[addedRole]:[],roles_to_remove:[],application_questions:[{id:'why',label:'Why?',type:'text',required:true,options:[],order:0}],opening_message:{content:'Welcome'}};
+  const settings={mod_role:[staffRole],no_ping_mod_role:[],private_thread:mode!=='denied',th_min:0,hero_min_percent:0,naming:mode+'-{user}',account_apply:false,roles_to_add:mode==='role'?[addedRole]:[],roles_to_remove:[],application_questions:[{id:'why',label:'Why?',type:'text',required:true,options:[],order:0}],opening_message:{content:'Welcome'}};
   await db.query('INSERT INTO ticket_panels(id,server_id,name,components,data) VALUES($1,$2,$3,$4,$5)',[panel,guild,mode,JSON.stringify([{id:button,type:2,custom_id:customId,label:'Apply',style:1}]),JSON.stringify({[customId+'_settings']:settings,legacy_publications:{[originChannel+':'+originMessage]:{message:{components:[{type:1,components:[{type:2,custom_id:customId,label:'Apply',style:1}]}]}}}})]);
   const prepared=await call('/v2/runtime/tickets/open/prepare',proof({custom_id:customId,component_type:2}));
   const answer=proof({custom_id:prepared.form.customId,components:[{type:1,components:[{type:4,custom_id:'q:0',value:'Hello'}]}]},{type:5});
@@ -57,7 +57,7 @@ try{
   const ticket=(await db.query('SELECT id,channel_id,thread_id FROM tickets WHERE id=$1',[prepared.ticketId])).rows[0];assert(ticket,'The created ticket must remain registered');
   if(mode==='role')assert.equal(op.result.channelId,ticket.channel_id);
   assert.equal(created.filter(c=>c.mode===mode).length,1);assert(pins.some(p=>p.channel===ticket.channel_id));
-  if(mode==='normal')assert(ticket.thread_id,'Private staff thread attached to existing ticket');
+  if(mode!=='denied')assert(ticket.thread_id,'Private staff thread attached to existing ticket');
   if(mode==='denied')assert.equal((await db.query("SELECT result->>'skipped' AS skipped FROM ticket_runtime_effects WHERE operation_id=$1 AND effect_key='pin-application'",[prepared.operationId])).rows[0].skipped,'true');
   if(mode==='role'){
     // Reproduce an older operation with durable messages but no ticket row.

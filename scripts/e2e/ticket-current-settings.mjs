@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { spawn,execFileSync } from 'node:child_process';
 import { randomUUID,generateKeyPairSync,sign } from 'node:crypto';
+import { createServer } from 'node:http';
 import { mkdtempSync,copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join,resolve } from 'node:path';
@@ -16,6 +17,11 @@ const guild='922222222222222901',actor='922222222222222902',other='9222222222222
 const panel=randomUUID(),button=randomUUID(),customId=`ck:ticket:open:${panel}:${button}`;
 const {privateKey,publicKey}=generateKeyPairSync('ed25519');const publicHex=publicKey.export({type:'spki',format:'der'}).subarray(-32).toString('hex');
 const key='ticket-e2e-only-'.padEnd(43,'x');let seq=922222222222222910n;
+// Effects may wake as soon as the form is accepted. Route every Discord request
+// to loopback, including background requests after the HTTP response returns.
+const provider=createServer((request,response)=>{request.resume();response.writeHead(503,{'content-type':'application/json'});response.end(JSON.stringify({message:'Local fixture unavailable'}));});
+await new Promise((resolveListen,reject)=>provider.once('error',reject).listen(0,'127.0.0.1',resolveListen));
+const providerOrigin=`http://127.0.0.1:${provider.address().port}`;
 const saved={mod_role:['922222222222222907'],no_ping_mod_role:[],questions:['Why join?','Second?','Third?','Fourth?','Fifth?','Sixth?'],account_apply:false,private_thread:false,th_min:1,naming:'{ticket_count}-{user}',num_apply:25,player_info:false,apply_clans:[],roles_to_add:[],roles_to_remove:[],townhall_requirements:{},new_message:'Welcome'};
 const welcome={content:'Welcome text',embeds:[{description:'Welcome to the ticket'}],components:[{type:1,components:[{type:2,style:5,label:'Guide',url:'https://example.com/guide',custom_id:'redundant'},{type:2,style:1,label:'Old action',custom_id:'p_old'}]}]};
 const extra={...saved,new_message:null,no_ping_mod_role:null,account_apply:true,questions:['  '+ '😀'.repeat(25),'Two','Three','Four','Five'],message:{description:'Inline welcome',type:'rich',color:null,image:{url:'attachment://missing',proxy_url:'https://example.com/image.png'}}};
@@ -24,7 +30,7 @@ await db.query("INSERT INTO server_custom_embeds(server_id,name,data) VALUES($1,
 await db.query('INSERT INTO ticket_panels(id,server_id,name,components,data) VALUES($1::uuid,$2,$3,$4::jsonb,$5::jsonb)',[panel,guild,'Ticket fixture',JSON.stringify([{id:button,type:2,custom_id:customId,label:'Apply',style:1}]),JSON.stringify({[customId+'_settings']:saved,extra_settings:extra,legacy_publications:{[channel+':'+message]:{message:{components:[{type:1,components:[{type:2,custom_id:customId,label:'Apply',style:1}]}]}}}})]);
 let logs='';const children=[];
 const start=async(cwd,port)=>{
- const child=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{cwd,stdio:['ignore','pipe','pipe'],env:{...process.env,CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_LOCAL_STATIC_ASSETS_ROOT,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_ADMIN_IDENTITY:'0',CLASHKING_E2E_API_BOT_TOKEN:key,CLASHKING_LOCAL_DISCORD_CLIENT_ID:app,CLASHKING_LOCAL_DISCORD_APPLICATION_ID:app,CLASHKING_LOCAL_DISCORD_PUBLIC_KEY:publicHex,CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'fixture',CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',CLASHKING_LOCAL_PRODUCTION_READS:'0',CLASHKING_LOCAL_FCM_CREDENTIALS_FILE:''}});
+ const child=spawn(process.execPath,['scripts/start-local-rewrite-api.mjs'],{cwd,stdio:['ignore','pipe','pipe'],env:{...process.env,CLASHKING_LOCAL_STATIC_ASSETS_ROOT:process.env.CLASHKING_LOCAL_STATIC_ASSETS_ROOT,CLASHKING_LOCAL_API_PORT:String(port),CLASHKING_LOCAL_ADMIN_IDENTITY:'0',CLASHKING_E2E_API_BOT_TOKEN:key,CLASHKING_LOCAL_DISCORD_CLIENT_ID:app,CLASHKING_LOCAL_DISCORD_APPLICATION_ID:app,CLASHKING_LOCAL_DISCORD_PUBLIC_KEY:publicHex,CLASHKING_LOCAL_DISCORD_CLIENT_SECRET:'fixture',CLASHKING_LOCAL_DISCORD_BOT_TOKEN:'fixture-only',CLASHKING_LOCAL_DISCORD_TEST_ORIGIN:providerOrigin,CLASHKING_LOCAL_ARCHIVE_BRIDGE:'0',CLASHKING_LOCAL_PRODUCTION_READS:'0',CLASHKING_LOCAL_FCM_CREDENTIALS_FILE:''}});
  let childLogs='';children.push(child);const capture=x=>{logs+=x;childLogs+=x};child.stdout.on('data',capture);child.stderr.on('data',capture);
  const origin=`http://127.0.0.1:${port}`;let ready=false;
  for(let i=0;i<120;i++){if(child.exitCode!==null)throw Error(logs.slice(-3000));try{ready=(await fetch(origin+'/v2/health')).ok&&childLogs.includes('isolated_api_ready')&&childLogs.includes('local_static_assets_seeded')}catch{}if(ready)break;await new Promise(r=>setTimeout(r,250));}
@@ -76,4 +82,4 @@ try {
  const resumed=await call(current,'/v2/runtime/tickets/resume',proof(`ck:ticket:resume:${missing.preparationId}`));assert.equal(resumed.outcome,'ready');assert.equal(resumed.form.fields.length,5);assert.equal(resumed.form.fields[0].customId,'account');
  const resumedMenu=await call(current,'/v2/runtime/tickets/resume',proof(`ck:ticket:resume:${missingMenu.preparationId}`));assert.equal(resumedMenu.outcome,'ready');
  console.log('PASS migrated settings and welcome; previous Worker multi-page operation resumed with all answers after migration; current single-form limits and inline-link resume');
-} finally { for(const child of children)child.kill('SIGTERM');await db.end(); }
+} finally { for(const child of children)child.kill('SIGTERM');await new Promise(resolveClose=>provider.close(resolveClose));await db.end(); }

@@ -163,7 +163,7 @@ export const calculateRosterMaxPercent = (player: RosterProgressPlayer): number 
 }
 
 export const staticMetadataSectionsForPath = (pathname: string): ReadonlyArray<string> => {
-  if (pathname === "/v2/runtime/tickets/open/prepare" || /^\/v2\/runtime\/ticket-operations\/[^/]+\/advance$/u.test(pathname)) return ["heroes"]
+  if (pathname === "/v2/runtime/tickets/open/prepare" || pathname === "/v2/runtime/tickets/resume" || /^\/v2\/runtime\/ticket-operations\/[^/]+\/advance$/u.test(pathname)) return ["heroes"]
   const staticMatch = pathname.match(/^\/v2\/static\/([^/]+)\//u)
   if (staticMatch?.[1]) { try { return [decodeURIComponent(staticMatch[1])] } catch { return [] } }
   if (pathname === "/v2/bot/players/upgrade-progress") return ["troops", "heroes", "spells", "pets", "equipment"]

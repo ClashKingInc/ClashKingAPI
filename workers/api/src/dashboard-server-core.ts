@@ -386,6 +386,7 @@ const panelOperation = (input: DashboardServerOperationInput) => database("Welco
 interface RoleRow { readonly id: string; readonly server_id: string; readonly clan_tag: string | null; readonly type: string; readonly option: string; readonly role_id: string; readonly created_at: Date | string; readonly updated_at: Date | string }
 const roleValue = (row: RoleRow) => ({ id: row.id, server_id: row.server_id, ...optional("clan_tag", row.clan_tag), type: row.type, option: row.option, role_id: row.role_id, created_at: iso(row.created_at), updated_at: iso(row.updated_at) })
 const roleColumns = "id::text, server_id, clan_tag, type, option, role_id, created_at, updated_at"
+const isTenureRule = (type: string, option: string) => type === "status" && /^[0-9]{1,4}$/u.test(option) && Number(option) >= 1 && Number(option) <= 1200
 const roleOperation = (input: DashboardServerOperationInput) => database("Server role operation failed", Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   const serverId = serverIdFor(input)
@@ -396,9 +397,16 @@ const roleOperation = (input: DashboardServerOperationInput) => database("Server
     return { server_id: serverId, roles, count: roles.length }
   }
   return yield* sql.withTransaction(Effect.gen(function* () {
+    // Serialize rule edits with the Lab switch. A request cannot create or
+    // change a tenure rule after the same server has disabled the experiment.
+    const server = (yield* sql<{lab_tenure_roles_enabled:boolean}>`SELECT lab_tenure_roles_enabled FROM servers WHERE id=${serverId} FOR UPDATE`)[0]
+    if (!server) return yield* new NotFound({ message: "Server not found" })
     const id = text(input.path.roleId)
     if (operation !== "createServerRole") yield* validateUuid(id)
     if (operation === "deleteServerRole") {
+      const existing = yield* sql.unsafe<RoleRow>(`SELECT ${roleColumns} FROM server_roles WHERE server_id = $1 AND id = $2::uuid`, [serverId, id])
+      const rule = yield* requireRow(existing, "Server role not found")
+      if (isTenureRule(rule.type, rule.option) && !server.lab_tenure_roles_enabled) return yield* new Forbidden({ message: "Enable tenure roles in Lab before changing tenure rules" })
       const rows = yield* sql.unsafe<RoleRow>(`DELETE FROM server_roles WHERE server_id = $1 AND id = $2::uuid RETURNING ${roleColumns}`, [serverId, id])
       const removed = yield* requireRow(rows, "Server role not found")
       // Removing a mapping relinquishes control; it does not revoke a role now
@@ -414,6 +422,7 @@ const roleOperation = (input: DashboardServerOperationInput) => database("Server
       values = { ...previous, ...values }
     }
     const type = text(values.type).trim(), option = text(values.option).trim(), roleId = text(values.role_id).trim()
+    if ((isTenureRule(type, option) || previous && isTenureRule(previous.type, previous.option)) && !server.lab_tenure_roles_enabled) return yield* new Forbidden({ message: "Enable tenure roles in Lab before changing tenure rules" })
     const clanTag = text(values.clan_tag).trim() ? normalizeTag(values.clan_tag) : null
     if (!option || !/^\d+$/u.test(roleId)) return yield* new InvalidRequest({ message: "option and a decimal-string role_id are required" })
     if (clanTag !== null && type !== "clan_role") return yield* new InvalidRequest({ message: "Only clan_role can use clan_tag" })
@@ -429,11 +438,11 @@ const roleOperation = (input: DashboardServerOperationInput) => database("Server
   }))
 }))
 
-const settingsFields: Readonly<Record<string, string>> = { auto_eval_triggers: "auto_role_triggers", auto_eval_role_treatment: "auto_role_treatment", auto_eval_blacklist_roles: "auto_role_blacklist_ids", role_leave_delay_minutes: "role_leave_delay_minutes", embed_color: "embed_color", nickname_rule: "nickname_rule", non_family_nickname_rule: "non_family_nickname_rule", change_nickname: "change_nickname", flair_non_family: "flair_non_family", auto_eval_nickname: "auto_eval_nickname", autoeval_log: "autoeval_log_channel_id", autoeval: "autoeval_enabled", full_whitelist_role: "full_whitelist_role_id", tied: "tied_stats_only", family_label: "family_label" }
+const settingsFields: Readonly<Record<string, string>> = { lab_tenure_roles_enabled: "lab_tenure_roles_enabled", auto_eval_triggers: "auto_role_triggers", auto_eval_role_treatment: "auto_role_treatment", auto_eval_blacklist_roles: "auto_role_blacklist_ids", role_leave_delay_minutes: "role_leave_delay_minutes", embed_color: "embed_color", nickname_rule: "nickname_rule", non_family_nickname_rule: "non_family_nickname_rule", change_nickname: "change_nickname", flair_non_family: "flair_non_family", auto_eval_nickname: "auto_eval_nickname", autoeval_log: "autoeval_log_channel_id", autoeval: "autoeval_enabled", full_whitelist_role: "full_whitelist_role_id", tied: "tied_stats_only", family_label: "family_label" }
 const roleRefreshSettings = new Set(["auto_eval_triggers","auto_eval_role_treatment", "auto_eval_blacklist_roles","role_leave_delay_minutes", "nickname_rule", "non_family_nickname_rule", "change_nickname", "flair_non_family", "auto_eval_nickname", "autoeval"])
 const loadSettings = (serverId: string) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
-  const rows = yield* sql<JsonRecord>`SELECT id AS server_id, id AS server, name, embed_color, nickname_rule, non_family_nickname_rule, change_nickname, flair_non_family, role_leave_delay_minutes, auto_eval_nickname, auto_role_triggers AS auto_eval_triggers, auto_role_treatment AS auto_eval_role_treatment, auto_role_blacklist_ids AS auto_eval_blacklist_roles, autoeval_log_channel_id AS autoeval_log, autoeval_enabled AS autoeval, full_whitelist_role_id AS full_whitelist_role, autoboard_limit, tied_stats_only AS tied, family_label,
+  const rows = yield* sql<JsonRecord>`SELECT id AS server_id, id AS server, name, lab_tenure_roles_enabled, embed_color, nickname_rule, non_family_nickname_rule, change_nickname, flair_non_family, role_leave_delay_minutes, auto_eval_nickname, auto_role_triggers AS auto_eval_triggers, auto_role_treatment AS auto_eval_role_treatment, auto_role_blacklist_ids AS auto_eval_blacklist_roles, autoeval_log_channel_id AS autoeval_log, autoeval_enabled AS autoeval, full_whitelist_role_id AS full_whitelist_role, autoboard_limit, tied_stats_only AS tied, family_label,
     jsonb_build_object('clan', link_parse_clan, 'army', link_parse_army, 'player', link_parse_player, 'base', link_parse_base, 'show', link_parse_show) AS link_parse FROM servers WHERE id = ${serverId}`
   const row = yield* requireRow(rows, "Server not found")
   const countdowns = yield* sql<{ type: string; channel_id: string }>`SELECT type, channel_id FROM server_countdowns WHERE server_id = ${serverId} AND clan_tag IS NULL AND NOT disabled ORDER BY type`

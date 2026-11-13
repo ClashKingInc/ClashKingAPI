@@ -113,6 +113,7 @@ export const LinkParseSettings = Schema.Struct({
   show: OptionalBoolean,
 })
 export const ServerSettingsUpdate = Schema.Struct({
+  lab_tenure_roles_enabled: OptionalBoolean,
   embed_color: OptionalNumber,
   nickname_rule: OptionalString,
   non_family_nickname_rule: OptionalString,
@@ -971,6 +972,7 @@ export const ServerSettings = Schema.Struct({
   server_id: Schema.String,
   server: Schema.String,
   name: Schema.String,
+  lab_tenure_roles_enabled: Schema.Boolean,
   embed_color: OptionalString,
   nickname_rule: OptionalString,
   non_family_nickname_rule: OptionalString,

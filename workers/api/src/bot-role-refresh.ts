@@ -11,9 +11,6 @@ import { DatabaseFailure, Forbidden, InvalidRequest, NotFound, UpstreamUnavailab
 import { readBoundedJson } from "./request-body.js"
 
 export const roleRefreshCategories = ["family", "clan", "leadership", "townhall", "builderhall", "league", "builder_league", "category", "nicknames", "tenure", "roster"] as const
-// Temporarily disabled by product decision. Keep saved rules and queued work
-// intact, but do not scan members, claim tenure-only jobs, or alter tenure roles.
-const tenureRefreshEnabled = false
 const idPattern = /^[0-9]{15,20}$/u
 const uuid = /^[0-9a-f-]{36}$/iu
 // The Gateway serializes role-less members without `roles` (Disgo omitempty).
@@ -73,14 +70,14 @@ export const manualRefreshTargets = (bindings:WorkerBindings,serverId:string,bod
 
 })
 
-export const claimRefreshJobs = (requestId?: string, serverId?: string, includeTenure = false, includeRoster = false, includeRoleTreatment = false, includeAutomaticPolicy = false, automaticOnly = false) => Effect.gen(function* () {
+export const claimRefreshJobs = (requestId?: string, serverId?: string, includeTenure = false, includeRoster = false, includeRoleTreatment = false, includeAutomaticPolicy = false, automaticOnly = false, supportsLabTenure = false) => Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient
   // A single lease per member serializes manual and automatic refreshes. Token
   // fencing prevents a crashed/expired attempt acknowledging a newer revision.
   return yield* sql.withTransaction(Effect.gen(function* () {
     // Time passing is itself a tenure input. Schedule mismatched cached members
     // without requiring a game event or the independent game-autoeval setting.
-    if (tenureRefreshEnabled && !requestId && includeTenure) yield* sql`INSERT INTO role_refresh_jobs(id,server_id,user_id,categories)
+    if (supportsLabTenure && !requestId && includeTenure) yield* sql`INSERT INTO role_refresh_jobs(id,server_id,user_id,categories)
       SELECT 'tenure:'||server.id||':'||member.user_id,server.id,member.user_id,ARRAY['tenure']::text[]
       FROM servers server JOIN discord_cache.members member ON member.guild_id=server.id
       JOIN discord_cache.guilds guild ON guild.id=server.id
@@ -92,7 +89,7 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
           AND (CASE WHEN rule.option ~ '^[0-9]{1,4}$' THEN rule.option::int ELSE 0 END) BETWEEN 1 AND 1200
           AND joined.joined_at+make_interval(months=>(CASE WHEN rule.option ~ '^[0-9]{1,4}$' THEN rule.option::int ELSE 0 END))<=now()
         ORDER BY (CASE WHEN rule.option ~ '^[0-9]{1,4}$' THEN rule.option::int ELSE 0 END) DESC,rule.role_id LIMIT 1) earned ON true
-      WHERE server.left_at IS NULL AND (${serverId ?? null}::text IS NULL OR server.id=${serverId ?? null})
+      WHERE server.left_at IS NULL AND server.lab_tenure_roles_enabled AND (${serverId ?? null}::text IS NULL OR server.id=${serverId ?? null})
         AND COALESCE(member.data->'user'->>'bot','false')<>'true' AND joined.joined_at IS NOT NULL
         AND guild.available AND guild.metadata_complete AND guild.members_complete
         AND guild.generation=shard.generation AND shard.healthy AND shard.heartbeat_at>now()-${gatewayHeartbeatFreshnessSeconds}*interval '1 second'
@@ -105,11 +102,15 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
       ON CONFLICT(id) DO UPDATE SET completed_at=NULL,result=NULL,attempts=0,due_at=now(),revision=role_refresh_jobs.revision+1,updated_at=now()
       WHERE role_refresh_jobs.completed_at<now()-interval '1 hour' OR (role_refresh_jobs.attempts>=12 AND role_refresh_jobs.updated_at<now()-interval '1 hour')`
     yield* sql`DELETE FROM role_refresh_jobs WHERE id IN (SELECT id FROM role_refresh_jobs WHERE completed_at<now()-interval '7 days' ORDER BY completed_at LIMIT 100)`
-    const candidates = yield* sql<{ id: string; server_id: string; user_id: string; revision: string; request_id: string | null; preview: boolean; categories: string[]; roster_role_ids: string[]; role_treatment: "add" | "remove" | "both"; auto_role_treatment: "add" | "remove" | "both"; auto_role_blacklist_ids: string[] }>`
-      SELECT job.id,job.server_id,job.user_id,job.revision::text,job.request_id,job.preview,job.categories,job.roster_role_ids,job.role_treatment,server.auto_role_treatment,server.auto_role_blacklist_ids FROM role_refresh_jobs job
+    const candidates = yield* sql<{ id: string; server_id: string; user_id: string; revision: string; request_id: string | null; preview: boolean; categories: string[]; roster_role_ids: string[]; role_treatment: "add" | "remove" | "both"; auto_role_treatment: "add" | "remove" | "both"; auto_role_blacklist_ids: string[]; lab_tenure_roles_enabled: boolean }>`
+      SELECT job.id,job.server_id,job.user_id,job.revision::text,job.request_id,job.preview,job.categories,job.roster_role_ids,job.role_treatment,server.auto_role_treatment,server.auto_role_blacklist_ids,server.lab_tenure_roles_enabled FROM role_refresh_jobs job
       JOIN servers server ON server.id=job.server_id
       WHERE completed_at IS NULL AND due_at<=now() AND attempts<12
-        AND (${tenureRefreshEnabled} OR NOT (job.categories <@ ARRAY['tenure']::text[]))
+        AND ((${supportsLabTenure} AND ${includeTenure} AND server.lab_tenure_roles_enabled) OR NOT (job.categories <@ ARRAY['tenure']::text[]))
+        -- Older workers cannot protect a role shared with a disabled tenure
+        -- rule. Pause their jobs for such servers until a capable worker claims them.
+        AND (${supportsLabTenure} OR NOT EXISTS (SELECT 1 FROM server_roles rule WHERE rule.server_id=server.id AND rule.type='status'
+          AND rule.option ~ '^[0-9]{1,4}$' AND (CASE WHEN rule.option ~ '^[0-9]{1,4}$' THEN rule.option::int ELSE 0 END) BETWEEN 1 AND 1200))
         AND (job.request_id IS NULL OR NOT EXISTS (SELECT 1 FROM role_refresh_requests request WHERE request.id=job.request_id AND request.message_id IS NULL))
         AND (${includeRoster} OR NOT ('roster'=ANY(job.categories)))
         -- Older consumers apply both directions unconditionally. They must not
@@ -133,7 +134,7 @@ export const claimRefreshJobs = (requestId?: string, serverId?: string, includeT
         WHERE role_refresh_leases.expires_at<=now() RETURNING token::text,expires_at::text`
       if (lease[0]) {
         yield* sql`UPDATE role_refresh_jobs SET attempts=attempts+1 WHERE id=${row.id}`
-        jobs.push({ ...row, categories: tenureRefreshEnabled ? row.categories : row.categories.filter(category => category !== "tenure"), token: lease[0].token, expires_at: lease[0].expires_at })
+        jobs.push({ ...row, categories: row.lab_tenure_roles_enabled && includeTenure ? row.categories : row.categories.filter(category => category !== "tenure"), token: lease[0].token, expires_at: lease[0].expires_at })
       }
     }
     return { jobs }
@@ -147,7 +148,7 @@ export const loadRefreshData = (bindings: WorkerBindings, serverId: string, user
   const settings = (yield* sql<Record<string, unknown>>`SELECT change_nickname,auto_eval_nickname,flair_non_family,
     COALESCE(nickname_rule,'[{player_clan_abbreviation}] {player_name}') AS nickname_rule,
     COALESCE(non_family_nickname_rule,'{player_name}') AS non_family_nickname_rule,
-    autoeval_enabled FROM servers WHERE id=${serverId}`)[0]
+    autoeval_enabled,lab_tenure_roles_enabled FROM servers WHERE id=${serverId}`)[0]
   if (!settings) return yield* new NotFound({ message: "Server not found" })
   const rules = yield* sql<{ type: string; option: string; role_id: string; clan_tag: string | null }>`SELECT type,option,role_id,clan_tag FROM server_roles WHERE server_id=${serverId}`
   const clans = yield* sql<{ tag: string; category: string | null; abbreviation: string }>`SELECT clan.tag,category.name AS category,clan.abbreviation FROM server_clans clan LEFT JOIN server_clan_categories category ON category.id=clan.category_id WHERE clan.server_id=${serverId}`
@@ -216,13 +217,14 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
   yield* auth.requireBot(request)
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/claim") {
     const body = object(yield* readBoundedJson(request, 4096))
-    yield* requireInput((body.requestId === undefined || snowflake(body.requestId)) && (body.serverId === undefined || snowflake(body.serverId)) && (body.includeTenure === undefined || typeof body.includeTenure === "boolean") && (body.automaticOnly === undefined || typeof body.automaticOnly === "boolean") && !(body.automaticOnly === true && body.requestId !== undefined) && (body.includeRoster === undefined || typeof body.includeRoster === "boolean") && (body.includeRoleTreatment === undefined || typeof body.includeRoleTreatment === "boolean") && (body.includeAutomaticPolicy === undefined || typeof body.includeAutomaticPolicy === "boolean"))
-    return Response.json(yield* claimRefreshJobs(body.requestId as string | undefined, body.serverId as string | undefined, body.includeTenure === true, body.includeRoster === true, body.includeRoleTreatment === true, body.includeAutomaticPolicy === true, body.automaticOnly === true))
+    yield* requireInput((body.requestId === undefined || snowflake(body.requestId)) && (body.serverId === undefined || snowflake(body.serverId)) && (body.includeTenure === undefined || typeof body.includeTenure === "boolean") && (body.supportsLabTenure === undefined || typeof body.supportsLabTenure === "boolean") && (body.automaticOnly === undefined || typeof body.automaticOnly === "boolean") && !(body.automaticOnly === true && body.requestId !== undefined) && (body.includeRoster === undefined || typeof body.includeRoster === "boolean") && (body.includeRoleTreatment === undefined || typeof body.includeRoleTreatment === "boolean") && (body.includeAutomaticPolicy === undefined || typeof body.includeAutomaticPolicy === "boolean"))
+    return Response.json(yield* claimRefreshJobs(body.requestId as string | undefined, body.serverId as string | undefined, body.includeTenure === true, body.includeRoster === true, body.includeRoleTreatment === true, body.includeAutomaticPolicy === true, body.automaticOnly === true, body.supportsLabTenure === true))
   }
   if (request.method === "POST" && url.pathname === "/v2/bot/role-refresh/validate") {
     const body = object(yield* readBoundedJson(request, 8192))
     yield* requireInput(typeof body.id === "string" && typeof body.token === "string" && uuid.test(body.token)
-      && Array.isArray(body.accountTags) && body.accountTags.every(tag => typeof tag === "string"))
+      && Array.isArray(body.accountTags) && body.accountTags.every(tag => typeof tag === "string")
+      && (body.tenureRolesEnabled === undefined || typeof body.tenureRolesEnabled === "boolean"))
     const sql = yield* SqlClient.SqlClient
     const policy = body.automaticRoleTreatment === undefined ? "both" : body.automaticRoleTreatment
     const blacklist = body.automaticBlacklistRoles === undefined ? [] : body.automaticBlacklistRoles
@@ -232,6 +234,11 @@ export const dispatchBotRoleRefresh = (request: Request, bindings: WorkerBinding
       JOIN role_refresh_leases lease ON lease.job_id=job.id AND lease.revision=job.revision
       JOIN servers server ON server.id=job.server_id
       WHERE job.id=${String(body.id)} AND lease.token=${String(body.token)}::uuid AND lease.expires_at>now()
+        -- A changed Lab choice invalidates the plan, including mixed-category
+        -- jobs; existing roles are not removed by the switch itself.
+        AND (NOT EXISTS (SELECT 1 FROM server_roles rule WHERE rule.server_id=server.id AND rule.type='status'
+          AND rule.option ~ '^[0-9]{1,4}$' AND (CASE WHEN rule.option ~ '^[0-9]{1,4}$' THEN rule.option::int ELSE 0 END) BETWEEN 1 AND 1200)
+          OR server.lab_tenure_roles_enabled=${typeof body.tenureRolesEnabled === "boolean" ? body.tenureRolesEnabled : null})
         AND (job.request_id IS NOT NULL OR server.autoeval_enabled OR job.categories <@ ARRAY['tenure','roster']::text[])
         -- Recheck policy even if a stale/missing member cache prevented the
         -- settings update from revising this particular queued job.

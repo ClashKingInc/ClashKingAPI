@@ -106,6 +106,9 @@ jobs:
           CLASHKING_E2E_SCHEMA_ROOT: ${{ github.workspace }}/.ci-schema
         run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/legend-day-performance.mjs --discord-contract-only
 
+      - name: Verify cached community membership in auth/me
+        run: bash .ci-schema/scripts/with-test-timescale.sh --profile retained-api -- node scripts/e2e/community-membership.mjs
+
       - name: Verify upstream Clash HTTP outcomes and removed migration route
         run: bash .ci-schema/scripts/with-test-integration.sh --profile retained-api -- node scripts/e2e/clash-http-outcomes.mjs
       - name: Verify tracked clan Links cache and API fallback

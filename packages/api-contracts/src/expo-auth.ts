@@ -15,6 +15,8 @@ export const AuthUser = Schema.Struct({
 export const CurrentUserResponse = Schema.Struct({
   ...AuthUser.fields,
   account_summary: Schema.Struct({ follower_count: Schema.Number }),
+  // Display-only cache hint. Never grants Discord/Dashboard permissions.
+  discord_community_member: Schema.optionalKey(Schema.Boolean),
 })
 
 export const NativeAuthResponse = Schema.Struct({

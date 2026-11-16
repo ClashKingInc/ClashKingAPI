@@ -124,7 +124,22 @@ export class AuthProfiles extends Context.Service<AuthProfiles, {
           raid_active_until=CASE WHEN raid_notifications_enabled THEN now()+interval '7 days' ELSE NULL END
           WHERE user_id=${principal.userId} AND entity_type='clan'
             AND (war_notifications_enabled OR raid_notifications_enabled)`)
-        return { ...user, account_summary: { follower_count: account.follower_count ?? 0 } }
+        // This optional UI hint uses the existing membership cache even when
+        // Gateway is stale/offline. Do not reuse authorization freshness checks
+        // or call Discord for it. Bound failures independently of auth success.
+        const communityMember = account.provider === "discord" ? yield* sql<{ member: boolean }>`
+          SELECT EXISTS (
+            SELECT 1 FROM discord_cache.members
+            WHERE guild_id = '923764211845312533' AND user_id = ${principal.userId}
+          ) AS member
+        `.pipe(
+          Effect.map((rows) => rows[0]?.member === true),
+          Effect.timeoutOption("100 millis"),
+          Effect.map((result) => result._tag === "Some" && result.value),
+          Effect.catch(() => Effect.succeed(false)),
+        ) : false
+        return { ...user, account_summary: { follower_count: account.follower_count ?? 0 },
+          discord_community_member: communityMember }
       }),
     })
   }))

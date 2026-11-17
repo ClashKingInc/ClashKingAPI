@@ -33,6 +33,8 @@ import {
   AuthWebVerifyEmailEndpoint,
 } from "./expo-auth.js"
 import {
+  ClanMemberActivityEndpoint,
+  ClanMemberJoinsEndpoint,
   ClanChangesEndpoint,
   ClanCwlSeasonsEndpoint,
   ClanJoinLeaveEndpoint,
@@ -242,6 +244,8 @@ export const expoEndpoints = {
   clanWarlog: ClanWarlogEndpoint,
   clanWars: ClanWarsEndpoint,
   clanJoinLeave: ClanJoinLeaveEndpoint,
+  clanMemberActivity: ClanMemberActivityEndpoint,
+  clanMemberJoins: ClanMemberJoinsEndpoint,
   warBasic: WarBasicEndpoint,
   warPrevious: WarPreviousEndpoint,
   leaderboardHistory: LeaderboardHistoryEndpoint,

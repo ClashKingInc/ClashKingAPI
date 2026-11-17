@@ -1,3 +1,4 @@
+import { queryClanMemberActivity, queryClanMemberJoins } from "./clan-member-activity.js"
 import { expoEndpoints, type AnyEndpoint } from "@clashking/api-contracts"
 import { Effect, Schema } from "effect"
 import { AuthIdentity } from "./auth.js"
@@ -13,6 +14,8 @@ import { queryLeaderboardHistory, queryClanLeaderboardHistory, queryClanLegendHi
 import { queryPlayerCwlHistory, queryClanCwlSeasons } from "./public-cwl.js"
 
 export const publicDataRuntimeRoutes = [
+  { method: "GET", path: "/v2/clan/:clanTag/member-joins" },
+  { method: "GET", path: "/v2/clan/:clanTag/member-activity" },
   { method: "GET", path: "/v2/player/:playerTag/cwl/history" },
   { method: "GET", path: "/v2/cwl/:clanTag/seasons" },
   { method: "GET", path: "/v2/player/search" },
@@ -66,13 +69,15 @@ export const dispatchPublicData = (request: Request, bindings: WorkerBindings) =
     yield* Schema.decodeUnknownEffect(endpoint.query)(typed(url.searchParams)).pipe(Effect.mapError(() => new InvalidRequest({ message: "Invalid query parameters" })))
     const result = yield* executePublicData(endpoint.operationId, path, url.searchParams, bindings, principal?.kind === "user" ? principal.userId : undefined).pipe(Effect.provideService(WorkerEnvironment, bindings))
     const encoded = yield* Schema.encodeUnknownEffect(endpoint.response)(result).pipe(Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Stored public data does not match the response contract" })))
-    return Response.json(encoded)
+    return Response.json(encoded, endpoint.auth === "public" ? undefined : { headers: { "cache-control": "private, no-store" } })
   }
   return undefined
 })
 
 const executePublicData = (operation: string, path: Readonly<Record<string, string>>, query: URLSearchParams, bindings: WorkerBindings, userId?: string) => Effect.gen(function* () {
   switch (operation) {
+    case "getExpoClanMemberJoins": return yield* queryClanMemberJoins(path.clanTag ?? "", bindings)
+    case "getExpoClanMemberActivity": return yield* queryClanMemberActivity(path.clanTag ?? "", userId!, bindings)
     case "getExpoPlayerCwlHistory": return yield* queryPlayerCwlHistory(path.playerTag ?? "", query)
     case "getExpoClanCwlSeasons": return yield* queryClanCwlSeasons(path.clanTag ?? "", query)
     case "searchExpoPlayers": return yield* queryPlayerSearch(bindings, query)

@@ -5,7 +5,7 @@ export interface RosterPublicationInput {
   emojis: readonly { id: string; name: string; animated?: boolean }[];
   dashboardUrl: string; joinLabel: string; leaveLabel: string; viewLabel: string; mode: string;
 }
-const clean = (value: string, limit: number) => value.replace(/[\\`*_~|<>[\]\r\n@]/gu, " ").slice(0, limit);
+const clean = (value: string, limit: number) => value.replace(/[\r\n<>@]/gu, " ").slice(0, limit).replace(/[\\`*_~|>[\]]/gu, "\\$&");
 
 /** Up to five static messages; each embed/message stays within both 4096/6000 limits. */
 export function rosterPublications(input: RosterPublicationInput) {

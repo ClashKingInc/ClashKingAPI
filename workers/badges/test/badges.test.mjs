@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { describe, it } from "node:test";
 import {
 	AVIF_QUALITY,
 	assetCacheKey,
 	badgePixelsForSize,
-	clearIsolateTokenCache,
 	handleBadgeRequest,
 	parseBadgePath,
 	parseSize,
@@ -126,10 +125,6 @@ describe("parseSize and parseBadgePath", () => {
 });
 
 describe("handleBadgeRequest", () => {
-	beforeEach(() => {
-		clearIsolateTokenCache();
-	});
-
 	it("serves PNG with 6d+1d SWR cache, 30d KV cacheTtl, single KV read on miss, and 0 image transforms", async () => {
 		const h = createHarness();
 		let dbCalls = 0;
@@ -175,7 +170,7 @@ describe("handleBadgeRequest", () => {
 		assert.equal(h.kvPuts[0].key, assetCacheKey("png", 200, "tok_abc"));
 		assert.equal(h.kvPuts[0].options, undefined);
 
-		// Legacy size=256 maps to 200px, reuses isolate token cache & KV asset without hitting DB or Supercell.
+		// Legacy size=256 maps to 200px and reuses the KV asset without hitting Supercell.
 		const aliasResponse = await handleBadgeRequest(
 			new Request("https://badges.clashk.ing/P0Y.png?size=256"),
 			h.env,
@@ -184,7 +179,7 @@ describe("handleBadgeRequest", () => {
 		);
 		assert.equal(aliasResponse.status, 200);
 		assert.equal(await aliasResponse.text(), "png:tok_abc:200");
-		assert.equal(dbCalls, 1);
+		assert.equal(dbCalls, 2);
 		assert.equal(fetched.length, 1);
 	});
 

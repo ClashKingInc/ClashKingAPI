@@ -2,8 +2,6 @@ const RESPONSE_CACHE_SECONDS = 518400; // 6 days fresh in Cloudflare Tiered Cach
 const RESPONSE_SWR_SECONDS = 86400; // 1 day background refresh (stale-while-revalidate)
 const RESPONSE_SIE_SECONDS = 2592000; // 30 days error fallback (stale-if-error)
 const ASSET_KV_EDGE_CACHE_TTL_SECONDS = 2592000; // 30 days KV PoP cache for immutable badge assets
-const ISOLATE_TOKEN_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes in-isolate LRU
-const ISOLATE_TOKEN_CACHE_MAX_ENTRIES = 5000;
 const ASSET_CACHE_VERSION = "v1";
 const MAX_BADGE_TOKEN_LENGTH = 512;
 const BADGE_TOKEN_HEADER = "X-ClashKing-Badge-Token";
@@ -46,46 +44,6 @@ type BadgeAsset = {
 	token: string;
 	stream: ReadableStream;
 };
-
-type CachedIsolateToken = {
-	token: string;
-	expiresAt: number;
-};
-
-const isolateTokenCache = new Map<string, CachedIsolateToken>();
-
-export function clearIsolateTokenCache(): void {
-	isolateTokenCache.clear();
-}
-
-function readIsolateToken(clanTag: string): string | null {
-	const entry = isolateTokenCache.get(clanTag);
-	if (!entry) {
-		return null;
-	}
-	if (entry.expiresAt <= Date.now()) {
-		isolateTokenCache.delete(clanTag);
-		return null;
-	}
-	// Refresh LRU recency.
-	isolateTokenCache.delete(clanTag);
-	isolateTokenCache.set(clanTag, entry);
-	return entry.token;
-}
-
-function writeIsolateToken(clanTag: string, token: string): void {
-	isolateTokenCache.delete(clanTag);
-	isolateTokenCache.set(clanTag, {
-		token,
-		expiresAt: Date.now() + ISOLATE_TOKEN_CACHE_TTL_MS,
-	});
-	if (isolateTokenCache.size > ISOLATE_TOKEN_CACHE_MAX_ENTRIES) {
-		const oldest = isolateTokenCache.keys().next().value;
-		if (oldest !== undefined) {
-			isolateTokenCache.delete(oldest);
-		}
-	}
-}
 
 export type BadgeDependencies = {
 	fetchBadge: (token: string, pixels: number) => Promise<Response>;
@@ -207,14 +165,8 @@ async function resolveBadgeToken(
 		return { token: hintedToken, cacheable: true };
 	}
 
-	const isolateCached = readIsolateToken(clanTag);
-	if (isolateCached !== null) {
-		return { token: isolateCached, cacheable: true };
-	}
-
 	try {
 		const token = await dependencies.queryBadgeToken(clanTag, env);
-		writeIsolateToken(clanTag, token);
 		// Missing clan tags ("null") use the same 6d + 1d SWR tiered cache as known tags.
 		return { token, cacheable: true };
 	} catch (error) {

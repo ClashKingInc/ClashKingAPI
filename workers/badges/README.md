@@ -36,7 +36,6 @@ When a request misses Cloudflare's Tiered Cache and carries a valid `X-ClashKing
 ## Cache layers
 
 1. **Cloudflare Tiered Workers Cache (6d fresh + 1d SWR):** Serves warm public responses across regions before Worker code runs — including missing-clan default shields returned when Postgres has no token for a tag.
-2. **In-isolate LRU (`15m`, up to 5,000 entries):** Avoids repeated Postgres lookups when a single clan is fetched in multiple sizes/formats on a warm Worker isolate without a token header.
-3. **KV `BADGE_CACHE` (permanent storage + 30-day PoP `cacheTtl`):** Stores only badge image files (`asset:v1:png:<pixels>:<token>` and `asset:v1:avif:q45:<pixels>:<token>`), shared across all clans using the same token. No tag-to-token mappings are read from or written to KV.
+2. **KV `BADGE_CACHE` (permanent storage + 30-day PoP `cacheTtl`):** Stores only badge image files (`asset:v1:png:<pixels>:<token>` and `asset:v1:avif:q45:<pixels>:<token>`), shared across all clans using the same token. No tag-to-token mappings are read from or written to KV.
 
 Database errors and upstream Supercell fallback errors are returned with `Cache-Control: no-store`.

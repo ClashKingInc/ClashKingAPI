@@ -6,6 +6,7 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
+    "test": "node --test test/badges.test.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p test/tsconfig.json"
   },
   "dependencies": {

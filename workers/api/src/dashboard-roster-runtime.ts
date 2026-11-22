@@ -1,3 +1,4 @@
+import { hydrateMissingBasicPlayers } from "./basic-player-upsert.js"
 import { rosterRoleInputs, queueRosterRoleRefresh } from "./roster-role-refresh.js"
 import { rosterWebhook } from "./roster-webhook.js"
 import { normalizeRosterQuestions, validRosterQuestionId } from "./roster-questionnaire.js"
@@ -224,6 +225,7 @@ interface RosterMemberRow {
   readonly discord_cache_ready?: boolean
   readonly discord_guild_id: string
   readonly discord_avatar_url: string | null
+  readonly owner_user_id: string | null
   readonly discord_user_id: string | null
   readonly discord_username: string | null
   readonly current_clan_name: string | null
@@ -305,7 +307,9 @@ const loadMembers = (sql: SqlClient.SqlClient, rosterId: string) => database(
   sql<RosterMemberRow>`
     SELECT member.member_group_id::text, member_label.name AS member_group_name, member.tag, member.name, member.townhall, member.trophies, member.current_clan_name, member.current_clan_tag,
            member.league_id, member.league_name, member.hero_level_sum, member.max_percent, member.war_preference,
-           link.user_id AS discord_user_id, member.discord_username, member.discord_avatar_url,
+           link.user_id AS owner_user_id,
+           CASE WHEN link.user_id ~ '^[0-9]{1,20}$' THEN link.user_id END AS discord_user_id,
+           member.discord_username, member.discord_avatar_url,
            GREATEST(member.last_online, (SELECT max(seen_at) FROM player_online_events activity WHERE activity.tag = member.tag)) AS last_online,
            member.refreshed_at, member.signup_answers, roster.server_id AS discord_guild_id, cached.data AS cached_discord,
            shard.application_id IS NOT NULL AS discord_cache_ready
@@ -315,7 +319,7 @@ const loadMembers = (sql: SqlClient.SqlClient, rosterId: string) => database(
     LEFT JOIN discord_cache.guilds guild ON guild.id = roster.server_id AND guild.available AND guild.members_complete AND guild.metadata_complete
     LEFT JOIN discord_cache.gateway_shards shard ON shard.application_id = guild.application_id AND shard.shard_id = guild.shard_id
       AND shard.generation = guild.generation AND shard.healthy AND shard.heartbeat_at > clock_timestamp() - ${gatewayHeartbeatFreshnessSeconds} * interval '1 second'
-    LEFT JOIN discord_cache.members cached ON cached.guild_id = guild.id AND cached.user_id = link.user_id AND shard.application_id IS NOT NULL
+    LEFT JOIN discord_cache.members cached ON cached.guild_id = guild.id AND cached.user_id = link.user_id AND link.user_id ~ '^[0-9]{1,20}$' AND shard.application_id IS NOT NULL
     WHERE member.roster_id = ${rosterId}::uuid
     ORDER BY member.position, member.tag
   `,
@@ -1047,10 +1051,10 @@ const queryAccountGroups = (sql: SqlClient.SqlClient, input: DashboardRosterOper
   const owners = new Map<string, Array<{ rosterId: string; playerTag: string; playerName: string }>>()
   for (const rosterId of rosterIds) {
     for (const member of yield* loadMembers(sql, rosterId)) {
-      if (member.discord_user_id === null) continue
-      const accounts = owners.get(member.discord_user_id) ?? []
+      if (member.owner_user_id === null) continue
+      const accounts = owners.get(member.owner_user_id) ?? []
       accounts.push({ rosterId, playerTag: member.tag, playerName: member.name })
-      owners.set(member.discord_user_id, accounts)
+      owners.set(member.owner_user_id, accounts)
     }
   }
   const groups = [...owners.entries()].sort(([left], [right]) => left.localeCompare(right))
@@ -1736,7 +1740,7 @@ const signupForm = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInp
   const serverId = yield* requireServerId(input)
   const row = (yield* loadRosters(sql, { serverId, rosterId: input.params.rosterId ?? "" }))[0]
   if (row === undefined) return yield* new NotFound({ message: "Roster not found" })
-  return json(questionnaire(questionsFrom(row.signup_questions)))
+  return json({ ...questionnaire(questionsFrom(row.signup_questions)), requireVerified: row.require_verified })
 })
 
 interface PreparedSignupIdentity {
@@ -1787,20 +1791,46 @@ const signupAccounts = (sql: SqlClient.SqlClient, input: DashboardRosterOperatio
   const actor = yield* signupActor(input, input.url.searchParams.get("discordUserId"))
   const roster = (yield* loadRosters(sql, { serverId, rosterId }))[0]
   if (!roster) return yield* new NotFound({ message: "Roster not found" })
-  const items = yield* database("Unable to load signup accounts", sql`
-    SELECT links.tag, COALESCE(player.name, links.tag) AS name, COALESCE(player.townhall_level, 0) AS townhall,
+  const rows = yield* database("Unable to load signup accounts", sql<{
+    readonly tag: string
+    readonly basic_name: string | null
+    readonly basic_townhall: number | null
+    readonly member_name: string | null
+    readonly member_townhall: number | null
+    readonly isVerified: boolean
+    readonly signedUp: boolean
+  }>`
+    SELECT links.tag, player.name AS basic_name, player.townhall_level AS basic_townhall,
+      NULLIF(member.name, '') AS member_name, member.townhall AS member_townhall,
       links.is_verified AS "isVerified", member.tag IS NOT NULL AS "signedUp"
     FROM player_links links LEFT JOIN basic_player player ON player.tag = links.tag
     LEFT JOIN roster_members member ON member.tag = links.tag AND member.roster_id = ${rosterId}::uuid
     WHERE links.user_id = ${actor} ORDER BY links.order_index, links.tag
   `)
+  const missingTags = rows.filter(row => row.basic_name === null).map(row => row.tag)
+  const hydrated = yield* hydrateMissingBasicPlayers(sql, input.bindings, missingTags)
+  const items = rows.map((row) => {
+    const live = hydrated.get(row.tag)
+    return {
+      tag: row.tag,
+      name: live?.name ?? row.basic_name ?? row.member_name ?? row.tag,
+      townhall: live?.townHallLevel ?? row.basic_townhall ?? row.member_townhall ?? 0,
+      isVerified: row.isVerified,
+      signedUp: row.signedUp,
+    }
+  })
   const counts = yield* database("Unable to count signup capacity", sql<{ total: number; owned: number }>`
     SELECT count(*)::integer AS total, count(*) FILTER (WHERE links.user_id = ${actor})::integer AS owned
     FROM roster_members member LEFT JOIN player_links links ON links.tag = member.tag WHERE member.roster_id = ${rosterId}::uuid`)
   const limits = [roster.max_signups == null ? Infinity : roster.max_signups - (counts[0]?.total ?? 0),
     roster.max_accounts_per_user == null ? Infinity : roster.max_accounts_per_user - (counts[0]?.owned ?? 0)]
   const remaining = Math.max(0, Math.min(...limits))
-  return json({ items, remainingSlots: Number.isFinite(remaining) ? remaining : null })
+  return json({
+    items,
+    remainingSlots: Number.isFinite(remaining) ? remaining : null,
+    requireVerified: roster.require_verified,
+    questionnaire: questionnaire(questionsFrom(roster.signup_questions)),
+  })
 })
 const withdrawSignup = (sql: SqlClient.SqlClient, input: DashboardRosterOperationInput) => Effect.gen(function* () {
   const body = yield* decodeJson(input.request), serverId = yield* requireServerId(input), rosterId = input.params.rosterId ?? ""
@@ -2321,6 +2351,7 @@ const refreshDiscordIdentity = (sql: SqlClient.SqlClient, input: DashboardRoster
     JOIN rosters roster ON roster.id = member.roster_id
     JOIN player_links links ON links.tag = member.tag
     WHERE member.roster_id = ${rosterId}::uuid AND roster.server_id = ${serverId} AND member.tag = ${playerTag}
+      AND links.user_id ~ '^[0-9]{1,20}$'
   `))[0]
   if (link === undefined) return yield* new NotFound({ message: "Roster member has no linked Discord user" })
   const { username, avatarUrl } = yield* loadDiscordIdentity(serverId, link.user_id)

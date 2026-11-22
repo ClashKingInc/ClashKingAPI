@@ -6,6 +6,7 @@ import { SqlClient } from "effect/sql"
  * reconcile even when no game-event trigger fires. Persist inside the link
  * transaction; preserve a pending leave grace window. */
 export const queueSubjectRoleRefresh = (userId: string) => Effect.gen(function* () {
+  if (!/^[0-9]{1,20}$/u.test(userId)) return
   const sql = yield* SqlClient.SqlClient
   const rosterServers = yield* sql<{id:string}>`SELECT DISTINCT roster.server_id AS id FROM rosters roster
     JOIN discord_cache.members member ON member.guild_id=roster.server_id AND member.user_id=${userId}

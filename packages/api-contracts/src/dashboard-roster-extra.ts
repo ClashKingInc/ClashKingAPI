@@ -28,12 +28,26 @@ export const DashboardRosterImageEndpoint = defineEndpoint({
   successStatus: 200, errors, summary: "Upload a roster image",
 })
 
+export const DashboardRosterQuestion = Schema.Struct({
+  id: Schema.String, label: Schema.String, type: Schema.Literals(["text", "boolean", "single_select"]),
+  required: Schema.Boolean, options: Schema.Array(Schema.String), order: Schema.Number,
+})
+export const DashboardRosterQuestionnaire = Schema.Struct({
+  accountSelector: Schema.Struct({ id: Schema.Literal("account"), type: Schema.Literal("account"), required: Schema.Literal(true) }),
+  questions: Schema.Array(DashboardRosterQuestion),
+})
+
 export const DashboardRosterAccountsEndpoint = defineEndpoint({
   operationId: "dashboardRosterAccounts", method: "GET", path: "/v2/server/:serverId/rosters/:rosterId/accounts",
   auth: "user-or-bot", body: NoBody, bodyMode: "none", pathParams: BuilderPath,
   query: Schema.Struct({ discordUserId: Schema.optionalKey(DecimalSnowflake) }),
-  response: Schema.Struct({ remainingSlots: Schema.NullOr(Schema.Number), items: Schema.Array(Schema.Struct({ tag: Schema.String, name: Schema.String,
-    townhall: Schema.Number, isVerified: Schema.Boolean, signedUp: Schema.Boolean })) }),
+  response: Schema.Struct({
+    remainingSlots: Schema.NullOr(Schema.Number),
+    requireVerified: Schema.Boolean,
+    questionnaire: DashboardRosterQuestionnaire,
+    items: Schema.Array(Schema.Struct({ tag: Schema.String, name: Schema.String,
+      townhall: Schema.Number, isVerified: Schema.Boolean, signedUp: Schema.Boolean })),
+  }),
   responseMode: "json", successStatus: 200, errors, summary: "List the actor's linked roster accounts",
 })
 export const DashboardRosterWithdrawEndpoint = defineEndpoint({
@@ -94,14 +108,6 @@ export const DashboardRosterMembershipValidateEndpoint = defineEndpoint({
   }), responseMode: "json", successStatus: 200, errors, summary: "Validate an exact transient roster membership proposal",
 })
 
-export const DashboardRosterQuestion = Schema.Struct({
-  id: Schema.String, label: Schema.String, type: Schema.Literals(["text", "boolean", "single_select"]),
-  required: Schema.Boolean, options: Schema.Array(Schema.String), order: Schema.Number,
-})
-export const DashboardRosterQuestionnaire = Schema.Struct({
-  accountSelector: Schema.Struct({ id: Schema.Literal("account"), type: Schema.Literal("account"), required: Schema.Literal(true) }),
-  questions: Schema.Array(DashboardRosterQuestion),
-})
 export const DashboardRosterQuestionnaireEndpoint = defineEndpoint({
   operationId: "dashboardRosterQuestionnaire", method: "PUT", path: "/v2/roster/questionnaire",
   auth: "server-write", body: Schema.Struct({ questions: Schema.Array(DashboardRosterQuestion), reset_answers: Schema.optionalKey(Schema.Boolean) }), bodyMode: "json",
@@ -112,7 +118,8 @@ export const DashboardRosterQuestionnaireEndpoint = defineEndpoint({
 export const DashboardRosterSignupFormEndpoint = defineEndpoint({
   operationId: "dashboardRosterSignupForm", method: "GET", path: "/v2/server/:serverId/rosters/:rosterId/signup-form",
   auth: "user-or-bot", body: NoBody, bodyMode: "none", pathParams: BuilderPath, query: NoQuery,
-  response: DashboardRosterQuestionnaire, responseMode: "json", successStatus: 200, errors, summary: "Get roster signup form",
+  response: Schema.Struct({ ...DashboardRosterQuestionnaire.fields, requireVerified: Schema.Boolean }),
+  responseMode: "json", successStatus: 200, errors, summary: "Get roster signup form",
 })
 export const DashboardRosterSubmission = Schema.Struct({
   id: Schema.String, rosterId: Schema.String, playerTag: Schema.String, answers: JsonObject,

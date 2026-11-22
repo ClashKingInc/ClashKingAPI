@@ -154,7 +154,7 @@ export const dispatchDashboardRosterSnapshots = (request: Request, bindings: Wor
       return yield* new Conflict({ message: "Roster role is not configured" })
     }
     const members = yield* sql<{ discord_user_id: string }>`SELECT DISTINCT discord_user_id FROM roster_members
-      WHERE roster_id = ${params.rosterId} AND discord_user_id IS NOT NULL ORDER BY discord_user_id`
+      WHERE roster_id = ${params.rosterId} AND discord_user_id ~ '^[0-9]{1,20}$' ORDER BY discord_user_id`
     yield* queueRosterRoleRefresh(sql,serverId)
     return { refreshId: crypto.randomUUID(), scope: "role" as const, status: "queued", refreshedPlayers: 0, failedPlayers: 0,
       refreshedAt: new Date().toISOString(), reused: false, roleId: roster.roster_role_id, roleMemberUserIds: members.map((member) => member.discord_user_id) }

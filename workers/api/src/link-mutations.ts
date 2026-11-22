@@ -7,6 +7,7 @@ import { Data, Effect, Schema } from "effect"
 import { SqlClient } from "effect/sql"
 
 import { AuthIdentity, type ApiPrincipal } from "./auth.js"
+import { BasicClashPlayer, basicPlayerObservation, upsertBasicPlayer, type BasicPlayerObservation } from "./basic-player-upsert.js"
 import type { WorkerBindings } from "./environment.js"
 import { Conflict, DatabaseFailure, Forbidden, InvalidRequest, NotFound, Unauthenticated, UpstreamUnavailable, type ApiFailure } from "./errors.js"
 import { correctTag } from "./home.js"
@@ -56,7 +57,6 @@ const linkedAccount = (row: LinkRow): EndpointResponse<typeof LinksVisibilityEnd
   ...(row.verified_at === null ? {} : { verified_at: iso(row.verified_at) }),
 })
 
-const PlayerIdentity = Schema.Struct({ tag: Schema.String, name: Schema.String, townHallLevel: Schema.Number })
 const fetchClash = (bindings: LinkBindings, path: string, body?: { token: string }) => Effect.tryPromise({
   try: (signal) => bindings.CLASH_PROXY.fetch(new Request(`http://clash-proxy.internal/v1/${path}`, {
     signal, method: body === undefined ? "GET" : "POST", headers: { accept: "application/json", ...(body === undefined ? {} : { "content-type": "application/json" }) },
@@ -73,7 +73,8 @@ export interface PreparedLink {
   readonly [preparedLinkBrand]: true
   readonly principal: ApiPrincipal
   readonly userId: string
-  readonly player: typeof PlayerIdentity.Type
+  readonly player: { readonly tag: string; readonly name: string; readonly townHallLevel: number }
+  readonly basicPlayer: BasicPlayerObservation
   readonly verifiedOwnership: boolean
 }
 export interface CommittedLink {
@@ -90,12 +91,15 @@ export const prepareLink = (principal: ApiPrincipal, rawUserId: string, input: E
   const playerTag = yield* tag(input.player_tag)
   const apiToken = input.api_token?.trim() ?? ""
   if (apiToken === "") return yield* new Forbidden({ message: "A valid in-game API token is required to link an account" })
+  const observedAt = new Date().toISOString()
   const response = yield* fetchClash(bindings, `players/${encodeURIComponent(playerTag)}`)
   if (response.status === 404) { yield* discard(response); return yield* new NotFound({ message: "Clash of Clans account does not exist" }) }
   if (!response.ok) { yield* discard(response); return yield* new UpstreamUnavailable({ cause: response.status, message: "Clash account lookup is unavailable" }) }
-  const player = yield* Schema.decodeUnknownEffect(PlayerIdentity)(yield* upstreamJson(response)).pipe(
+  const snapshot = yield* Schema.decodeUnknownEffect(BasicClashPlayer)(yield* upstreamJson(response)).pipe(
     Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Clash account identity is invalid" })))
-  if (player.tag !== playerTag) return yield* new UpstreamUnavailable({ cause: "Player tag mismatch", message: "Clash account identity is invalid" })
+  if (snapshot.tag !== playerTag) return yield* new UpstreamUnavailable({ cause: "Player tag mismatch", message: "Clash account identity is invalid" })
+  const player = { tag: snapshot.tag, name: snapshot.name, townHallLevel: snapshot.townHallLevel }
+  const basicPlayer = basicPlayerObservation(snapshot, observedAt)
   const verification = yield* fetchClash(bindings, `players/${encodeURIComponent(playerTag)}/verifytoken`, { token: apiToken })
   if (!verification.ok) {
     yield* discard(verification)
@@ -105,7 +109,7 @@ export const prepareLink = (principal: ApiPrincipal, rawUserId: string, input: E
     Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Clash account verification returned invalid data" })))
   if (result.status !== "ok") return yield* new Forbidden({ message: "Invalid player token. Check your Clash of Clans account settings and try again." })
   return Object.freeze({[preparedLinkBrand]:true as const,principal:Object.freeze({...principal}),userId,
-    player:Object.freeze(player),verifiedOwnership:true as const})
+    player:Object.freeze(player),basicPlayer:Object.freeze(basicPlayer),verifiedOwnership:true as const})
 })
 
 /** SQL only. Callers may wrap this in their receipt/outbox transaction; the
@@ -114,7 +118,7 @@ export const prepareLink = (principal: ApiPrincipal, rawUserId: string, input: E
  * for global, Dashboard and signed server-scoped linking. */
 export const commitPreparedLink=(proof:PreparedLink):Runtime<CommittedLink>=>Effect.gen(function* () {
   if (proof?.[preparedLinkBrand] !== true) return yield* new InvalidRequest({message:"Account link provider proof is missing"})
-  const {principal,userId,player,verifiedOwnership:verifyOwnership}=proof,playerTag=player.tag
+  const {principal,userId,player,basicPlayer,verifiedOwnership:verifyOwnership}=proof,playerTag=player.tag
   const sql = yield* SqlClient.SqlClient
   return yield* database(sql.withTransaction(Effect.gen(function* () {
     yield* lockUser(principal)
@@ -128,6 +132,7 @@ export const commitPreparedLink=(proof:PreparedLink):Runtime<CommittedLink>=>Eff
         FROM player_links WHERE user_id = ${userId}
         ON CONFLICT (tag) DO NOTHING RETURNING is_verified, hidden`
       if (inserted[0] !== undefined) {
+        yield* upsertBasicPlayer(sql, basicPlayer)
         if (verifyOwnership) yield* sql`DELETE FROM user_bookmarks WHERE user_id = ${userId} AND entity_type = 'player' AND tag = ${playerTag}`
         yield* queueSubjectRoleRefresh(userId)
         return {response:{
@@ -160,6 +165,7 @@ export const commitPreparedLink=(proof:PreparedLink):Runtime<CommittedLink>=>Eff
         WHERE player_links.user_id = EXCLUDED.user_id
       RETURNING is_verified, hidden`
     if (saved[0] === undefined) return yield* new LinkOwnershipConflict({ account: { ...player, is_verified: false, hidden: false } })
+    yield* upsertBasicPlayer(sql, basicPlayer)
     if (verifyOwnership) yield* sql`DELETE FROM user_bookmarks WHERE user_id = ${userId} AND entity_type = 'player' AND tag = ${playerTag}`
     for (const subjectId of new Set([userId, ...(existing?.user_id ? [existing.user_id] : [])])) yield* queueSubjectRoleRefresh(subjectId)
     return {response:{

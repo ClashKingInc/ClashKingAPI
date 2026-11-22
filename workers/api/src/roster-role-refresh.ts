@@ -8,7 +8,7 @@ export const rosterRoleInputs = (sql: SqlClient.SqlClient, serverId: string) => 
   ) configured WHERE id IS NOT NULL ORDER BY id`
   const owners = yield* sql<{ id: string }>`SELECT DISTINCT link.user_id AS id FROM roster_members member
     JOIN rosters roster ON roster.id=member.roster_id JOIN player_links link ON link.tag=member.tag
-    WHERE roster.server_id=${serverId} AND link.user_id IS NOT NULL ORDER BY id`
+    WHERE roster.server_id=${serverId} AND link.user_id ~ '^[0-9]{1,20}$' ORDER BY id`
   return { roles: roles.map(row=>row.id), owners: owners.map(row=>row.id) }
 })
 export const rosterRoleState = (sql: SqlClient.SqlClient, serverId: string, userId: string) => Effect.gen(function* () {

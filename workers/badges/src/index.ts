@@ -1,25 +1,36 @@
-const RESPONSE_CACHE_SECONDS = 86400;
-const TAG_TOKEN_TTL_SECONDS = 86400;
-const NULL_TOKEN_TTL_SECONDS = 300;
-const MISSING_RESPONSE_CACHE_SECONDS = 3600;
+const RESPONSE_CACHE_SECONDS = 518400; // 6 days fresh in Cloudflare Tiered Cache
+const RESPONSE_SWR_SECONDS = 86400; // 1 day background refresh (stale-while-revalidate)
+const RESPONSE_SIE_SECONDS = 2592000; // 30 days error fallback (stale-if-error)
+const ASSET_KV_EDGE_CACHE_TTL_SECONDS = 2592000; // 30 days KV PoP cache for immutable badge assets
+const ISOLATE_TOKEN_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes in-isolate LRU
+const ISOLATE_TOKEN_CACHE_MAX_ENTRIES = 5000;
 const ASSET_CACHE_VERSION = "v1";
 const MAX_BADGE_TOKEN_LENGTH = 512;
 const BADGE_TOKEN_HEADER = "X-ClashKing-Badge-Token";
 export const AVIF_QUALITY = 45;
 
-const BADGE_SIZES = {
-	small: { outputPixels: 70, sourcePixels: 70 },
-	medium: { outputPixels: 200, sourcePixels: 200 },
-	large: { outputPixels: 512, sourcePixels: 512 },
-	"64": { outputPixels: 64, sourcePixels: 70 },
-	"128": { outputPixels: 128, sourcePixels: 200 },
-	"256": { outputPixels: 256, sourcePixels: 512 },
-	"512": { outputPixels: 512, sourcePixels: 512 },
+// Supercell natively serves 70px (small), 200px (medium), and 512px (large) PNGs.
+// PNGs are never transformed; AVIFs encode those exact three native sizes with no resize step.
+const CANONICAL_BADGE_PIXELS = {
+	small: 70,
+	medium: 200,
+	large: 512,
 } as const;
 
-type BadgeSize = keyof typeof BADGE_SIZES;
+export type BadgeSize = keyof typeof CANONICAL_BADGE_PIXELS;
+
+// Legacy numeric sizes remain accepted during migration and map to the three canonical sizes.
+const BADGE_SIZE_ALIASES: Readonly<Record<string, BadgeSize>> = {
+	small: "small",
+	medium: "medium",
+	large: "large",
+	"64": "small",
+	"128": "medium",
+	"256": "medium",
+	"512": "large",
+};
+
 type BadgeFormat = "png" | "avif";
-type BadgeRecipe = (typeof BADGE_SIZES)[BadgeSize];
 
 type ParsedBadgePath = {
 	clanTag: string;
@@ -28,13 +39,53 @@ type ParsedBadgePath = {
 
 type BadgeTokenResolution = {
 	token: string;
-	responseCacheSeconds: number;
+	cacheable: boolean;
 };
 
 type BadgeAsset = {
 	token: string;
 	stream: ReadableStream;
 };
+
+type CachedIsolateToken = {
+	token: string;
+	expiresAt: number;
+};
+
+const isolateTokenCache = new Map<string, CachedIsolateToken>();
+
+export function clearIsolateTokenCache(): void {
+	isolateTokenCache.clear();
+}
+
+function readIsolateToken(clanTag: string): string | null {
+	const entry = isolateTokenCache.get(clanTag);
+	if (!entry) {
+		return null;
+	}
+	if (entry.expiresAt <= Date.now()) {
+		isolateTokenCache.delete(clanTag);
+		return null;
+	}
+	// Refresh LRU recency.
+	isolateTokenCache.delete(clanTag);
+	isolateTokenCache.set(clanTag, entry);
+	return entry.token;
+}
+
+function writeIsolateToken(clanTag: string, token: string): void {
+	isolateTokenCache.delete(clanTag);
+	isolateTokenCache.set(clanTag, {
+		token,
+		expiresAt: Date.now() + ISOLATE_TOKEN_CACHE_TTL_MS,
+	});
+	if (isolateTokenCache.size > ISOLATE_TOKEN_CACHE_MAX_ENTRIES) {
+		const oldest = isolateTokenCache.keys().next().value;
+		if (oldest !== undefined) {
+			isolateTokenCache.delete(oldest);
+		}
+	}
+}
 
 export type BadgeDependencies = {
 	fetchBadge: (token: string, pixels: number) => Promise<Response>;
@@ -75,7 +126,13 @@ export function parseSize(value: string | null): BadgeSize | null {
 		return "small";
 	}
 
-	return Object.hasOwn(BADGE_SIZES, value) ? (value as BadgeSize) : null;
+	return Object.hasOwn(BADGE_SIZE_ALIASES, value)
+		? BADGE_SIZE_ALIASES[value]!
+		: null;
+}
+
+export function badgePixelsForSize(size: BadgeSize): number {
+	return CANONICAL_BADGE_PIXELS[size];
 }
 
 export function assetCacheKey(
@@ -86,10 +143,6 @@ export function assetCacheKey(
 	const formatVersion =
 		format === "avif" ? `${format}:q${AVIF_QUALITY}` : format;
 	return `asset:${ASSET_CACHE_VERSION}:${formatVersion}:${pixels}:${token}`;
-}
-
-export function tokenCacheKey(clanTag: string): string {
-	return `clan-token:${ASSET_CACHE_VERSION}:${clanTag}`;
 }
 
 function badgeUrl(token: string, pixels: number): string {
@@ -128,21 +181,6 @@ function logCacheError(event: string, key: string, error: unknown): void {
 	);
 }
 
-function storeToken(
-	env: Env,
-	ctx: ExecutionContext,
-	key: string,
-	token: string,
-): void {
-	const expirationTtl =
-		token === "null" ? NULL_TOKEN_TTL_SECONDS : TAG_TOKEN_TTL_SECONDS;
-	ctx.waitUntil(
-		env.BADGE_CACHE.put(key, token, { expirationTtl }).catch((error) => {
-			logCacheError("badge_token_cache_write_error", key, error);
-		}),
-	);
-}
-
 function isValidBadgeToken(token: string): boolean {
 	return (
 		token !== "null" &&
@@ -160,52 +198,25 @@ async function resolveBadgeToken(
 	request: Request,
 	clanTag: string,
 	env: Env,
-	ctx: ExecutionContext,
 	dependencies: BadgeDependencies,
 ): Promise<BadgeTokenResolution> {
-	const key = tokenCacheKey(clanTag);
-	let cached: string | null = null;
-
-	try {
-		cached = await env.BADGE_CACHE.get(key);
-		if (cached && cached !== "null") {
-			return { token: cached, responseCacheSeconds: RESPONSE_CACHE_SECONDS };
-		}
-	} catch (error) {
-		logCacheError("badge_token_cache_read_error", key, error);
+	// A valid caller-supplied token skips Postgres completely; the public URL
+	// response is cached by Cloudflare's Tiered Cache.
+	const hintedToken = readBadgeHint(request);
+	if (hintedToken) {
+		return { token: hintedToken, cacheable: true };
 	}
 
-	if (cached === "null") {
-		const hintedToken = readBadgeHint(request);
-		if (hintedToken) {
-			storeToken(env, ctx, key, hintedToken);
-			return {
-				token: hintedToken,
-				responseCacheSeconds: RESPONSE_CACHE_SECONDS,
-			};
-		}
-
-		return { token: "null", responseCacheSeconds: MISSING_RESPONSE_CACHE_SECONDS };
+	const isolateCached = readIsolateToken(clanTag);
+	if (isolateCached !== null) {
+		return { token: isolateCached, cacheable: true };
 	}
 
 	try {
 		const token = await dependencies.queryBadgeToken(clanTag, env);
-		if (token !== "null") {
-			storeToken(env, ctx, key, token);
-			return { token, responseCacheSeconds: RESPONSE_CACHE_SECONDS };
-		}
-
-		const hintedToken = readBadgeHint(request);
-		if (hintedToken) {
-			storeToken(env, ctx, key, hintedToken);
-			return {
-				token: hintedToken,
-				responseCacheSeconds: RESPONSE_CACHE_SECONDS,
-			};
-		}
-
-		storeToken(env, ctx, key, "null");
-		return { token: "null", responseCacheSeconds: MISSING_RESPONSE_CACHE_SECONDS };
+		writeIsolateToken(clanTag, token);
+		// Missing clan tags ("null") use the same 6d + 1d SWR tiered cache as known tags.
+		return { token, cacheable: true };
 	} catch (error) {
 		console.error(
 			JSON.stringify({
@@ -214,17 +225,8 @@ async function resolveBadgeToken(
 				error: error instanceof Error ? error.message : String(error),
 			}),
 		);
-
-		const hintedToken = readBadgeHint(request);
-		if (hintedToken) {
-			storeToken(env, ctx, key, hintedToken);
-			return {
-				token: hintedToken,
-				responseCacheSeconds: RESPONSE_CACHE_SECONDS,
-			};
-		}
-
-		return { token: "null", responseCacheSeconds: 0 };
+		// Never cache a transient database error as a default shield.
+		return { token: "null", cacheable: false };
 	}
 }
 
@@ -236,7 +238,10 @@ async function readAsset(
 ): Promise<ReadableStream | null> {
 	const key = assetCacheKey(format, pixels, token);
 	try {
-		return await env.BADGE_CACHE.get(key, "stream");
+		return await env.BADGE_CACHE.get(key, {
+			type: "stream",
+			cacheTtl: ASSET_KV_EDGE_CACHE_TTL_SECONDS,
+		});
 	} catch (error) {
 		logCacheError("badge_asset_cache_read_error", key, error);
 		return null;
@@ -259,6 +264,23 @@ function storeAsset(
 	);
 }
 
+async function fetchAndStoreSourcePng(
+	token: string,
+	pixels: number,
+	env: Env,
+	ctx: ExecutionContext,
+	dependencies: BadgeDependencies,
+): Promise<BadgeAsset | null> {
+	const upstream = await dependencies.fetchBadge(token, pixels);
+	if (!upstream.ok || !upstream.body) {
+		return null;
+	}
+
+	const [responseStream, cacheStream] = upstream.body.tee();
+	storeAsset(env, ctx, "png", pixels, token, cacheStream);
+	return { token, stream: responseStream };
+}
+
 async function loadSourcePngForToken(
 	token: string,
 	pixels: number,
@@ -271,118 +293,79 @@ async function loadSourcePngForToken(
 		return { token, stream: cached };
 	}
 
-	const upstream = await dependencies.fetchBadge(token, pixels);
-	if (!upstream.ok || !upstream.body) {
-		return null;
-	}
-
-	const [responseStream, cacheStream] = upstream.body.tee();
-	storeAsset(env, ctx, "png", pixels, token, cacheStream);
-	return { token, stream: responseStream };
+	return fetchAndStoreSourcePng(token, pixels, env, ctx, dependencies);
 }
 
-async function loadSourcePng(
-	token: string,
-	pixels: number,
-	env: Env,
-	ctx: ExecutionContext,
-	dependencies: BadgeDependencies,
-): Promise<BadgeAsset | null> {
-	const asset = await loadSourcePngForToken(
-		token,
-		pixels,
-		env,
-		ctx,
-		dependencies,
-	);
-	if (asset || token === "null") {
-		return asset;
-	}
-
-	return loadSourcePngForToken("null", pixels, env, ctx, dependencies);
-}
-
-async function transformBadge(
+async function encodeAvifBadge(
 	stream: ReadableStream,
-	format: BadgeFormat,
-	recipe: BadgeRecipe,
 	env: Env,
 ): Promise<Response> {
-	let transformer = env.IMAGES.input(stream);
-	if (recipe.outputPixels !== recipe.sourcePixels) {
-		transformer = transformer.transform({
-			width: recipe.outputPixels,
-			height: recipe.outputPixels,
-			fit: "scale-down",
-		});
-	}
-
-	return transformer
-		.output(
-			format === "avif"
-				? { format: "image/avif", quality: AVIF_QUALITY }
-				: { format: "image/png" },
-		)
+	return env.IMAGES.input(stream)
+		.output({ format: "image/avif", quality: AVIF_QUALITY })
 		.then((result) => result.response());
 }
 
 async function loadBadgeAsset(
 	format: BadgeFormat,
 	token: string,
-	recipe: BadgeRecipe,
+	pixels: number,
 	env: Env,
 	ctx: ExecutionContext,
 	dependencies: BadgeDependencies,
 ): Promise<BadgeAsset | null> {
-	const cached = await readAsset(env, format, recipe.outputPixels, token);
+	const cached = await readAsset(env, format, pixels, token);
 	if (cached) {
 		return { token, stream: cached };
 	}
 
-	const source = await loadSourcePng(
+	// PNGs are never transformed: on a miss, go straight to Supercell without a
+	// duplicate KV read for the same key.
+	if (format === "png") {
+		const fetched = await fetchAndStoreSourcePng(
+			token,
+			pixels,
+			env,
+			ctx,
+			dependencies,
+		);
+		if (fetched || token === "null") {
+			return fetched;
+		}
+		return loadSourcePngForToken("null", pixels, env, ctx, dependencies);
+	}
+
+	// AVIF missed KV: pull the native source PNG from KV (or Supercell), then encode.
+	let source = await loadSourcePngForToken(
 		token,
-		recipe.sourcePixels,
+		pixels,
 		env,
 		ctx,
 		dependencies,
 	);
+	if (!source && token !== "null") {
+		const fallbackAvif = await readAsset(env, "avif", pixels, "null");
+		if (fallbackAvif) {
+			return { token: "null", stream: fallbackAvif };
+		}
+		source = await loadSourcePngForToken(
+			"null",
+			pixels,
+			env,
+			ctx,
+			dependencies,
+		);
+	}
 	if (!source) {
 		return null;
 	}
 
-	if (source.token !== token) {
-		const fallbackCached = await readAsset(
-			env,
-			format,
-			recipe.outputPixels,
-			source.token,
-		);
-		if (fallbackCached) {
-			return { token: source.token, stream: fallbackCached };
-		}
-	}
-
-	if (
-		format === "png" &&
-		recipe.outputPixels === recipe.sourcePixels
-	) {
-		return source;
-	}
-
-	const transformed = await transformBadge(source.stream, format, recipe, env);
+	const transformed = await encodeAvifBadge(source.stream, env);
 	if (!transformed.ok || !transformed.body) {
 		return null;
 	}
 
 	const [responseStream, cacheStream] = transformed.body.tee();
-	storeAsset(
-		env,
-		ctx,
-		format,
-		recipe.outputPixels,
-		source.token,
-		cacheStream,
-	);
+	storeAsset(env, ctx, "avif", pixels, source.token, cacheStream);
 	return { token: source.token, stream: responseStream };
 }
 
@@ -391,6 +374,28 @@ const CORS_HEADERS = {
 	"Access-Control-Allow-Methods": "GET, OPTIONS",
 	"Access-Control-Allow-Headers": BADGE_TOKEN_HEADER,
 } as const;
+
+function buildETag(token: string, format: BadgeFormat, pixels: number): string {
+	const formatVersion =
+		format === "avif" ? `${format}-q${AVIF_QUALITY}` : format;
+	return `"${ASSET_CACHE_VERSION}-${token}-${formatVersion}-${pixels}"`;
+}
+
+function matchesIfNoneMatch(header: string | null, etag: string): boolean {
+	if (!header) {
+		return false;
+	}
+	return header
+		.split(",")
+		.map((part) => part.trim().replace(/^W\//, ""))
+		.some((candidate) => candidate === "*" || candidate === etag);
+}
+
+function cacheControlHeader(cacheable: boolean): string {
+	return cacheable
+		? `public, max-age=${RESPONSE_CACHE_SECONDS}, s-maxage=${RESPONSE_CACHE_SECONDS}, stale-while-revalidate=${RESPONSE_SWR_SECONDS}, stale-if-error=${RESPONSE_SIE_SECONDS}`
+		: "no-store";
+}
 
 function textResponse(
 	body: string | null,
@@ -408,26 +413,26 @@ function textResponse(
 }
 
 function imageResponse(
-	stream: ReadableStream,
+	stream: ReadableStream | null,
 	format: BadgeFormat,
-	cacheSeconds: number,
+	cacheable: boolean,
+	etag: string,
+	status: 200 | 304 = 200,
 ): Response {
 	const headers = new Headers({
 		...CORS_HEADERS,
-		"Content-Type": format === "avif" ? "image/avif" : "image/png",
+		"Cache-Control": cacheControlHeader(cacheable),
 		"X-Content-Type-Options": "nosniff",
 	});
 
-	if (cacheSeconds > 0) {
-		headers.set(
-			"Cache-Control",
-			`public, max-age=${cacheSeconds}, s-maxage=${cacheSeconds}`,
-		);
-	} else {
-		headers.set("Cache-Control", "no-store");
+	if (cacheable) {
+		headers.set("ETag", etag);
+	}
+	if (status === 200) {
+		headers.set("Content-Type", format === "avif" ? "image/avif" : "image/png");
 	}
 
-	return new Response(stream, { status: 200, headers });
+	return new Response(status === 304 ? null : stream, { status, headers });
 }
 
 const DEFAULT_DEPENDENCIES = {
@@ -464,25 +469,34 @@ export async function handleBadgeRequest(
 	const size = parseSize(sizeValues[0] ?? null);
 	if (!size) {
 		return textResponse(
-			'Invalid size. Use "small", "medium", "large", 64, 128, 256, or 512.',
+			'Invalid size. Use "small", "medium", or "large".',
 			400,
 		);
 	}
 
+	const pixels = badgePixelsForSize(size);
 	const resolution = await resolveBadgeToken(
 		request,
 		parsed.clanTag,
 		env,
-		ctx,
 		dependencies,
 	);
+
+	// Short-circuit matching revalidations before reading image bytes from KV.
+	const expectedETag = buildETag(resolution.token, parsed.format, pixels);
+	if (
+		resolution.cacheable &&
+		matchesIfNoneMatch(request.headers.get("If-None-Match"), expectedETag)
+	) {
+		return imageResponse(null, parsed.format, true, expectedETag, 304);
+	}
 
 	let asset: BadgeAsset | null;
 	try {
 		asset = await loadBadgeAsset(
 			parsed.format,
 			resolution.token,
-			BADGE_SIZES[size],
+			pixels,
 			env,
 			ctx,
 			dependencies,
@@ -503,11 +517,14 @@ export async function handleBadgeRequest(
 		return textResponse("Badge unavailable", 502);
 	}
 
-	return imageResponse(
-		asset.stream,
-		parsed.format,
-		resolution.responseCacheSeconds,
-	);
+	// If a real token failed upstream at Supercell and fell back to "null",
+	// do not cache that empty shield for 6 days.
+	const fellBackFromUpstreamError =
+		asset.token === "null" && resolution.token !== "null";
+	const cacheable = resolution.cacheable && !fellBackFromUpstreamError;
+	const etag = buildETag(asset.token, parsed.format, pixels);
+
+	return imageResponse(asset.stream, parsed.format, cacheable, etag, 200);
 }
 
 export default {

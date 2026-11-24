@@ -21,7 +21,12 @@ const categories = new Set(["buildings", "traps", "troops", "guardians", "spells
 const villageCategories = new Set(["buildings", "traps", "troops", "spells", "heroes"])
 const levelCategories = new Set(["buildings", "traps", "troops", "guardians", "spells", "heroes", "pets", "equipment", "helpers", "achievements"])
 const locales = new Set(["EN", "AR", "CN", "CNT", "DE", "ES", "FA", "FI", "FR", "ID", "IT", "JP", "KR", "MS", "NL", "NO", "PL", "PT", "RU", "TH", "TR", "VI"])
-const loadedSections = new Map<string, ReadonlyArray<StaticItem>>()
+const STATIC_METADATA_TTL_MS = 10 * 60 * 1000
+interface CachedSection { readonly items: ReadonlyArray<StaticItem>; readonly expiresAt: number }
+interface CachedTranslations { readonly entries: Readonly<Record<string, string>>; readonly expiresAt: number }
+// Keep only resolved plain JS values in isolate memory; never share live R2 I/O promises across requests.
+const loadedSections = new Map<string, CachedSection>()
+const loadedTranslations = new Map<string, CachedTranslations>()
 const upstream = (cause: unknown, message: string) => new UpstreamUnavailable({ cause, message })
 
 const decodeSection = (value: unknown, category: string): ReadonlyArray<StaticItem> => {
@@ -45,15 +50,30 @@ const readJson = <A>(bindings: Pick<WorkerBindings, "ASSETS">, key: string): Eff
 export const prepareStaticMetadata = (bindings: Pick<WorkerBindings, "ASSETS">, requested: ReadonlyArray<string>) => Effect.gen(function* () {
   const unique = [...new Set(requested)]
   for (const category of unique) if (!categories.has(category)) return yield* new NotFound({ message: `Static category '${category}' not found` })
-  yield* Effect.forEach(unique, (category) => readJson<unknown>(bindings, `static_data/${category}.json`).pipe(
+  const now = Date.now()
+  const missing = unique.filter((category) => {
+    const cached = loadedSections.get(category)
+    return cached === undefined || cached.expiresAt <= now
+  })
+  if (missing.length === 0) return
+  yield* Effect.forEach(missing, (category) => readJson<unknown>(bindings, `static_data/${category}.json`).pipe(
       Effect.flatMap((value) => Effect.try({
-        try: () => loadedSections.set(category, decodeSection(value, category)),
+        try: () => loadedSections.set(category, { items: decodeSection(value, category), expiresAt: Date.now() + STATIC_METADATA_TTL_MS }),
         catch: (cause) => upstream(cause, `Static metadata '${category}' is invalid`),
       })),
       Effect.asVoid,
     ), { concurrency: "unbounded", discard: true })
 })
-const section = (category: string): ReadonlyArray<StaticItem> => loadedSections.get(category) ?? []
+const loadTranslations = (bindings: Pick<WorkerBindings, "ASSETS">, locale: string): Effect.Effect<Readonly<Record<string, string>>, UpstreamUnavailable> => {
+  const cached = loadedTranslations.get(locale)
+  if (cached !== undefined && cached.expiresAt > Date.now()) return Effect.succeed(cached.entries)
+  return readJson<Readonly<Record<string, string>>>(bindings, `translations/${locale}.json`).pipe(
+    Effect.tap((entries) => Effect.sync(() => {
+      loadedTranslations.set(locale, { entries, expiresAt: Date.now() + STATIC_METADATA_TTL_MS })
+    })),
+  )
+}
+const section = (category: string): ReadonlyArray<StaticItem> => loadedSections.get(category)?.items ?? []
 
 export interface StaticItemReference {
   readonly id: number; readonly name: string; readonly isSuperTroop: boolean
@@ -92,7 +112,7 @@ export const staticNames = (category: string, query: StaticNameQuery = {}) => Ef
   yield* prepareStaticMetadata(bindings, [category])
   const locale = (query.locale ?? "").toUpperCase()
   if (locale !== "" && !locales.has(locale)) return yield* new InvalidRequest({ message: `Invalid static locale '${locale}'` })
-  const translations = locale === "" || locale === "EN" ? undefined : yield* readJson<Readonly<Record<string, string>>>(bindings, `translations/${locale}.json`)
+  const translations = locale === "" || locale === "EN" ? undefined : yield* loadTranslations(bindings, locale)
   const name = (query.name ?? "").toLowerCase(), village = (query.village ?? "").toLowerCase(), names: string[] = []
   for (const item of section(category)) {
     const translated = translations?.[item.tid] || item.name

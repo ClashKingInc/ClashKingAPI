@@ -109,6 +109,9 @@ jobs:
       - name: Verify cached community membership in auth/me
         run: bash .ci-schema/scripts/with-test-timescale.sh --profile retained-api -- node scripts/e2e/community-membership.mjs
 
+      - name: Verify Discord OAuth session recovery and native device rotation
+        run: bash .ci-schema/scripts/with-test-timescale.sh --profile retained-api -- node scripts/e2e/discord-session-recovery.mjs
+
       - name: Verify roster email links, lightweight signup endpoints, and basic_player hydration
         run: bash .ci-schema/scripts/with-test-timescale.sh --profile retained-api -- node scripts/e2e/roster-email-links.mjs
 

@@ -279,8 +279,25 @@ const guildOperation = (input: DashboardServerOperationInput) => database("Guild
       banner: asset("banners", guild.banner), premium_tier: guild.premium_tier, boost_count: guild.premium_subscription_count ?? 0 }
   }
   if (input.principal.kind !== "user") return yield* new Forbidden({ message: "A user identity is required to list Discord guilds" })
-  const token = yield* credentials.accessToken(input.principal.userId, input.principal.deviceId)
-  const guilds = yield* decodeDiscord(Schema.Array(RawGuild), yield* discord.request("/users/@me/guilds?limit=200&with_counts=true", { oauthAccessToken: token }))
+  const { userId, deviceId } = input.principal
+  const token = yield* credentials.accessToken(userId, deviceId)
+  const fetchGuilds = (accessToken: string) =>
+    discord.request("/users/@me/guilds?limit=200&with_counts=true", { oauthAccessToken: accessToken })
+  const rawGuilds = yield* fetchGuilds(token).pipe(
+    Effect.catchTag("Unauthenticated", () => Effect.gen(function* () {
+      const refreshed = yield* credentials.accessToken(userId, deviceId, {
+        rejectedAccessToken: token,
+      })
+      return yield* fetchGuilds(refreshed).pipe(
+        Effect.catchTag("Unauthenticated", (error) =>
+          credentials.revokeDeviceSession(userId, deviceId, {
+            matchingAccessToken: refreshed,
+          }).pipe(Effect.andThen(Effect.fail(error))),
+        ),
+      )
+    })),
+  )
+  const guilds = yield* decodeDiscord(Schema.Array(RawGuild), rawGuilds)
   if (guilds.length === 0) return []
   const cached = yield* sql.unsafe<{ id: string; last_command_at: Date | string | null }>(`
     SELECT cache.id, stored.last_command_at

@@ -111,7 +111,28 @@ export class AuthProfiles extends Context.Service<AuthProfiles, {
               Number.isFinite(expiresAt) && expiresAt - 60_000 > Date.now()
             ? yield* cipher.decrypt(account.access_token_ciphertext)
             : yield* credentials.accessToken(principal.userId, principal.deviceId).pipe(Effect.provideService(SqlClient.SqlClient, sql))
-          const current = yield* profile(access)
+          const initial = yield* profile(access).pipe(Effect.result)
+          let current: typeof DiscordProfile.Type
+          if (initial._tag === "Success") current = initial.success
+          else if (initial.failure._tag !== "Unauthenticated") return yield* initial.failure
+          else {
+            // Discord can invalidate an access token before its stored expires_at.
+            // Force one locked refresh before revoking the ClashKing session so
+            // recoverable rotations succeed and revoked grants sign out cleanly.
+            const refreshed = yield* credentials.accessToken(principal.userId, principal.deviceId, {
+              rejectedAccessToken: access,
+            }).pipe(Effect.provideService(SqlClient.SqlClient, sql))
+            current = yield* profile(refreshed).pipe(
+              Effect.catchTag("Unauthenticated", (error) =>
+                credentials.revokeDeviceSession(principal.userId, principal.deviceId, {
+                  matchingAccessToken: refreshed,
+                }).pipe(
+                  Effect.provideService(SqlClient.SqlClient, sql),
+                  Effect.andThen(Effect.fail(error)),
+                ),
+              ),
+            )
+          }
           if (current.id !== principal.userId) {
             return yield* new Unauthenticated({ message: "Discord session does not match the authenticated user" })
           }

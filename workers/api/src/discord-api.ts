@@ -3,7 +3,7 @@ import { Context, Effect, Layer, Redacted, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 
 import type { ApiFailure } from "./errors.js"
-import { Forbidden, InvalidRequest, NotFound, RateLimited, UpstreamUnavailable } from "./errors.js"
+import { Forbidden, InvalidRequest, NotFound, RateLimited, Unauthenticated, UpstreamUnavailable } from "./errors.js"
 import { WorkerEnvironment } from "./environment.js"
 import { readBoundedJson } from "./request-body.js"
 
@@ -58,7 +58,12 @@ const providerFailure = (cause: unknown): ApiFailure => new UpstreamUnavailable(
   message: "Discord API request failed",
 })
 
-const decodeResponse = (response: {readonly status: number;readonly headers: Readonly<Record<string,string>>;readonly stream: Stream.Stream<Uint8Array, unknown>}): Effect.Effect<unknown, ApiFailure> => Effect.gen(function* () {
+type DiscordErrorMode = "bot" | "oauth-user" | "oauth-refresh"
+
+const decodeResponse = (
+  response: {readonly status: number;readonly headers: Readonly<Record<string,string>>;readonly stream: Stream.Stream<Uint8Array, unknown>},
+  mode: DiscordErrorMode = "bot",
+): Effect.Effect<unknown, ApiFailure> => Effect.gen(function* () {
   if (response.status === 204) return undefined
   const body = new Response(Stream.toReadableStream(response.stream), {headers:response.headers})
   if (response.status >= 200 && response.status < 300) {
@@ -67,10 +72,25 @@ const decodeResponse = (response: {readonly status: number;readonly headers: Rea
       cause:new Error("Invalid or oversized Discord JSON"),message:"Discord returned invalid JSON",
     })))
   }
+  // Discord reports revoked or expired OAuth refresh tokens as HTTP 400 with
+  // {"error":"invalid_grant"}. Distinguish that from client-configuration errors
+  // so only definitively revoked user grants invalidate a ClashKing session.
+  if (mode === "oauth-refresh" && response.status === 400) {
+    const errorPayload = yield* readBoundedJson(body, 65_536).pipe(Effect.catch(() => Effect.succeed(undefined)))
+    if (typeof errorPayload === "object" && errorPayload !== null && "error" in errorPayload && errorPayload.error === "invalid_grant") {
+      return yield* new Unauthenticated({message:"Discord session is no longer valid"})
+    }
+    return yield* new InvalidRequest({message:`Discord rejected the request (${response.status})`})
+  }
   yield* Effect.promise(() => body.body?.cancel().catch(() => undefined) ?? Promise.resolve())
   if (response.status === 429) {
     const seconds=Number(response.headers["retry-after"])
     return yield* new RateLimited({message:"Discord API is rate limited",retryAfterSeconds:Number.isFinite(seconds)?Math.max(1,Math.ceil(seconds)):1})
+  }
+  // A 401 on a user OAuth request means the user's Discord bearer token is no
+  // longer accepted, whereas bot 401/403 and user 403 indicate permission errors.
+  if (mode === "oauth-user" && response.status === 401) {
+    return yield* new Unauthenticated({message:"Discord rejected the user session credentials"})
   }
   if (response.status === 401 || response.status === 403) return yield* new Forbidden({message:"Discord rejected the configured credentials or permissions"})
   if (response.status === 404) return yield* new NotFound({message:"Discord resource was not found"})
@@ -100,7 +120,11 @@ export class DiscordApi extends Context.Service<DiscordApi, {
         let response=sdk.httpClient.execute(req)
         if(options.files?.length)response=response.pipe(sdk.withFiles(options.files))
         if(options.oauthAccessToken!==undefined)response=response.pipe(Effect.provideService(OAuthBearer,options.oauthAccessToken))
-        return response.pipe(Effect.mapError(providerFailure),Effect.flatMap(decodeResponse),Effect.withSpan("DiscordApi.request"))
+        return response.pipe(
+          Effect.mapError(providerFailure),
+          Effect.flatMap((res) => decodeResponse(res, options.oauthAccessToken !== undefined ? "oauth-user" : "bot")),
+          Effect.withSpan("DiscordApi.request"),
+        )
       }
       // dfx does not expose the OAuth code/refresh token exchange endpoint.
       // Keep only that form exchange on Effect's HTTP client, without bot auth
@@ -108,7 +132,10 @@ export class DiscordApi extends Context.Service<DiscordApi, {
       const token=(value:DiscordTokenRequest)=>{
         const form=Object.fromEntries(Object.entries(value).filter((row):row is [string,string]=>typeof row[1]==="string"))
         const req=HttpClientRequest.post(`${origin.replace(/\/v\d+$/u,"")}/oauth2/token`).pipe(HttpClientRequest.bodyUrlParams(form))
-        return finish(http.execute(req).pipe(Effect.mapError(providerFailure),Effect.flatMap(decodeResponse))).pipe(Effect.withSpan("DiscordApi.token"))
+        return finish(http.execute(req).pipe(
+          Effect.mapError(providerFailure),
+          Effect.flatMap((res) => decodeResponse(res, value.grant_type === "refresh_token" ? "oauth-refresh" : "bot")),
+        )).pipe(Effect.withSpan("DiscordApi.token"))
       }
       return {request,token}
     })).pipe(Layer.provide([

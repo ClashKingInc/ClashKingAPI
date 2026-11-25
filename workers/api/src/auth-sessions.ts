@@ -89,6 +89,23 @@ export class AuthSessions extends Context.Service<AuthSessions, {
             return yield* new AuthRefreshRejected({ message: "Session was already refreshed" })
           }
           yield* persist(claims.userId, nextDevice, tokens)
+          if (kind === "native" && nextDevice !== claims.deviceId) {
+            // Native OS updates (such as Android Build.ID changes) can rotate the
+            // device_id sent on refresh. Carry the Discord OAuth row to the new
+            // device_id so /v2/auth/me does not orphan the session.
+            yield* database(sql`INSERT INTO auth_discord_tokens
+              (user_id,device_id,access_token_ciphertext,refresh_token_ciphertext,expires_at,created_at,updated_at)
+              SELECT user_id,${nextDevice},access_token_ciphertext,refresh_token_ciphertext,expires_at,created_at,now()
+              FROM auth_discord_tokens
+              WHERE user_id = ${claims.userId} AND device_id = ${claims.deviceId}
+              ON CONFLICT (user_id,device_id) DO NOTHING`)
+            yield* database(sql`DELETE FROM auth_discord_tokens
+              WHERE user_id = ${claims.userId} AND device_id = ${claims.deviceId}
+                AND NOT EXISTS (
+                  SELECT 1 FROM auth_refresh_tokens
+                  WHERE user_id = ${claims.userId} AND device_id = ${claims.deviceId} AND expires_at > now()
+                )`)
+          }
           return tokens
         })).pipe(Effect.mapError((cause) => cause._tag === "SqlError"
           ? new DatabaseFailure({ cause, message: "Session rotation failed" }) : cause))

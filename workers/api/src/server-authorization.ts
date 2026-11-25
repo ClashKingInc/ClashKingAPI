@@ -184,9 +184,24 @@ export class ServerAuthorization extends Context.Service<
         const gateway = cached.get(serverId)!
         if (freshOauthManager) {
           const accessToken = yield* credentials.accessToken(principal.userId, principal.deviceId)
-          const guilds = yield* discord.request("/users/@me/guilds?limit=200&with_counts=true", { oauthAccessToken: accessToken }).pipe(
-            Effect.flatMap((value) => Schema.decodeUnknownEffect(Guilds)(value).pipe(
-              Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Discord guild authorization response is invalid" })))),
+          const fetchGuilds = (token: string) =>
+            discord.request("/users/@me/guilds?limit=200&with_counts=true", { oauthAccessToken: token })
+          const rawGuilds = yield* fetchGuilds(accessToken).pipe(
+            Effect.catchTag("Unauthenticated", () => Effect.gen(function* () {
+              const refreshed = yield* credentials.accessToken(principal.userId, principal.deviceId, {
+                rejectedAccessToken: accessToken,
+              })
+              return yield* fetchGuilds(refreshed).pipe(
+                Effect.catchTag("Unauthenticated", (error) =>
+                  credentials.revokeDeviceSession(principal.userId, principal.deviceId, {
+                    matchingAccessToken: refreshed,
+                  }).pipe(Effect.andThen(Effect.fail(error))),
+                ),
+              )
+            })),
+          )
+          const guilds = yield* Schema.decodeUnknownEffect(Guilds)(rawGuilds).pipe(
+            Effect.mapError((cause) => new UpstreamUnavailable({ cause, message: "Discord guild authorization response is invalid" })),
           )
           const guild = guilds.find((candidate) => candidate.id === serverId)
           return { principal, manager: guild !== undefined && discordGuildManager(guild), sections: {} }
